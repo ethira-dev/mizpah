@@ -6,59 +6,64 @@ import {
   fetchServices,
   fetchStats,
 } from "@/lib/api"
-import type {
-  FilterChip,
-  LogEntry,
-  PropertyInfo,
-  Stats,
-  WsEvent,
-} from "@/lib/types"
+import type { LogEntry, PropertyInfo, Stats, WsEvent } from "@/lib/types"
 
 const MAX_CLIENT_ENTRIES = 50_000
 
-function sendSubscribe(ws: WebSocket, filters: FilterChip[]) {
+function sendSubscribe(ws: WebSocket, q: string) {
   if (ws.readyState !== WebSocket.OPEN) return
   ws.send(
     JSON.stringify({
       type: "subscribe",
       service: "*",
-      filters,
+      q,
     })
   )
 }
 
-export function useMizpah(filters: FilterChip[]) {
+export function useMizpah(query: string) {
   const [entries, setEntries] = useState<LogEntry[]>([])
   const [services, setServices] = useState<string[]>([])
   const [properties, setProperties] = useState<PropertyInfo[]>([])
   const [stats, setStats] = useState<Stats | null>(null)
   const [connected, setConnected] = useState(false)
   const [loading, setLoading] = useState(true)
-  const filtersRef = useRef(filters)
+  const [queryError, setQueryError] = useState<string | null>(null)
+  const queryRef = useRef(query)
   const wsRef = useRef<WebSocket | null>(null)
 
-  filtersRef.current = filters
+  queryRef.current = query
 
   const reload = useCallback(async () => {
     setLoading(true)
     try {
-      const [logs, svc, props, st] = await Promise.all([
+      const [logsResult, svc, props, st] = await Promise.all([
         fetchLogs({
           limit: 500,
-          filters,
-        }),
+          q: query,
+        })
+          .then((logs) => ({ ok: true as const, logs }))
+          .catch((err: unknown) => ({
+            ok: false as const,
+            message: err instanceof Error ? err.message : "Failed to load logs",
+          })),
         fetchServices(),
         fetchProperties(),
         fetchStats(),
       ])
-      setEntries(logs.entries)
       setServices(svc)
       setProperties(props)
       setStats(st)
+      if (logsResult.ok) {
+        setEntries(logsResult.logs.entries)
+        setQueryError(null)
+      } else {
+        setQueryError(logsResult.message)
+      }
     } finally {
       setLoading(false)
     }
-  }, [filters])
+  }, [query])
 
   useEffect(() => {
     void reload()
@@ -78,7 +83,7 @@ export function useMizpah(filters: FilterChip[]) {
 
     ws.onopen = () => {
       setConnected(true)
-      sendSubscribe(ws, filtersRef.current)
+      sendSubscribe(ws, queryRef.current)
     }
     ws.onclose = () => {
       setConnected(false)
@@ -126,8 +131,8 @@ export function useMizpah(filters: FilterChip[]) {
   useEffect(() => {
     const ws = wsRef.current
     if (!ws) return
-    sendSubscribe(ws, filters)
-  }, [filters])
+    sendSubscribe(ws, query)
+  }, [query])
 
   return {
     entries,
@@ -136,6 +141,7 @@ export function useMizpah(filters: FilterChip[]) {
     stats,
     connected,
     loading,
+    queryError,
     reload,
   }
 }

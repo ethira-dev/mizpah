@@ -1,4 +1,4 @@
-use crate::filter::{parse_filters_param, FilterChip};
+use crate::filter::{compile_query, matches_entry, CompiledQuery};
 use crate::store::{LogEntry, PropertyInfo, Stats, Store, WsEvent};
 use axum::extract::ws::{Message, WebSocket};
 use axum::extract::{Query, State, WebSocketUpgrade};
@@ -67,8 +67,8 @@ struct LogsQuery {
     service: Option<String>,
     cursor: Option<u64>,
     limit: Option<usize>,
-    /// JSON array of FilterChip
-    filters: Option<String>,
+    /// CEL filter expression
+    q: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -80,17 +80,17 @@ struct LogsResponse {
 
 async fn list_logs(
     State(state): State<AppState>,
-    Query(q): Query<LogsQuery>,
+    Query(params): Query<LogsQuery>,
 ) -> Result<Json<LogsResponse>, (StatusCode, String)> {
-    let filters: Vec<FilterChip> =
-        parse_filters_param(q.filters.as_deref()).map_err(|e| (StatusCode::BAD_REQUEST, e))?;
+    let query = compile_query(params.q.as_deref().unwrap_or(""))
+        .map_err(|e| (StatusCode::BAD_REQUEST, e))?;
     let (entries, has_more) = state
         .store
         .query_logs(
-            q.service.as_deref(),
-            q.cursor,
-            q.limit.unwrap_or(100),
-            &filters,
+            params.service.as_deref(),
+            params.cursor,
+            params.limit.unwrap_or(100),
+            &query,
         )
         .await;
     Ok(Json(LogsResponse { entries, has_more }))
@@ -132,11 +132,20 @@ async fn stats(State(state): State<AppState>) -> Json<Stats> {
     Json(state.store.stats().await)
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Clone)]
 struct WsSubscription {
     /// `*` or empty means all services.
     service: String,
-    filters: Vec<FilterChip>,
+    query: CompiledQuery,
+}
+
+impl Default for WsSubscription {
+    fn default() -> Self {
+        Self {
+            service: "*".into(),
+            query: CompiledQuery::MatchAll,
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -147,7 +156,7 @@ enum WsClientMessage {
         #[serde(default = "default_service")]
         service: String,
         #[serde(default)]
-        filters: Vec<FilterChip>,
+        q: String,
     },
 }
 
@@ -163,7 +172,7 @@ fn event_matches_subscription(event: &WsEvent, sub: &WsSubscription) -> bool {
             if !service_ok {
                 return false;
             }
-            crate::filter::matches_all(&entry.service, &entry.data, &sub.filters)
+            matches_entry(&entry.service, &entry.data, &sub.query)
         }
         _ => true,
     }
@@ -219,10 +228,17 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
         match msg {
             Message::Close(_) => break,
             Message::Text(text) => {
-                if let Ok(WsClientMessage::Subscribe { service, filters }) =
+                if let Ok(WsClientMessage::Subscribe { service, q }) =
                     serde_json::from_str::<WsClientMessage>(&text)
                 {
-                    let _ = sub_tx.send(WsSubscription { service, filters });
+                    match compile_query(&q) {
+                        Ok(query) => {
+                            let _ = sub_tx.send(WsSubscription { service, query });
+                        }
+                        Err(err) => {
+                            warn!(error = %err, "ignoring invalid WS CEL query");
+                        }
+                    }
                 }
             }
             _ => {}

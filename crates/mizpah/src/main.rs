@@ -2,11 +2,12 @@ mod api;
 mod attach;
 mod filter;
 mod ingest;
+mod mcp;
 mod pretty_ingest;
 mod store;
 
 use api::AppState;
-use clap::Parser;
+use clap::{Parser, Subcommand};
 use std::net::{SocketAddr, TcpListener};
 use std::sync::Arc;
 use store::{Store, DEFAULT_MAX_BYTES};
@@ -20,9 +21,12 @@ use tracing_subscriber::EnvFilter;
     version
 )]
 struct Cli {
-    /// Service name for this ingest stream (required)
-    #[arg(short, long)]
-    service: String,
+    #[command(subcommand)]
+    command: Option<Commands>,
+
+    /// Service name for this ingest stream (required in pipe/hub mode)
+    #[arg(short, long, global = false)]
+    service: Option<String>,
 
     /// Host to bind (hub) or connect to (attach)
     #[arg(long, default_value = "127.0.0.1")]
@@ -41,20 +45,82 @@ struct Cli {
     no_open: bool,
 }
 
+#[derive(Debug, Subcommand)]
+enum Commands {
+    /// MCP server for Cursor / Claude / Codex (queries the live hub)
+    Mcp {
+        #[command(subcommand)]
+        action: Option<McpAction>,
+
+        /// Hub host (ignored when MIZPAH_URL is set)
+        #[arg(long, default_value = "127.0.0.1")]
+        host: String,
+
+        /// Hub port (ignored when MIZPAH_URL is set)
+        #[arg(short, long, default_value_t = 1738)]
+        port: u16,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum McpAction {
+    /// Register Mizpah in Cursor, Claude Desktop, Claude Code, and Codex configs
+    Install,
+    /// Remove Mizpah MCP entries from those configs
+    Uninstall,
+}
+
 #[tokio::main]
 async fn main() {
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("error")),
-        )
-        .with_writer(std::io::stderr)
-        .init();
-
     let cli = Cli::parse();
-    if cli.service.trim().is_empty() {
-        eprintln!("error: --service must not be empty");
-        std::process::exit(2);
+
+    match cli.command {
+        Some(Commands::Mcp { action, host, port }) => match action {
+            None => {
+                // stderr only — stdout is the MCP JSON-RPC channel
+                tracing_subscriber::fmt()
+                    .with_env_filter(
+                        EnvFilter::try_from_default_env()
+                            .unwrap_or_else(|_| EnvFilter::new("error")),
+                    )
+                    .with_writer(std::io::stderr)
+                    .init();
+
+                let base_url = mcp::hub_base_url(&host, port);
+                if let Err(err) = mcp::run_stdio(base_url).await {
+                    error!(error = %err, "MCP server failed");
+                    std::process::exit(1);
+                }
+            }
+            Some(McpAction::Install) => {
+                std::process::exit(mcp::run_install());
+            }
+            Some(McpAction::Uninstall) => {
+                std::process::exit(mcp::run_uninstall());
+            }
+        },
+        None => {
+            tracing_subscriber::fmt()
+                .with_env_filter(
+                    EnvFilter::try_from_default_env()
+                        .unwrap_or_else(|_| EnvFilter::new("error")),
+                )
+                .with_writer(std::io::stderr)
+                .init();
+
+            run_pipe_mode(cli).await;
+        }
     }
+}
+
+async fn run_pipe_mode(cli: Cli) {
+    let service = match cli.service.as_deref().map(str::trim) {
+        Some(s) if !s.is_empty() => s.to_string(),
+        _ => {
+            eprintln!("error: --service is required\n\nUsage: mizpah --service <name>\n       mizpah mcp\n       mizpah mcp install");
+            std::process::exit(2);
+        }
+    };
 
     let addr: SocketAddr = format!("{}:{}", cli.host, cli.port)
         .parse()
@@ -65,13 +131,14 @@ async fn main() {
 
     match try_bind(addr) {
         Ok(listener) => {
-            if let Err(err) = run_hub(listener, cli).await {
+            if let Err(err) = run_hub(listener, &cli.host, cli.port, cli.max_bytes, cli.no_open, service)
+                .await
+            {
                 error!(error = %err, "hub failed");
                 std::process::exit(1);
             }
         }
         Err(bind_err) => {
-            // Address in use → attach mode
             let in_use = bind_err.kind() == std::io::ErrorKind::AddrInUse;
             if !in_use {
                 eprintln!(
@@ -83,7 +150,7 @@ async fn main() {
 
             let base_url = format!("http://{}:{}", cli.host, cli.port);
             info!(%addr, "port in use; attaching as ingest client");
-            if let Err(err) = attach::attach_and_forward(&base_url, &cli.service).await {
+            if let Err(err) = attach::attach_and_forward(&base_url, &service).await {
                 eprintln!("error: {err}");
                 std::process::exit(1);
             }
@@ -109,27 +176,33 @@ fn print_startup_banner(url: &str) {
 
 async fn run_hub(
     std_listener: TcpListener,
-    cli: Cli,
+    host: &str,
+    port: u16,
+    max_bytes: u64,
+    no_open: bool,
+    service: String,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     std_listener.set_nonblocking(true)?;
     let listener = tokio::net::TcpListener::from_std(std_listener)?;
 
-    let store = Arc::new(Store::new(cli.max_bytes));
+    let store = Arc::new(Store::new(max_bytes));
     let state = AppState {
         store: Arc::clone(&store),
     };
     let app = api::router(state);
 
-    let url = format!("http://{}:{}", cli.host, cli.port);
+    let url = format!("http://{host}:{port}");
     print_startup_banner(&url);
 
-    if !cli.no_open {
+    // Auto-register MCP with local AI clients (idempotent).
+    mcp::ensure_registered_on_hub_start();
+
+    if !no_open {
         if let Err(err) = open::that(&url) {
             tracing::warn!(error = %err, "failed to open browser");
         }
     }
 
-    let service = cli.service.clone();
     let ingest_store = Arc::clone(&store);
     tokio::spawn(async move {
         ingest::ingest_stdin_local(ingest_store, service).await;
@@ -137,4 +210,46 @@ async fn run_hub(
 
     axum::serve(listener, app).await?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use clap::CommandFactory;
+
+    #[test]
+    fn clap_accepts_mcp_without_service() {
+        let cli = Cli::try_parse_from(["mizpah", "mcp"]).expect("mcp should parse");
+        match cli.command {
+            Some(Commands::Mcp { action: None, .. }) => {}
+            other => panic!("unexpected: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn clap_accepts_mcp_install() {
+        let cli = Cli::try_parse_from(["mizpah", "mcp", "install"]).unwrap();
+        match cli.command {
+            Some(Commands::Mcp {
+                action: Some(McpAction::Install),
+                ..
+            }) => {}
+            other => panic!("unexpected: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn clap_pipe_mode_still_works() {
+        let cli = Cli::try_parse_from(["mizpah", "--service", "api", "--no-open"]).unwrap();
+        assert!(cli.command.is_none());
+        assert_eq!(cli.service.as_deref(), Some("api"));
+        assert!(cli.no_open);
+    }
+
+    #[test]
+    fn clap_help_renders() {
+        let mut cmd = Cli::command();
+        let help = cmd.render_help().to_string();
+        assert!(help.contains("mcp"));
+    }
 }

@@ -1,12 +1,30 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="dark">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Mizpah</title>
-    <script type="module" crossorigin src="/assets/index-l2sSlxnV.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-XBqKsW5o.css">
+    <script>
+      ;(() => {
+        const key = "theme"
+        const stored = localStorage.getItem(key)
+        const theme =
+          stored === "light" || stored === "dark" || stored === "system"
+            ? stored
+            : "dark"
+        const resolved =
+          theme === "system"
+            ? window.matchMedia("(prefers-color-scheme: dark)").matches
+              ? "dark"
+              : "light"
+            : theme
+        document.documentElement.classList.remove("light", "dark")
+        document.documentElement.classList.add(resolved)
+      })()
+    </script>
+    <script type="module" crossorigin src="/assets/index-YNQkFzMW.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-Dhe-oUo-.css">
   </head>
   <body>
     <div id="root"></div>

@@ -24,9 +24,11 @@ build: ui
 release: ui
     cargo build --release
 
-# Install `mizpah` onto PATH (~/.cargo/bin)
+# Install `mizpah` onto PATH (~/.cargo/bin) and register MCP with AI clients
 install: ui
     cargo install --path crates/mizpah --force
+    # Prefer the cargo-installed binary so Homebrew's older `mizpah` does not shadow `mcp`
+    "{{env_var_or_default('CARGO_HOME', home_directory() / '.cargo')}}/bin/mizpah" mcp install
 
 # Run hub (example): just run api
 run service='demo' *args='':

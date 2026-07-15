@@ -1,10 +1,10 @@
-import type { FilterChip, LogEntry, PropertyInfo, Stats } from "./types"
+import type { LogEntry, PropertyInfo, Stats } from "./types"
 
 export async function fetchLogs(opts: {
   service?: string
   cursor?: number
   limit?: number
-  filters?: FilterChip[]
+  q?: string
 }): Promise<{ entries: LogEntry[]; hasMore: boolean }> {
   const params = new URLSearchParams()
   if (opts.service && opts.service !== "*") {
@@ -12,11 +12,14 @@ export async function fetchLogs(opts: {
   }
   if (opts.cursor != null) params.set("cursor", String(opts.cursor))
   if (opts.limit != null) params.set("limit", String(opts.limit))
-  if (opts.filters?.length) {
-    params.set("filters", JSON.stringify(opts.filters))
+  if (opts.q?.trim()) {
+    params.set("q", opts.q.trim())
   }
   const res = await fetch(`/api/logs?${params}`)
-  if (!res.ok) throw new Error(`logs: ${res.status}`)
+  if (!res.ok) {
+    const body = await res.text().catch(() => "")
+    throw new Error(body || `logs: ${res.status}`)
+  }
   return res.json()
 }
 

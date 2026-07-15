@@ -288,7 +288,7 @@ impl Store {
         service: Option<&str>,
         cursor: Option<u64>,
         limit: usize,
-        filters: &[crate::filter::FilterChip],
+        query: &crate::filter::CompiledQuery,
     ) -> (Vec<LogEntry>, bool) {
         let inner = self.inner.read().await;
         let limit = limit.clamp(1, 500);
@@ -307,7 +307,7 @@ impl Store {
                     continue;
                 }
             }
-            if !crate::filter::matches_all(&entry.service, &entry.data, filters) {
+            if !crate::filter::matches_entry(&entry.service, &entry.data, query) {
                 continue;
             }
             if matched.len() >= limit {

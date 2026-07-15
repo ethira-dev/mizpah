@@ -1,94 +1,71 @@
-use serde::{Deserialize, Serialize};
+use cel::{Context, Program, Value as CelValue};
 use serde_json::Value;
+use std::sync::Arc;
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub enum FilterOp {
-    Eq,
-    Neq,
-    Contains,
-    Gt,
-    Lt,
-    Exists,
-    In,
+/// A compiled CEL query, or match-all when the expression is empty.
+#[derive(Clone)]
+pub enum CompiledQuery {
+    MatchAll,
+    Cel(Arc<Program>),
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct FilterChip {
-    pub path: String,
-    pub op: FilterOp,
-    #[serde(default)]
-    pub value: Option<String>,
-    #[serde(default)]
-    pub values: Option<Vec<String>>,
+/// Compile a CEL filter expression. Empty / whitespace → match all.
+pub fn compile_query(q: &str) -> Result<CompiledQuery, String> {
+    let trimmed = q.trim();
+    if trimmed.is_empty() {
+        return Ok(CompiledQuery::MatchAll);
+    }
+    Program::compile(trimmed)
+        .map(|p| CompiledQuery::Cel(Arc::new(p)))
+        .map_err(|e| format!("invalid CEL query: {e}"))
 }
 
-/// Match filters against a log entry. Paths `service` and `level` are special:
-/// - `service` compares against the entry's service tag
-/// - `level` resolves `level` / `severity` / `lvl` in data (first present)
-pub fn matches_all(service: &str, data: &Value, filters: &[FilterChip]) -> bool {
-    filters.iter().all(|f| matches_one(service, data, f))
-}
-
-fn matches_one(service: &str, data: &Value, filter: &FilterChip) -> bool {
-    let resolved = resolve_filter_value(service, data, &filter.path);
-    match filter.op {
-        FilterOp::Exists => resolved.is_some() && !resolved.as_ref().unwrap().is_null(),
-        FilterOp::Eq => {
-            let Some(v) = resolved else {
+/// Evaluate a compiled query against a log entry.
+///
+/// Context bindings:
+/// - `service` — stream service tag (wins over data key collisions)
+/// - `level` — first of `level` / `severity` / `lvl` in data (wins over collisions)
+/// - every top-level key from `data` as a CEL variable
+///
+/// The expression must evaluate to a bool. Execution errors and non-bool results
+/// count as no match.
+pub fn matches_entry(service: &str, data: &Value, query: &CompiledQuery) -> bool {
+    match query {
+        CompiledQuery::MatchAll => true,
+        CompiledQuery::Cel(program) => {
+            let Ok(ctx) = build_context(service, data) else {
                 return false;
             };
-            let Some(expected) = filter.value.as_deref() else {
-                return false;
-            };
-            value_as_string(&v) == expected
-        }
-        FilterOp::In => {
-            let Some(v) = resolved else {
-                return false;
-            };
-            let Some(values) = filter.values.as_ref() else {
-                return false;
-            };
-            if values.is_empty() {
-                return false;
-            }
-            let actual = value_as_string(&v);
-            values.iter().any(|expected| actual == *expected)
-        }
-        FilterOp::Neq => {
-            let Some(expected) = filter.value.as_deref() else {
-                return true;
-            };
-            match resolved {
-                None => true,
-                Some(v) => value_as_string(&v) != expected,
+            match program.execute(&ctx) {
+                Ok(CelValue::Bool(b)) => b,
+                _ => false,
             }
         }
-        FilterOp::Contains => {
-            let Some(v) = resolved else {
-                return false;
-            };
-            let Some(needle) = filter.value.as_deref() else {
-                return false;
-            };
-            value_as_string(&v)
-                .to_lowercase()
-                .contains(&needle.to_lowercase())
-        }
-        FilterOp::Gt => compare_num(resolved.as_ref(), filter.value.as_deref(), std::cmp::Ordering::Greater),
-        FilterOp::Lt => compare_num(resolved.as_ref(), filter.value.as_deref(), std::cmp::Ordering::Less),
     }
 }
 
-/// Resolved value owned or borrowed from data. Service/level may synthesize a string Value.
-fn resolve_filter_value(service: &str, data: &Value, path: &str) -> Option<Value> {
-    match path {
-        "service" => Some(Value::String(service.to_string())),
-        "level" => level_of(data).map(Value::String),
-        _ => get_path(data, path).cloned(),
+fn build_context(service: &str, data: &Value) -> Result<Context<'static>, String> {
+    let mut ctx = Context::default();
+
+    if let Value::Object(map) = data {
+        for (key, value) in map {
+            if key == "service" || key == "level" {
+                continue;
+            }
+            ctx.add_variable(key.as_str(), value)
+                .map_err(|e| format!("bind {key}: {e}"))?;
+        }
     }
+
+    ctx.add_variable("service", service)
+        .map_err(|e| format!("bind service: {e}"))?;
+
+    if let Some(level) = level_of(data) {
+        ctx.add_variable("level", level)
+            .map_err(|e| format!("bind level: {e}"))?;
+    }
+
+    Ok(ctx)
 }
 
 /// Mirror of UI `levelOf`: first of level / severity / lvl.
@@ -108,254 +85,113 @@ fn level_of(data: &Value) -> Option<String> {
     None
 }
 
-fn compare_num(
-    resolved: Option<&Value>,
-    expected: Option<&str>,
-    want: std::cmp::Ordering,
-) -> bool {
-    let Some(v) = resolved else {
-        return false;
-    };
-    let Some(exp) = expected else {
-        return false;
-    };
-    let Ok(rhs) = exp.parse::<f64>() else {
-        return false;
-    };
-    let Some(lhs) = value_as_f64(v) else {
-        return false;
-    };
-    lhs.partial_cmp(&rhs) == Some(want)
-}
-
-fn value_as_f64(v: &Value) -> Option<f64> {
-    match v {
-        Value::Number(n) => n.as_f64(),
-        Value::String(s) => s.parse().ok(),
-        _ => None,
-    }
-}
-
-fn value_as_string(v: &Value) -> String {
-    match v {
-        Value::Null => "null".to_string(),
-        Value::Bool(b) => b.to_string(),
-        Value::Number(n) => n.to_string(),
-        Value::String(s) => s.clone(),
-        other => other.to_string(),
-    }
-}
-
-/// Resolve a dotted path like `user.id` against a JSON value.
-/// Array indices like `items[0].name` are also supported.
-pub fn get_path<'a>(data: &'a Value, path: &str) -> Option<&'a Value> {
-    if path.is_empty() {
-        return Some(data);
-    }
-    let mut current = data;
-    for segment in split_path(path) {
-        match current {
-            Value::Object(map) => {
-                current = map.get(segment.as_str())?;
-            }
-            Value::Array(arr) => {
-                let idx: usize = segment.parse().ok()?;
-                current = arr.get(idx)?;
-            }
-            _ => return None,
-        }
-    }
-    Some(current)
-}
-
-fn split_path(path: &str) -> Vec<String> {
-    let mut parts = Vec::new();
-    let mut buf = String::new();
-    let mut chars = path.chars().peekable();
-    while let Some(c) = chars.next() {
-        match c {
-            '.' => {
-                if !buf.is_empty() {
-                    parts.push(std::mem::take(&mut buf));
-                }
-            }
-            '[' => {
-                if !buf.is_empty() {
-                    parts.push(std::mem::take(&mut buf));
-                }
-                let mut idx = String::new();
-                for c2 in chars.by_ref() {
-                    if c2 == ']' {
-                        break;
-                    }
-                    idx.push(c2);
-                }
-                if !idx.is_empty() {
-                    parts.push(idx);
-                }
-            }
-            _ => buf.push(c),
-        }
-    }
-    if !buf.is_empty() {
-        parts.push(buf);
-    }
-    parts
-}
-
-/// Parse filters from a JSON query string (array of chips).
-pub fn parse_filters_param(raw: Option<&str>) -> Result<Vec<FilterChip>, String> {
-    let Some(raw) = raw else {
-        return Ok(Vec::new());
-    };
-    if raw.is_empty() {
-        return Ok(Vec::new());
-    }
-    serde_json::from_str(raw).map_err(|e| format!("invalid filters: {e}"))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use serde_json::json;
 
-    #[test]
-    fn dotted_path() {
-        let data = json!({"user": {"id": 42}, "level": "error"});
-        assert_eq!(get_path(&data, "user.id"), Some(&json!(42)));
-        assert_eq!(get_path(&data, "level"), Some(&json!("error")));
+    fn matches(service: &str, data: &Value, q: &str) -> bool {
+        let compiled = compile_query(q).expect("compile");
+        matches_entry(service, data, &compiled)
     }
 
     #[test]
-    fn filter_eq_and_contains() {
-        let data = json!({"msg": "hello world", "level": "info"});
-        assert!(matches_all(
-            "api",
-            &data,
-            &[FilterChip {
-                path: "level".into(),
-                op: FilterOp::Eq,
-                value: Some("info".into()),
-                values: None,
-            }]
-        ));
-        assert!(matches_all(
-            "api",
-            &data,
-            &[FilterChip {
-                path: "msg".into(),
-                op: FilterOp::Contains,
-                value: Some("WORLD".into()),
-                values: None,
-            }]
-        ));
-    }
-
-    #[test]
-    fn filter_in() {
-        let data = json!({"level": "error"});
-        assert!(matches_all(
-            "api",
-            &data,
-            &[FilterChip {
-                path: "level".into(),
-                op: FilterOp::In,
-                value: None,
-                values: Some(vec!["warn".into(), "error".into()]),
-            }]
-        ));
-        assert!(!matches_all(
-            "api",
-            &data,
-            &[FilterChip {
-                path: "level".into(),
-                op: FilterOp::In,
-                value: None,
-                values: Some(vec!["info".into(), "debug".into()]),
-            }]
-        ));
-        assert!(!matches_all(
-            "api",
-            &data,
-            &[FilterChip {
-                path: "level".into(),
-                op: FilterOp::In,
-                value: None,
-                values: Some(vec![]),
-            }]
-        ));
-    }
-
-    #[test]
-    fn filter_service_special_path() {
+    fn empty_query_matches_all() {
         let data = json!({"msg": "hi"});
-        assert!(matches_all(
-            "billing",
-            &data,
-            &[FilterChip {
-                path: "service".into(),
-                op: FilterOp::Eq,
-                value: Some("billing".into()),
-                values: None,
-            }]
-        ));
-        assert!(!matches_all(
-            "billing",
-            &data,
-            &[FilterChip {
-                path: "service".into(),
-                op: FilterOp::Eq,
-                value: Some("api".into()),
-                values: None,
-            }]
-        ));
-        assert!(matches_all(
+        assert!(matches("api", &data, ""));
+        assert!(matches("api", &data, "   "));
+    }
+
+    #[test]
+    fn eq_and_contains() {
+        let data = json!({"msg": "hello world", "level": "info"});
+        assert!(matches("api", &data, r#"level == "info""#));
+        assert!(matches("api", &data, r#"msg.contains("world")"#));
+        assert!(!matches("api", &data, r#"msg.contains("missing")"#));
+    }
+
+    #[test]
+    fn and_or() {
+        let data = json!({"msg": "timeout", "level": "error"});
+        assert!(matches(
             "api",
             &data,
-            &[FilterChip {
-                path: "service".into(),
-                op: FilterOp::In,
-                value: None,
-                values: Some(vec!["api".into(), "web".into()]),
-            }]
+            r#"level == "error" && msg.contains("timeout")"#
+        ));
+        assert!(matches(
+            "api",
+            &data,
+            r#"level == "info" || msg.contains("timeout")"#
+        ));
+        assert!(!matches(
+            "api",
+            &data,
+            r#"level == "info" && msg.contains("timeout")"#
         ));
     }
 
     #[test]
-    fn filter_level_aliases() {
+    fn in_list() {
+        let data = json!({"level": "error"});
+        assert!(matches("api", &data, r#"level in ["warn", "error"]"#));
+        assert!(!matches("api", &data, r#"level in ["info", "debug"]"#));
+    }
+
+    #[test]
+    fn service_binding() {
+        let data = json!({"msg": "hi"});
+        assert!(matches("billing", &data, r#"service == "billing""#));
+        assert!(!matches("billing", &data, r#"service == "api""#));
+        assert!(matches(
+            "api",
+            &data,
+            r#"service in ["api", "web"]"#
+        ));
+    }
+
+    #[test]
+    fn service_wins_over_data_key() {
+        let data = json!({"service": "from-data", "msg": "hi"});
+        assert!(matches("billing", &data, r#"service == "billing""#));
+        assert!(!matches("billing", &data, r#"service == "from-data""#));
+    }
+
+    #[test]
+    fn level_aliases() {
         let severity = json!({"severity": "warn"});
-        assert!(matches_all(
-            "api",
-            &severity,
-            &[FilterChip {
-                path: "level".into(),
-                op: FilterOp::Eq,
-                value: Some("warn".into()),
-                values: None,
-            }]
-        ));
+        assert!(matches("api", &severity, r#"level == "warn""#));
+
         let lvl = json!({"lvl": 50});
-        assert!(matches_all(
-            "api",
-            &lvl,
-            &[FilterChip {
-                path: "level".into(),
-                op: FilterOp::Eq,
-                value: Some("50".into()),
-                values: None,
-            }]
-        ));
-        // Prefer `level` over severity when both present
+        assert!(matches("api", &lvl, r#"level == "50""#));
+
         let both = json!({"level": "error", "severity": "info"});
-        assert!(matches_all(
-            "api",
-            &both,
-            &[FilterChip {
-                path: "level".into(),
-                op: FilterOp::Eq,
-                value: Some("error".into()),
-                values: None,
-            }]
-        ));
+        assert!(matches("api", &both, r#"level == "error""#));
+    }
+
+    #[test]
+    fn nested_path() {
+        let data = json!({"user": {"id": "42"}, "level": "error"});
+        assert!(matches("api", &data, r#"user.id == "42""#));
+        assert!(matches("api", &data, r#"has(user.id)"#));
+        assert!(!matches("api", &data, r#"user.id == "99""#));
+    }
+
+    #[test]
+    fn missing_field_is_no_match() {
+        let data = json!({"level": "info"});
+        assert!(!matches("api", &data, r#"msg.contains("x")"#));
+    }
+
+    #[test]
+    fn invalid_query_errors() {
+        assert!(compile_query("level ==").is_err());
+        assert!(compile_query("((((").is_err());
+    }
+
+    #[test]
+    fn non_bool_is_no_match() {
+        let data = json!({"msg": "hi", "n": 1});
+        assert!(!matches("api", &data, r#"msg"#));
+        assert!(!matches("api", &data, r#"1 + 1"#));
     }
 }
