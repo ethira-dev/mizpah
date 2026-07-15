@@ -2,6 +2,11 @@
 
 JSON log viewer with a modern web UI — and an MCP server so Cursor, Claude, and Codex can query your live logs without pasting them into chat.
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![GitHub Release](https://img.shields.io/github/v/release/ethira-dev/mizpah)](https://github.com/ethira-dev/mizpah/releases/latest)
+
+![Mizpah UI — live JSON logs with CEL filters](docs/images/ui.png)
+
 ```bash
 my-app 2>&1 | mizpah --service api
 ```
