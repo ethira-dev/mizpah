@@ -11,7 +11,7 @@ my-app 2>&1 | mizpah --service api
 ### Homebrew
 
 ```bash
-brew install ethira-dev/mizpah
+brew install ethira-dev/mizpah/mizpah
 ```
 
 ### From source
