@@ -108,7 +108,7 @@ msg.matches("(?i)time.?out")
 
 Use `contains` for substring match and `matches` for regex (SQL `LIKE`-style patterns). Combine with `&&` / `||`. Empty query matches all logs.
 
-REST: `GET /api/logs?q=<cel>` · WebSocket subscribe: `{ "type": "subscribe", "q": "…" }`.
+REST: `GET /api/logs?q=<cel>` · `GET /api/properties?q=<search>` (lists all discovered fields with counts) · WebSocket subscribe: `{ "type": "subscribe", "q": "…" }`.
 
 ### CLI
 

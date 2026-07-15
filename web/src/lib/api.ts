@@ -30,10 +30,19 @@ export async function fetchServices(): Promise<string[]> {
   return data.services
 }
 
-export async function fetchProperties(service?: string): Promise<PropertyInfo[]> {
+export async function fetchProperties(opts?: {
+  service?: string
+  q?: string
+}): Promise<PropertyInfo[]> {
   const params = new URLSearchParams()
-  if (service && service !== "*") params.set("service", service)
-  const res = await fetch(`/api/properties?${params}`)
+  if (opts?.service && opts.service !== "*") {
+    params.set("service", opts.service)
+  }
+  if (opts?.q?.trim()) {
+    params.set("q", opts.q.trim())
+  }
+  const qs = params.toString()
+  const res = await fetch(qs ? `/api/properties?${qs}` : "/api/properties")
   if (!res.ok) throw new Error(`properties: ${res.status}`)
   const data = (await res.json()) as { properties: PropertyInfo[] }
   return data.properties

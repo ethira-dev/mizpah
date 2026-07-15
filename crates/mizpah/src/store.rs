@@ -24,10 +24,24 @@ pub struct LogEntry {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct PropertyValueInfo {
+    pub value: String,
+    pub count: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PropertyInfo {
     pub path: String,
     pub types: Vec<String>,
     pub sample_values: Vec<String>,
+    /// Entries in the buffer that currently have this field. `0` when not computed
+    /// (e.g. lightweight WebSocket property snapshots).
+    #[serde(default)]
+    pub count: u64,
+    /// Sample values with occurrence counts. Empty when counts were not computed.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub values: Vec<PropertyValueInfo>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -220,7 +234,8 @@ impl Store {
                 }
             }
 
-            let props = paths_to_info(&inner.properties);
+            let mut props = paths_to_info(&inner.properties);
+            push_service_property(&mut props, &inner.services, None);
             (evicted_ids, service_was_new, props)
         };
 
@@ -269,9 +284,18 @@ impl Store {
         }
     }
 
-    pub async fn properties(&self, service: Option<&str>) -> Vec<PropertyInfo> {
+    /// Search and list discovered fields with occurrence counts over the full buffer.
+    ///
+    /// - `q` matches property paths or sample values (case-insensitive substring).
+    /// - When only values match, non-matching samples are dropped from the result.
+    /// - Always includes a synthetic `service` field when services are present.
+    pub async fn search_properties(
+        &self,
+        service: Option<&str>,
+        q: Option<&str>,
+    ) -> Vec<PropertyInfo> {
         let inner = self.inner.read().await;
-        match service {
+        let mut infos = match service {
             Some(svc) if !svc.is_empty() && svc != "*" => {
                 if let Some(map) = inner.properties_by_service.get(svc) {
                     paths_to_info(map)
@@ -280,7 +304,26 @@ impl Store {
                 }
             }
             _ => paths_to_info(&inner.properties),
+        };
+        push_service_property(&mut infos, &inner.services, service);
+
+        let needle = q
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_ascii_lowercase());
+
+        if let Some(ref needle) = needle {
+            infos = filter_properties_by_query(infos, needle);
         }
+
+        // Sort sample values alphabetically before counting so UI order is stable.
+        for info in &mut infos {
+            info.sample_values
+                .sort_by(|a, b| a.to_ascii_lowercase().cmp(&b.to_ascii_lowercase()));
+        }
+
+        annotate_property_counts(&inner.entries, service, &mut infos);
+        infos
     }
 
     pub async fn query_logs(
@@ -446,11 +489,169 @@ fn paths_to_info(map: &HashMap<String, PathMeta>) -> Vec<PropertyInfo> {
                 path: path.clone(),
                 types,
                 sample_values: meta.sample_values.clone(),
+                count: 0,
+                values: Vec::new(),
             }
         })
         .collect();
     infos.sort_by(|a, b| a.path.cmp(&b.path));
     infos
+}
+
+fn push_service_property(
+    infos: &mut Vec<PropertyInfo>,
+    services: &HashMap<String, u64>,
+    service_filter: Option<&str>,
+) {
+    infos.retain(|p| p.path != "service");
+
+    let mut names: Vec<String> = match service_filter {
+        Some(svc) if !svc.is_empty() && svc != "*" => {
+            if services.contains_key(svc) {
+                vec![svc.to_string()]
+            } else {
+                Vec::new()
+            }
+        }
+        _ => services.keys().cloned().collect(),
+    };
+    if names.is_empty() {
+        return;
+    }
+    names.sort_by(|a, b| a.to_ascii_lowercase().cmp(&b.to_ascii_lowercase()));
+
+    infos.push(PropertyInfo {
+        path: "service".into(),
+        types: vec!["string".into()],
+        sample_values: names,
+        count: 0,
+        values: Vec::new(),
+    });
+    infos.sort_by(|a, b| a.path.cmp(&b.path));
+}
+
+fn filter_properties_by_query(infos: Vec<PropertyInfo>, needle: &str) -> Vec<PropertyInfo> {
+    let mut out = Vec::new();
+    for mut info in infos {
+        let path_match = info.path.to_ascii_lowercase().contains(needle);
+        if path_match {
+            out.push(info);
+            continue;
+        }
+        info.sample_values
+            .retain(|v| v.to_ascii_lowercase().contains(needle));
+        if !info.sample_values.is_empty() {
+            out.push(info);
+        }
+    }
+    out
+}
+
+fn annotate_property_counts(
+    entries: &VecDeque<LogEntry>,
+    service_filter: Option<&str>,
+    infos: &mut [PropertyInfo],
+) {
+    if infos.is_empty() {
+        return;
+    }
+
+    let mut prop_counts = vec![0u64; infos.len()];
+    let mut value_counts: Vec<Vec<u64>> = infos
+        .iter()
+        .map(|info| vec![0u64; info.sample_values.len()])
+        .collect();
+
+    for entry in entries {
+        if let Some(svc) = service_filter {
+            if !svc.is_empty() && svc != "*" && entry.service != svc {
+                continue;
+            }
+        }
+        for (i, info) in infos.iter().enumerate() {
+            if !value_exists(entry, &info.path) {
+                continue;
+            }
+            prop_counts[i] += 1;
+            for (j, sample) in info.sample_values.iter().enumerate() {
+                if value_matches(entry, &info.path, sample) {
+                    value_counts[i][j] += 1;
+                }
+            }
+        }
+    }
+
+    for (i, info) in infos.iter_mut().enumerate() {
+        info.count = prop_counts[i];
+        info.values = info
+            .sample_values
+            .iter()
+            .zip(value_counts[i].iter())
+            .map(|(value, &count)| PropertyValueInfo {
+                value: value.clone(),
+                count,
+            })
+            .collect();
+    }
+}
+
+/// Resolve a dotted / bracket path in log JSON (`user.id`, `items[0].name`).
+fn get_at_path<'a>(data: &'a Value, path: &str) -> Option<&'a Value> {
+    let mut cur = data;
+    let mut rest = path;
+    while !rest.is_empty() {
+        if let Some(stripped) = rest.strip_prefix('[') {
+            let end = stripped.find(']')?;
+            let idx: usize = stripped[..end].parse().ok()?;
+            cur = cur.as_array()?.get(idx)?;
+            rest = &stripped[end + 1..];
+            if let Some(r) = rest.strip_prefix('.') {
+                rest = r;
+            }
+        } else {
+            let end = rest.find(['.', '[']).unwrap_or(rest.len());
+            let key = &rest[..end];
+            cur = cur.as_object()?.get(key)?;
+            rest = &rest[end..];
+            if let Some(r) = rest.strip_prefix('.') {
+                rest = r;
+            }
+        }
+    }
+    Some(cur)
+}
+
+fn value_exists(entry: &LogEntry, path: &str) -> bool {
+    if path == "service" {
+        return true;
+    }
+    get_at_path(&entry.data, path).is_some()
+}
+
+fn sample_matches(actual: &Value, sample: &str) -> bool {
+    if let Some(prefix) = sample.strip_suffix('…') {
+        return actual
+            .as_str()
+            .map(|s| s.starts_with(prefix))
+            .unwrap_or(false);
+    }
+    match actual {
+        Value::Null => sample == "null",
+        Value::Bool(b) => sample == b.to_string(),
+        Value::Number(n) => sample == n.to_string(),
+        Value::String(s) => sample == s,
+        _ => false,
+    }
+}
+
+fn value_matches(entry: &LogEntry, path: &str, sample: &str) -> bool {
+    if path == "service" {
+        return entry.service == sample;
+    }
+    match get_at_path(&entry.data, path) {
+        Some(actual) => sample_matches(actual, sample),
+        None => false,
+    }
 }
 
 #[cfg(test)]
@@ -553,5 +754,57 @@ mod tests {
         let entries = store.push_line("api", "[other] {").await;
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0].data["_raw"], json!("[other] {"));
+    }
+
+    #[tokio::test]
+    async fn search_properties_filters_and_counts() {
+        let store = Store::new(1_000_000);
+        store
+            .push_line("api", r#"{"level":"error","msg":"boom","user":{"id":"1"}}"#)
+            .await;
+        store
+            .push_line("api", r#"{"level":"info","msg":"ok","user":{"id":"2"}}"#)
+            .await;
+        store
+            .push_line("web", r#"{"level":"error","msg":"fail"}"#)
+            .await;
+
+        let all = store.search_properties(None, None).await;
+        let level = all.iter().find(|p| p.path == "level").expect("level");
+        assert_eq!(level.count, 3);
+        let error = level
+            .values
+            .iter()
+            .find(|v| v.value == "error")
+            .expect("error sample");
+        assert_eq!(error.count, 2);
+
+        let service = all.iter().find(|p| p.path == "service").expect("service");
+        assert_eq!(service.count, 3);
+        assert!(service.sample_values.iter().any(|v| v == "api"));
+        assert!(service.sample_values.iter().any(|v| v == "web"));
+
+        let nested = all.iter().find(|p| p.path == "user.id").expect("user.id");
+        assert_eq!(nested.count, 2);
+
+        let filtered = store.search_properties(None, Some("erro")).await;
+        assert!(filtered.iter().any(|p| p.path == "level"));
+        let level = filtered.iter().find(|p| p.path == "level").unwrap();
+        assert_eq!(level.sample_values, vec!["error".to_string()]);
+        assert!(!filtered.iter().any(|p| p.path == "msg"));
+
+        let by_path = store.search_properties(None, Some("user")).await;
+        assert!(by_path.iter().any(|p| p.path == "user.id"));
+    }
+
+    #[test]
+    fn get_at_path_nested_and_array() {
+        let data = json!({
+            "user": { "id": "42" },
+            "items": [{ "name": "a" }, { "name": "b" }]
+        });
+        assert_eq!(get_at_path(&data, "user.id"), Some(&json!("42")));
+        assert_eq!(get_at_path(&data, "items[1].name"), Some(&json!("b")));
+        assert_eq!(get_at_path(&data, "missing"), None);
     }
 }

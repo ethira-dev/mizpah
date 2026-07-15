@@ -21,7 +21,7 @@ export function App() {
 
   const onQueryChange = useCallback((q: string) => setQuery(q), [])
 
-  const { entries, services, properties, stats, connected, loading, queryError } =
+  const { entries, services, properties, propertiesRevision, stats, connected, loading, queryError } =
     useMizpah(query)
 
   const memLabel = useMemo(() => {
@@ -64,9 +64,7 @@ export function App() {
 
         <div className="flex min-h-0 flex-1">
           <PropertyFilterDrawer
-            properties={properties}
-            services={services}
-            entries={entries}
+            propertiesRevision={propertiesRevision}
             onApplyFilter={onQueryChange}
           />
           <main className="flex min-h-0 min-w-0 flex-1 flex-col">

@@ -25,6 +25,7 @@ export function useMizpah(query: string) {
   const [entries, setEntries] = useState<LogEntry[]>([])
   const [services, setServices] = useState<string[]>([])
   const [properties, setProperties] = useState<PropertyInfo[]>([])
+  const [propertiesRevision, setPropertiesRevision] = useState(0)
   const [stats, setStats] = useState<Stats | null>(null)
   const [connected, setConnected] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -53,6 +54,7 @@ export function useMizpah(query: string) {
       ])
       setServices(svc)
       setProperties(props)
+      setPropertiesRevision((n) => n + 1)
       setStats(st)
       if (logsResult.ok) {
         setEntries(logsResult.logs.entries)
@@ -105,6 +107,7 @@ export function useMizpah(query: string) {
       }
       if (event.type === "properties") {
         setProperties(event.paths)
+        setPropertiesRevision((n) => n + 1)
         return
       }
       if (event.type === "evicted") {
@@ -138,6 +141,7 @@ export function useMizpah(query: string) {
     entries,
     services,
     properties,
+    propertiesRevision,
     stats,
     connected,
     loading,

@@ -40,6 +40,9 @@ pub struct ListPropertiesArgs {
     /// Optional service to scope discovered property paths.
     #[serde(default)]
     pub service: Option<String>,
+    /// Optional case-insensitive search over property paths and sample values.
+    #[serde(default)]
+    pub q: Option<String>,
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
@@ -96,7 +99,7 @@ impl MizpahMcp {
     }
 
     #[tool(
-        description = "List discovered JSON property paths (and sample values) to help write CEL filters. Optionally scope to a service."
+        description = "List discovered JSON property paths (and sample values with occurrence counts) to help write CEL filters. Optionally scope to a service and/or search with q (matches path or sample value)."
     )]
     async fn list_properties(
         &self,
@@ -104,7 +107,7 @@ impl MizpahMcp {
     ) -> Result<CallToolResult, McpError> {
         let resp = self
             .hub
-            .list_properties(args.service.as_deref())
+            .list_properties(args.service.as_deref(), args.q.as_deref())
             .await
             .map_err(hub_err)?;
         json_result(resp)

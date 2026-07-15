@@ -111,6 +111,8 @@ async fn list_services(State(state): State<AppState>) -> Json<ServicesResponse> 
 #[derive(Debug, Deserialize)]
 struct PropertiesQuery {
     service: Option<String>,
+    /// Case-insensitive substring match against property paths and sample values.
+    q: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -124,7 +126,10 @@ async fn list_properties(
     Query(q): Query<PropertiesQuery>,
 ) -> Json<PropertiesResponse> {
     Json(PropertiesResponse {
-        properties: state.store.properties(q.service.as_deref()).await,
+        properties: state
+            .store
+            .search_properties(q.service.as_deref(), q.q.as_deref())
+            .await,
     })
 }
 

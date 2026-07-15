@@ -1,69 +1,28 @@
 import { ChevronLeft, ChevronRight, PanelLeft, Search, X } from "lucide-react"
-import { useMemo, useState } from "react"
+import { useEffect, useState } from "react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { fetchProperties } from "@/lib/api"
 import { buildCelEqualityFilter } from "@/lib/filter-from-property"
-import type { LogEntry, PropertyInfo } from "@/lib/types"
+import type { PropertyInfo } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
 const EDGE_W = 8
 const PEEK_W = 20
 const OPEN_W = 260
+const SEARCH_DEBOUNCE_MS = 200
 
 type PropertyFilterDrawerProps = {
-  properties: PropertyInfo[]
-  services: string[]
-  entries: LogEntry[]
+  /** Bumps when the hub rediscovers properties so the open drawer can refresh. */
+  propertiesRevision: number
   onApplyFilter: (cel: string) => void
 }
 
 function formatCount(n: number): string {
   if (n > 999) return "999+"
   return String(n)
-}
-
-function compareAlpha(a: string, b: string): number {
-  return a.localeCompare(b, undefined, { sensitivity: "base" })
-}
-
-/** Resolve a dotted / bracket path in log JSON (`user.id`, `items[0].name`). */
-function getAtPath(data: Record<string, unknown>, path: string): unknown {
-  const parts = path.match(/[^.[\]]+|\[(?:\d+)\]/g)
-  if (!parts) return undefined
-  let cur: unknown = data
-  for (const raw of parts) {
-    if (cur == null || typeof cur !== "object") return undefined
-    const key = raw.startsWith("[") ? raw.slice(1, -1) : raw
-    cur = (cur as Record<string, unknown>)[key]
-  }
-  return cur
-}
-
-function valueExists(entry: LogEntry, path: string): boolean {
-  if (path === "service") return true
-  return getAtPath(entry.data, path) !== undefined
-}
-
-/** Match sample string form used by the store (bool/number/null/string/truncated). */
-function sampleMatches(actual: unknown, sample: string): boolean {
-  if (sample.endsWith("…")) {
-    const prefix = sample.slice(0, -1)
-    return typeof actual === "string" && actual.startsWith(prefix)
-  }
-  if (actual === null) return sample === "null"
-  if (typeof actual === "boolean") return sample === String(actual)
-  if (typeof actual === "number") return sample === String(actual)
-  if (typeof actual === "string") return sample === actual
-  return false
-}
-
-function valueMatches(entry: LogEntry, path: string, sample: string): boolean {
-  if (path === "service") return entry.service === sample
-  const actual = getAtPath(entry.data, path)
-  if (actual === undefined) return false
-  return sampleMatches(actual, sample)
 }
 
 function CountPill({ count }: { count: number }) {
@@ -80,79 +39,48 @@ function CountPill({ count }: { count: number }) {
 }
 
 export function PropertyFilterDrawer({
-  properties,
-  services,
-  entries,
+  propertiesRevision,
   onApplyFilter,
 }: PropertyFilterDrawerProps) {
   const [open, setOpen] = useState(false)
   const [peeking, setPeeking] = useState(false)
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set())
   const [search, setSearch] = useState("")
+  const [debouncedSearch, setDebouncedSearch] = useState("")
+  const [items, setItems] = useState<PropertyInfo[]>([])
+  const [loading, setLoading] = useState(false)
 
-  const items = useMemo((): PropertyInfo[] => {
-    const list: PropertyInfo[] = properties.filter((p) => p.path !== "service")
-    if (services.length > 0) {
-      list.push({
-        path: "service",
-        types: ["string"],
-        sampleValues: [...services],
+  useEffect(() => {
+    const id = window.setTimeout(() => {
+      setDebouncedSearch(search.trim())
+    }, SEARCH_DEBOUNCE_MS)
+    return () => window.clearTimeout(id)
+  }, [search])
+
+  useEffect(() => {
+    if (!open) return
+
+    let cancelled = false
+    setLoading(true)
+    void fetchProperties({ q: debouncedSearch || undefined })
+      .then((props) => {
+        if (!cancelled) setItems(props)
       })
+      .catch(() => {
+        if (!cancelled) setItems([])
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+
+    return () => {
+      cancelled = true
     }
-    return list
-      .map((item) => ({
-        ...item,
-        sampleValues: [...item.sampleValues].sort(compareAlpha),
-      }))
-      .sort((a, b) => compareAlpha(a.path, b.path))
-  }, [properties, services])
-
-  const filteredItems = useMemo(() => {
-    const q = search.trim().toLowerCase()
-    if (!q) return items
-
-    const out: PropertyInfo[] = []
-    for (const item of items) {
-      const pathMatch = item.path.toLowerCase().includes(q)
-      const matchedValues = pathMatch
-        ? item.sampleValues
-        : item.sampleValues.filter((v) => v.toLowerCase().includes(q))
-      if (!pathMatch && matchedValues.length === 0) continue
-      out.push({ ...item, sampleValues: matchedValues })
-    }
-    return out
-  }, [items, search])
-
-  const counts = useMemo(() => {
-    const propertyCounts = new Map<string, number>()
-    const valueCounts = new Map<string, number>()
-
-    for (const item of items) {
-      let propCount = 0
-      const valueMap = new Map(item.sampleValues.map((v) => [v, 0]))
-
-      for (const entry of entries) {
-        if (!valueExists(entry, item.path)) continue
-        propCount++
-        for (const sample of item.sampleValues) {
-          if (valueMatches(entry, item.path, sample)) {
-            valueMap.set(sample, (valueMap.get(sample) ?? 0) + 1)
-          }
-        }
-      }
-
-      propertyCounts.set(item.path, propCount)
-      for (const [sample, n] of valueMap) {
-        valueCounts.set(`${item.path}\0${sample}`, n)
-      }
-    }
-
-    return { propertyCounts, valueCounts }
-  }, [entries, items])
+  }, [open, debouncedSearch, propertiesRevision])
 
   const width = open ? OPEN_W : peeking ? PEEK_W : 0
   const showChrome = open || peeking
-  const searching = search.trim().length > 0
+  const searching = debouncedSearch.length > 0
 
   function toggleExpanded(path: string) {
     setExpanded((prev) => {
@@ -165,6 +93,13 @@ export function PropertyFilterDrawer({
 
   function applyValue(path: string, value: string, types: string[]) {
     onApplyFilter(buildCelEqualityFilter(path, value, types))
+  }
+
+  function valuesFor(item: PropertyInfo): { value: string; count: number }[] {
+    if (item.values && item.values.length > 0) {
+      return item.values
+    }
+    return item.sampleValues.map((value) => ({ value, count: 0 }))
   }
 
   return (
@@ -258,22 +193,22 @@ export function PropertyFilterDrawer({
 
             <ScrollArea className="min-h-0 flex-1">
               <div className="p-2">
-                {items.length === 0 ? (
+                {loading && items.length === 0 ? (
                   <p className="px-2 py-6 text-center text-xs text-muted-foreground">
-                    Waiting for logs…
+                    Loading…
                   </p>
-                ) : filteredItems.length === 0 ? (
+                ) : items.length === 0 ? (
                   <p className="px-2 py-6 text-center text-xs text-muted-foreground">
-                    No matches
+                    {searching ? "No matches" : "Waiting for logs…"}
                   </p>
                 ) : (
                   <ul className="space-y-0.5">
-                    {filteredItems.map((item) => {
+                    {items.map((item) => {
+                      const values = valuesFor(item)
                       const isOpen =
                         expanded.has(item.path) ||
-                        (searching && item.sampleValues.length > 0)
-                      const propCount =
-                        counts.propertyCounts.get(item.path) ?? 0
+                        (searching && values.length > 0)
+                      const propCount = item.count ?? 0
                       return (
                         <li key={item.path}>
                           <button
@@ -300,42 +235,32 @@ export function PropertyFilterDrawer({
 
                           {isOpen ? (
                             <ul className="mt-0.5 mb-1 ml-4 space-y-0.5 border-l border-border pl-2">
-                              {item.sampleValues.length === 0 ? (
+                              {values.length === 0 ? (
                                 <li className="px-2 py-1 text-[11px] text-muted-foreground">
                                   No sample values
                                 </li>
                               ) : (
-                                item.sampleValues.map((value) => {
-                                  const valueCount =
-                                    counts.valueCounts.get(
-                                      `${item.path}\0${value}`
-                                    ) ?? 0
-                                  return (
-                                    <li key={value}>
-                                      <button
-                                        type="button"
-                                        className={cn(
-                                          "flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-left",
-                                          "text-muted-foreground hover:bg-muted hover:text-foreground",
-                                          "focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                                        )}
-                                        title={value}
-                                        onClick={() =>
-                                          applyValue(
-                                            item.path,
-                                            value,
-                                            item.types
-                                          )
-                                        }
-                                      >
-                                        <CountPill count={valueCount} />
-                                        <span className="min-w-0 flex-1 truncate font-mono text-[11px]">
-                                          {value}
-                                        </span>
-                                      </button>
-                                    </li>
-                                  )
-                                })
+                                values.map(({ value, count }) => (
+                                  <li key={value}>
+                                    <button
+                                      type="button"
+                                      className={cn(
+                                        "flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-left",
+                                        "text-muted-foreground hover:bg-muted hover:text-foreground",
+                                        "focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                                      )}
+                                      title={value}
+                                      onClick={() =>
+                                        applyValue(item.path, value, item.types)
+                                      }
+                                    >
+                                      <CountPill count={count} />
+                                      <span className="min-w-0 flex-1 truncate font-mono text-[11px]">
+                                        {value}
+                                      </span>
+                                    </button>
+                                  </li>
+                                ))
                               )}
                             </ul>
                           ) : null}

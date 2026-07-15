@@ -104,10 +104,14 @@ impl HubClient {
     pub async fn list_properties(
         &self,
         service: Option<&str>,
+        q: Option<&str>,
     ) -> Result<PropertiesResponse, HubError> {
         let mut query = Vec::new();
         if let Some(svc) = service.filter(|s| !s.is_empty()) {
             query.push(("service", svc.to_string()));
+        }
+        if let Some(expr) = q.filter(|s| !s.is_empty()) {
+            query.push(("q", expr.to_string()));
         }
         self.get_json("/api/properties", &query).await
     }
