@@ -36,3 +36,15 @@ run service='demo' *args='':
 
 test:
     cargo test -p mizpah
+
+# Frontend lint + typecheck
+lint-web:
+    cd web && npm run lint && npm run typecheck
+
+# Rust format + clippy
+lint-rust:
+    cargo fmt --check
+    cargo clippy -p mizpah -- -D warnings
+
+# Full local gate (same as PR CI, minus npm ci)
+check: lint-rust test lint-web

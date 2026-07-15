@@ -4,10 +4,12 @@ mod client;
 mod install;
 mod server;
 
-pub use install::{ensure_registered_on_hub_start, install_all, resolve_binary_path, uninstall_all};
+pub use install::{
+    ensure_registered_on_hub_start, install_all, resolve_binary_path, uninstall_all,
+};
 
-use rmcp::ServiceExt;
 use rmcp::transport::stdio;
+use rmcp::ServiceExt;
 use server::MizpahMcp;
 
 /// Resolve hub base URL from env or host/port flags.

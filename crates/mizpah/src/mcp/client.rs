@@ -64,22 +64,16 @@ impl HubClient {
         query: &[(&str, String)],
     ) -> Result<T, HubError> {
         let url = format!("{}{path}", self.base_url);
-        let response = self
-            .http
-            .get(&url)
-            .query(query)
-            .send()
-            .await
-            .map_err(|e| {
-                if e.is_connect() || e.is_timeout() {
-                    HubError::Unreachable {
-                        url: self.base_url.clone(),
-                        source: e,
-                    }
-                } else {
-                    HubError::Request(e)
+        let response = self.http.get(&url).query(query).send().await.map_err(|e| {
+            if e.is_connect() || e.is_timeout() {
+                HubError::Unreachable {
+                    url: self.base_url.clone(),
+                    source: e,
                 }
-            })?;
+            } else {
+                HubError::Request(e)
+            }
+        })?;
 
         let status = response.status();
         if !status.is_success() {
@@ -164,9 +158,9 @@ impl HubClient {
                 .map(|eid| eid >= min_id && eid <= max_id)
                 .unwrap_or(false)
         });
-        response.entries.sort_by_key(|entry| {
-            entry.get("id").and_then(|v| v.as_u64()).unwrap_or(0)
-        });
+        response
+            .entries
+            .sort_by_key(|entry| entry.get("id").and_then(|v| v.as_u64()).unwrap_or(0));
         response.has_more = false;
         Ok(response)
     }
@@ -219,10 +213,7 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(resp.entries.len(), 1);
-        assert_eq!(
-            resp.entries[0]["data"]["msg"].as_str(),
-            Some("boom")
-        );
+        assert_eq!(resp.entries[0]["data"]["msg"].as_str(), Some("boom"));
     }
 
     #[tokio::test]
@@ -240,17 +231,15 @@ mod tests {
     async fn get_logs_around_window() {
         let (url, store) = spawn_test_hub().await;
         for i in 0..10 {
-            store
-                .push_line("api", &format!(r#"{{"n":{i}}}"#))
-                .await;
+            store.push_line("api", &format!(r#"{{"n":{i}}}"#)).await;
         }
         let client = HubClient::new(url);
-        let all = client.search_logs(None, None, Some(50), None).await.unwrap();
-        let mid = all.entries[5]["id"].as_u64().unwrap();
-        let window = client
-            .get_logs_around(mid, 2, 2, None, None)
+        let all = client
+            .search_logs(None, None, Some(50), None)
             .await
             .unwrap();
+        let mid = all.entries[5]["id"].as_u64().unwrap();
+        let window = client.get_logs_around(mid, 2, 2, None, None).await.unwrap();
         assert!(!window.entries.is_empty());
         let ids: Vec<u64> = window
             .entries

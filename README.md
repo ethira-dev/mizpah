@@ -161,12 +161,17 @@ cargo build --release
 Useful targets:
 
 ```bash
-just install   # UI + install binary to ~/.cargo/bin
-just ui        # rebuild SPA only
-just build     # UI + debug binary
-just test      # Rust unit tests
-just web-dev   # Vite dev server (proxies to :1738)
+just install    # UI + install binary to ~/.cargo/bin
+just ui         # rebuild SPA only
+just build      # UI + debug binary
+just test       # Rust unit tests
+just web-dev    # Vite dev server (proxies to :1738)
+just lint-rust  # cargo fmt --check + clippy
+just lint-web   # eslint + tsc
+just check      # lint-rust + test + lint-web (matches PR CI)
 ```
+
+Pull requests run the same Rust and web checks via GitHub Actions (`.github/workflows/ci.yml`).
 
 ### Architecture
 

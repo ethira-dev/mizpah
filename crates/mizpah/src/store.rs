@@ -1,83 +1,21 @@
 use crate::pretty_ingest::{
     is_pretty_block_start, parse_pretty_block, strip_ansi, strip_service_prefix, PrettyBuffer,
 };
-use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
+use crate::properties::{
+    annotate_property_counts, discover_paths_into, filter_properties_by_query, paths_to_info,
+    push_service_property, PathMeta,
+};
+use chrono::Utc;
 use serde_json::{Map, Value};
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicU64, Ordering};
 use tokio::sync::{broadcast, RwLock};
 
+// Re-export public DTOs so existing `crate::store::{...}` imports keep working.
+pub use crate::models::{LogEntry, PropertyInfo, ServiceInfo, Stats, WsEvent};
+
 pub const DEFAULT_MAX_BYTES: u64 = 1_073_741_824; // 1 GiB
 const BROADCAST_CAPACITY: usize = 1024;
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct LogEntry {
-    pub id: u64,
-    pub received_at: DateTime<Utc>,
-    pub service: String,
-    pub data: Value,
-    #[serde(skip)]
-    pub approx_bytes: u64,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PropertyValueInfo {
-    pub value: String,
-    pub count: u64,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PropertyInfo {
-    pub path: String,
-    pub types: Vec<String>,
-    pub sample_values: Vec<String>,
-    /// Entries in the buffer that currently have this field. `0` when not computed
-    /// (e.g. lightweight WebSocket property snapshots).
-    #[serde(default)]
-    pub count: u64,
-    /// Sample values with occurrence counts. Empty when counts were not computed.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub values: Vec<PropertyValueInfo>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ServiceInfo {
-    pub name: String,
-    pub count: u64,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Stats {
-    pub count: u64,
-    pub approx_bytes: u64,
-    pub max_bytes: u64,
-    pub services: Vec<ServiceInfo>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "camelCase")]
-pub enum WsEvent {
-    #[serde(rename = "log")]
-    Log { entry: LogEntry },
-    #[serde(rename = "evicted")]
-    Evicted { ids: Vec<u64> },
-    #[serde(rename = "services")]
-    Services { names: Vec<String> },
-    #[serde(rename = "properties")]
-    Properties { paths: Vec<PropertyInfo> },
-}
-
-#[derive(Debug, Clone, Default)]
-struct PathMeta {
-    types: HashSet<String>,
-    sample_values: Vec<String>,
-}
 
 struct Inner {
     entries: VecDeque<LogEntry>,
@@ -186,9 +124,10 @@ impl Store {
 
         // Start multiline pretty block
         if is_pretty_block_start(cleaned) {
-            inner
-                .pretty_buffers
-                .insert(service.to_string(), PrettyBuffer::start(cleaned.to_string()));
+            inner.pretty_buffers.insert(
+                service.to_string(),
+                PrettyBuffer::start(cleaned.to_string()),
+            );
             return Vec::new();
         }
 
@@ -248,9 +187,7 @@ impl Store {
             let names = self.service_names().await;
             self.publish(WsEvent::Services { names });
         }
-        self.publish(WsEvent::Properties {
-            paths: properties,
-        });
+        self.publish(WsEvent::Properties { paths: properties });
         self.publish(WsEvent::Log {
             entry: entry.clone(),
         });
@@ -318,8 +255,7 @@ impl Store {
 
         // Sort sample values alphabetically before counting so UI order is stable.
         for info in &mut infos {
-            info.sample_values
-                .sort_by(|a, b| a.to_ascii_lowercase().cmp(&b.to_ascii_lowercase()));
+            info.sample_values.sort_by_key(|a| a.to_ascii_lowercase());
         }
 
         annotate_property_counts(&inner.entries, service, &mut infos);
@@ -374,10 +310,7 @@ pub fn parse_line(line: &str) -> Value {
     }
     match serde_json::from_str::<Value>(trimmed) {
         Ok(Value::Object(obj)) => Value::Object(obj),
-        Ok(other) => Value::Object(Map::from_iter([(
-            "_value".to_string(),
-            other,
-        )])),
+        Ok(other) => Value::Object(Map::from_iter([("_value".to_string(), other)])),
         Err(_) => Value::Object(Map::from_iter([(
             "_raw".to_string(),
             Value::String(trimmed.to_string()),
@@ -396,12 +329,7 @@ fn try_parse_json_object(line: &str) -> Option<Value> {
 fn raw_payloads_from_lines(lines: Vec<String>) -> Vec<Value> {
     lines
         .into_iter()
-        .map(|line| {
-            Value::Object(Map::from_iter([(
-                "_raw".to_string(),
-                Value::String(line),
-            )]))
-        })
+        .map(|line| Value::Object(Map::from_iter([("_raw".to_string(), Value::String(line))])))
         .collect()
 }
 
@@ -409,249 +337,6 @@ fn estimate_bytes(service: &str, data: &Value) -> u64 {
     let json_len = data.to_string().len() as u64;
     let overhead = 64 + service.len() as u64;
     json_len + overhead
-}
-
-fn discover_paths_into(value: &Value, prefix: &str, map: &mut HashMap<String, PathMeta>) {
-    match value {
-        Value::Object(obj) => {
-            for (key, child) in obj {
-                let path = if prefix.is_empty() {
-                    key.clone()
-                } else {
-                    format!("{prefix}.{key}")
-                };
-                record_path(&path, child, map);
-                if child.is_object() {
-                    discover_paths_into(child, &path, map);
-                } else if let Value::Array(arr) = child {
-                    for (i, item) in arr.iter().enumerate().take(5) {
-                        if item.is_object() {
-                            let item_path = format!("{path}[{i}]");
-                            discover_paths_into(item, &item_path, map);
-                        }
-                    }
-                }
-            }
-        }
-        other => {
-            if !prefix.is_empty() {
-                record_path(prefix, other, map);
-            }
-        }
-    }
-}
-
-fn record_path(path: &str, value: &Value, map: &mut HashMap<String, PathMeta>) {
-    let meta = map.entry(path.to_string()).or_default();
-    let type_name = match value {
-        Value::Null => "null",
-        Value::Bool(_) => "boolean",
-        Value::Number(n) => {
-            if n.is_f64() && !n.is_i64() && !n.is_u64() {
-                "number"
-            } else {
-                "number"
-            }
-        }
-        Value::String(_) => "string",
-        Value::Array(_) => "array",
-        Value::Object(_) => "object",
-    };
-    meta.types.insert(type_name.to_string());
-
-    if meta.sample_values.len() < 20 {
-        let sample = match value {
-            Value::String(s) => {
-                if s.len() > 80 {
-                    format!("{}…", &s[..80])
-                } else {
-                    s.clone()
-                }
-            }
-            Value::Null => "null".to_string(),
-            Value::Bool(b) => b.to_string(),
-            Value::Number(n) => n.to_string(),
-            Value::Array(_) | Value::Object(_) => return,
-        };
-        if !meta.sample_values.contains(&sample) {
-            meta.sample_values.push(sample);
-        }
-    }
-}
-
-fn paths_to_info(map: &HashMap<String, PathMeta>) -> Vec<PropertyInfo> {
-    let mut infos: Vec<PropertyInfo> = map
-        .iter()
-        .map(|(path, meta)| {
-            let mut types: Vec<String> = meta.types.iter().cloned().collect();
-            types.sort();
-            PropertyInfo {
-                path: path.clone(),
-                types,
-                sample_values: meta.sample_values.clone(),
-                count: 0,
-                values: Vec::new(),
-            }
-        })
-        .collect();
-    infos.sort_by(|a, b| a.path.cmp(&b.path));
-    infos
-}
-
-fn push_service_property(
-    infos: &mut Vec<PropertyInfo>,
-    services: &HashMap<String, u64>,
-    service_filter: Option<&str>,
-) {
-    infos.retain(|p| p.path != "service");
-
-    let mut names: Vec<String> = match service_filter {
-        Some(svc) if !svc.is_empty() && svc != "*" => {
-            if services.contains_key(svc) {
-                vec![svc.to_string()]
-            } else {
-                Vec::new()
-            }
-        }
-        _ => services.keys().cloned().collect(),
-    };
-    if names.is_empty() {
-        return;
-    }
-    names.sort_by(|a, b| a.to_ascii_lowercase().cmp(&b.to_ascii_lowercase()));
-
-    infos.push(PropertyInfo {
-        path: "service".into(),
-        types: vec!["string".into()],
-        sample_values: names,
-        count: 0,
-        values: Vec::new(),
-    });
-    infos.sort_by(|a, b| a.path.cmp(&b.path));
-}
-
-fn filter_properties_by_query(infos: Vec<PropertyInfo>, needle: &str) -> Vec<PropertyInfo> {
-    let mut out = Vec::new();
-    for mut info in infos {
-        let path_match = info.path.to_ascii_lowercase().contains(needle);
-        if path_match {
-            out.push(info);
-            continue;
-        }
-        info.sample_values
-            .retain(|v| v.to_ascii_lowercase().contains(needle));
-        if !info.sample_values.is_empty() {
-            out.push(info);
-        }
-    }
-    out
-}
-
-fn annotate_property_counts(
-    entries: &VecDeque<LogEntry>,
-    service_filter: Option<&str>,
-    infos: &mut [PropertyInfo],
-) {
-    if infos.is_empty() {
-        return;
-    }
-
-    let mut prop_counts = vec![0u64; infos.len()];
-    let mut value_counts: Vec<Vec<u64>> = infos
-        .iter()
-        .map(|info| vec![0u64; info.sample_values.len()])
-        .collect();
-
-    for entry in entries {
-        if let Some(svc) = service_filter {
-            if !svc.is_empty() && svc != "*" && entry.service != svc {
-                continue;
-            }
-        }
-        for (i, info) in infos.iter().enumerate() {
-            if !value_exists(entry, &info.path) {
-                continue;
-            }
-            prop_counts[i] += 1;
-            for (j, sample) in info.sample_values.iter().enumerate() {
-                if value_matches(entry, &info.path, sample) {
-                    value_counts[i][j] += 1;
-                }
-            }
-        }
-    }
-
-    for (i, info) in infos.iter_mut().enumerate() {
-        info.count = prop_counts[i];
-        info.values = info
-            .sample_values
-            .iter()
-            .zip(value_counts[i].iter())
-            .map(|(value, &count)| PropertyValueInfo {
-                value: value.clone(),
-                count,
-            })
-            .collect();
-    }
-}
-
-/// Resolve a dotted / bracket path in log JSON (`user.id`, `items[0].name`).
-fn get_at_path<'a>(data: &'a Value, path: &str) -> Option<&'a Value> {
-    let mut cur = data;
-    let mut rest = path;
-    while !rest.is_empty() {
-        if let Some(stripped) = rest.strip_prefix('[') {
-            let end = stripped.find(']')?;
-            let idx: usize = stripped[..end].parse().ok()?;
-            cur = cur.as_array()?.get(idx)?;
-            rest = &stripped[end + 1..];
-            if let Some(r) = rest.strip_prefix('.') {
-                rest = r;
-            }
-        } else {
-            let end = rest.find(['.', '[']).unwrap_or(rest.len());
-            let key = &rest[..end];
-            cur = cur.as_object()?.get(key)?;
-            rest = &rest[end..];
-            if let Some(r) = rest.strip_prefix('.') {
-                rest = r;
-            }
-        }
-    }
-    Some(cur)
-}
-
-fn value_exists(entry: &LogEntry, path: &str) -> bool {
-    if path == "service" {
-        return true;
-    }
-    get_at_path(&entry.data, path).is_some()
-}
-
-fn sample_matches(actual: &Value, sample: &str) -> bool {
-    if let Some(prefix) = sample.strip_suffix('…') {
-        return actual
-            .as_str()
-            .map(|s| s.starts_with(prefix))
-            .unwrap_or(false);
-    }
-    match actual {
-        Value::Null => sample == "null",
-        Value::Bool(b) => sample == b.to_string(),
-        Value::Number(n) => sample == n.to_string(),
-        Value::String(s) => sample == s,
-        _ => false,
-    }
-}
-
-fn value_matches(entry: &LogEntry, path: &str, sample: &str) -> bool {
-    if path == "service" {
-        return entry.service == sample;
-    }
-    match get_at_path(&entry.data, path) {
-        Some(actual) => sample_matches(actual, sample),
-        None => false,
-    }
 }
 
 #[cfg(test)]
@@ -663,10 +348,7 @@ mod tests {
     async fn reassembles_pretty_multiline_object() {
         let store = Store::new(1_000_000);
         assert!(store.push_line("api", "{").await.is_empty());
-        assert!(store
-            .push_line("api", "  level: 'info',")
-            .await
-            .is_empty());
+        assert!(store.push_line("api", "  level: 'info',").await.is_empty());
         assert!(store
             .push_line("api", "  message: 'hello',")
             .await
@@ -702,9 +384,7 @@ mod tests {
         let store = Store::new(1_000_000);
         assert!(store.push_line("api", "{").await.is_empty());
         assert!(store.push_line("api", "  a: 1,").await.is_empty());
-        let entries = store
-            .push_line("api", r#"{"level":"info"}"#)
-            .await;
+        let entries = store.push_line("api", r#"{"level":"info"}"#).await;
         // flushed pretty lines as raw + the JSON object
         assert!(entries.len() >= 2);
         assert_eq!(entries.last().unwrap().data["level"], json!("info"));
@@ -795,16 +475,5 @@ mod tests {
 
         let by_path = store.search_properties(None, Some("user")).await;
         assert!(by_path.iter().any(|p| p.path == "user.id"));
-    }
-
-    #[test]
-    fn get_at_path_nested_and_array() {
-        let data = json!({
-            "user": { "id": "42" },
-            "items": [{ "name": "a" }, { "name": "b" }]
-        });
-        assert_eq!(get_at_path(&data, "user.id"), Some(&json!("42")));
-        assert_eq!(get_at_path(&data, "items[1].name"), Some(&json!("b")));
-        assert_eq!(get_at_path(&data, "missing"), None);
     }
 }

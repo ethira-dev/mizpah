@@ -23,7 +23,6 @@ path = "src/main.rs"
 
 [dependencies]
 axum = { version = "0.8", features = ["ws"] }
-bytes = "1"
 cel = { version = "0.14.0", features = ["json", "regex"] }
 chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4", features = ["derive"] }
@@ -37,10 +36,17 @@ schemars = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
-tokio = { version = "1", features = ["full"] }
-tokio-stream = "0.1"
+tokio = { version = "1", features = [
+  "rt-multi-thread",
+  "macros",
+  "net",
+  "io-util",
+  "io-std",
+  "sync",
+  "time",
+  "signal",
+] }
 toml_edit = "0.22"
-tower-http = { version = "0.6", features = ["cors", "trace"] }
+tower-http = { version = "0.6", features = ["cors"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-uuid = { version = "1", features = ["v4", "serde"] }

@@ -63,12 +63,7 @@ impl InstallReport {
                 InstallAction::SkippedMissingProduct => "skipped (product not found)",
                 InstallAction::Unchanged => "unchanged",
             };
-            eprintln!(
-                "  {}: {} ({})",
-                r.client.label(),
-                status,
-                r.path.display()
-            );
+            eprintln!("  {}: {} ({})", r.client.label(), status, r.path.display());
         }
         for e in &self.errors {
             eprintln!(
@@ -170,7 +165,9 @@ fn claude_desktop_config_path() -> Option<PathBuf> {
     let dir = if cfg!(target_os = "macos") {
         home.join("Library/Application Support/Claude")
     } else if cfg!(target_os = "windows") {
-        std::env::var_os("APPDATA").map(PathBuf::from)?.join("Claude")
+        std::env::var_os("APPDATA")
+            .map(PathBuf::from)?
+            .join("Claude")
     } else {
         home.join(".config/Claude")
     };
@@ -260,9 +257,7 @@ pub fn merge_toml_mcp_servers(existing: &str, command: &str) -> Result<(String, 
     let mut doc: DocumentMut = if existing.trim().is_empty() {
         DocumentMut::new()
     } else {
-        existing
-            .parse()
-            .map_err(|e| format!("invalid TOML: {e}"))?
+        existing.parse().map_err(|e| format!("invalid TOML: {e}"))?
     };
 
     let servers = doc
@@ -291,12 +286,7 @@ pub fn merge_toml_mcp_servers(existing: &str, command: &str) -> Result<(String, 
         .get("args")
         .and_then(|i| i.as_value())
         .and_then(|v| v.as_array())
-        .map(|arr| {
-            arr.iter()
-                .filter_map(|v| v.as_str())
-                .collect::<Vec<_>>()
-                == vec!["mcp"]
-        })
+        .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>() == vec!["mcp"])
         .unwrap_or(false);
     if !args_match {
         let desired_args = toml_edit::Array::from_iter(["mcp"]);
@@ -311,9 +301,7 @@ pub fn remove_toml_mcp_server(existing: &str) -> Result<(String, bool), String> 
     if existing.trim().is_empty() {
         return Ok((String::new(), false));
     }
-    let mut doc: DocumentMut = existing
-        .parse()
-        .map_err(|e| format!("invalid TOML: {e}"))?;
+    let mut doc: DocumentMut = existing.parse().map_err(|e| format!("invalid TOML: {e}"))?;
 
     let changed = match doc.get_mut("mcp_servers").and_then(|i| i.as_table_mut()) {
         Some(servers) => servers.remove(SERVER_NAME).is_some(),
@@ -400,7 +388,9 @@ pub fn ensure_registered_on_hub_start() {
         .iter()
         .any(|r| r.action == InstallAction::Updated);
     if any_updated {
-        eprintln!("mizpah: registered MCP server with local AI clients (restart them to pick up tools)");
+        eprintln!(
+            "mizpah: registered MCP server with local AI clients (restart them to pick up tools)"
+        );
         report.print_summary();
     }
 }
@@ -418,10 +408,7 @@ mod tests {
             v["mcpServers"]["mizpah"]["command"].as_str(),
             Some("/bin/mizpah")
         );
-        assert_eq!(
-            v["mcpServers"]["mizpah"]["args"],
-            json!(["mcp"])
-        );
+        assert_eq!(v["mcpServers"]["mizpah"]["args"], json!(["mcp"]));
     }
 
     #[test]
@@ -450,7 +437,8 @@ mod tests {
 
     #[test]
     fn remove_json_server() {
-        let existing = r#"{"mcpServers":{"mizpah":{"command":"x","args":["mcp"]},"other":{"command":"y"}}}"#;
+        let existing =
+            r#"{"mcpServers":{"mizpah":{"command":"x","args":["mcp"]},"other":{"command":"y"}}}"#;
         let (out, changed) = remove_json_mcp_server(existing).unwrap();
         assert!(changed);
         let v: Value = serde_json::from_str(&out).unwrap();

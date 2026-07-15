@@ -61,20 +61,24 @@ export function PropertyFilterDrawer({
     if (!open) return
 
     let cancelled = false
-    setLoading(true)
-    void fetchProperties({ q: debouncedSearch || undefined })
-      .then((props) => {
-        if (!cancelled) setItems(props)
-      })
-      .catch(() => {
-        if (!cancelled) setItems([])
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
+    const id = window.setTimeout(() => {
+      if (cancelled) return
+      setLoading(true)
+      void fetchProperties({ q: debouncedSearch || undefined })
+        .then((props) => {
+          if (!cancelled) setItems(props)
+        })
+        .catch(() => {
+          if (!cancelled) setItems([])
+        })
+        .finally(() => {
+          if (!cancelled) setLoading(false)
+        })
+    }, 0)
 
     return () => {
       cancelled = true
+      window.clearTimeout(id)
     }
   }, [open, debouncedSearch, propertiesRevision])
 

@@ -25,12 +25,14 @@ export function CelQueryEditor({
   error,
 }: CelQueryEditorProps) {
   const [draft, setDraft] = useState(value)
+  const [prevValue, setPrevValue] = useState(value)
+  if (value !== prevValue) {
+    setPrevValue(value)
+    setDraft(value)
+  }
+
   const hint = useMemo(() => celSyntaxHint(draft), [draft])
   const displayError = error ?? hint
-
-  useEffect(() => {
-    setDraft(value)
-  }, [value])
 
   useEffect(() => {
     if (draft === value) return

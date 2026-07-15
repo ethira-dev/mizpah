@@ -142,11 +142,7 @@ mod tests {
         let data = json!({"msg": "hi"});
         assert!(matches("billing", &data, r#"service == "billing""#));
         assert!(!matches("billing", &data, r#"service == "api""#));
-        assert!(matches(
-            "api",
-            &data,
-            r#"service in ["api", "web"]"#
-        ));
+        assert!(matches("api", &data, r#"service in ["api", "web"]"#));
     }
 
     #[test]

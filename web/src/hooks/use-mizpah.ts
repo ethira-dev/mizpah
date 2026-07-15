@@ -33,7 +33,9 @@ export function useMizpah(query: string) {
   const queryRef = useRef(query)
   const wsRef = useRef<WebSocket | null>(null)
 
-  queryRef.current = query
+  useEffect(() => {
+    queryRef.current = query
+  }, [query])
 
   const reload = useCallback(async () => {
     setLoading(true)
@@ -68,7 +70,11 @@ export function useMizpah(query: string) {
   }, [query])
 
   useEffect(() => {
-    void reload()
+    // Defer so the effect body does not synchronously setState (react-hooks lint).
+    const id = window.setTimeout(() => {
+      void reload()
+    }, 0)
+    return () => window.clearTimeout(id)
   }, [reload])
 
   useEffect(() => {

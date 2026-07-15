@@ -57,7 +57,7 @@ pub fn strip_ansi(input: &str) -> String {
                     while i < bytes.len() {
                         let c = bytes[i];
                         i += 1;
-                        if (b'A'..=b'Z').contains(&c) || (b'a'..=b'z').contains(&c) {
+                        if c.is_ascii_uppercase() || c.is_ascii_lowercase() {
                             break;
                         }
                     }

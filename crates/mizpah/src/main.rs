@@ -3,7 +3,10 @@ mod attach;
 mod filter;
 mod ingest;
 mod mcp;
+mod models;
 mod pretty_ingest;
+mod properties;
+mod stdin_lines;
 mod store;
 
 use api::AppState;
@@ -102,8 +105,7 @@ async fn main() {
         None => {
             tracing_subscriber::fmt()
                 .with_env_filter(
-                    EnvFilter::try_from_default_env()
-                        .unwrap_or_else(|_| EnvFilter::new("error")),
+                    EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("error")),
                 )
                 .with_writer(std::io::stderr)
                 .init();
@@ -131,8 +133,15 @@ async fn run_pipe_mode(cli: Cli) {
 
     match try_bind(addr) {
         Ok(listener) => {
-            if let Err(err) = run_hub(listener, &cli.host, cli.port, cli.max_bytes, cli.no_open, service)
-                .await
+            if let Err(err) = run_hub(
+                listener,
+                &cli.host,
+                cli.port,
+                cli.max_bytes,
+                cli.no_open,
+                service,
+            )
+            .await
             {
                 error!(error = %err, "hub failed");
                 std::process::exit(1);
