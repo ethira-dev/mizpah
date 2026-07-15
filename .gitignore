@@ -1,0 +1,17 @@
+/target/
+**/*.rs.bk
+.DS_Store
+
+# Node / web
+web/node_modules/
+web/dist/
+web/.vite/
+
+# Embedded UI is produced by `npm run build` in web/
+# Keep a placeholder so rust-embed always has a folder; built assets are committed optionally.
+# Uncomment to ignore built static assets:
+# crates/mizpah/static/assets/
+# crates/mizpah/static/index.html
+
+.env
+.env.*

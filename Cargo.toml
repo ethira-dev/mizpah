@@ -1,0 +1,13 @@
+[workspace]
+resolver = "2"
+members = ["crates/mizpah"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/ethira-dev/mizpah"
+homepage = "https://github.com/ethira-dev/mizpah"
+authors = ["Lucas"]
+keywords = ["logs", "cli", "json", "observability"]
+categories = ["command-line-utilities", "development-tools", "web-programming"]
