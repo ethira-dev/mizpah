@@ -889,7 +889,7 @@ fn find_browser_binary() -> Option<PathBuf> {
                 return Some(p);
             }
         }
-        return None;
+        None
     }
     #[cfg(target_os = "windows")]
     {
@@ -902,7 +902,7 @@ fn find_browser_binary() -> Option<PathBuf> {
             candidates.push(PathBuf::from(&pf86).join("Google\\Chrome\\Application\\chrome.exe"));
             candidates.push(PathBuf::from(&pf86).join("Microsoft\\Edge\\Application\\msedge.exe"));
         }
-        return candidates.into_iter().find(|p| p.is_file());
+        candidates.into_iter().find(|p| p.is_file())
     }
     #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
     {
