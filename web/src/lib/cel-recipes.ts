@@ -13,6 +13,28 @@ export const CEL_RECIPES: CelRecipe[] = [
   { label: "Has field", expression: "has(user.id)" },
   { label: "Levels", expression: 'level in ["error", "warn"]' },
   { label: "Regex", expression: 'msg.matches("(?i)time.?out")' },
+  { label: "Browser console", expression: 'kind == "console"' },
+  {
+    label: "Browser console errors",
+    expression: 'kind == "console" && level == "error"',
+  },
+  {
+    label: "Browser network errors",
+    expression: 'kind == "network" && status >= 400',
+  },
+  {
+    label: "Cursor hooks",
+    expression: 'source == "cursor"',
+  },
+  {
+    label: "Claude hooks",
+    expression: 'source == "claude"',
+  },
+  {
+    label: "Agent tool failures",
+    expression:
+      'kind == "postToolUseFailure" || kind == "PostToolUseFailure"',
+  },
 ]
 
 export type CheatSheetGroup = {
@@ -26,6 +48,8 @@ export const CEL_CHEAT_SHEET: CheatSheetGroup[] = [
     items: [
       { code: "service", hint: "stream service tag" },
       { code: "level", hint: "level / severity / lvl" },
+      { code: "source", hint: '"browser" | "cursor" | "claude"' },
+      { code: "kind", hint: "console / network / hook event" },
       { code: "cmd", hint: "shell command when present" },
       { code: "_mzp.cwd", hint: "receiver terminal folder" },
       { code: "field.nested", hint: "JSON fields via ." },

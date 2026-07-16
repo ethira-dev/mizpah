@@ -1,5 +1,7 @@
+mod agent_hooks;
 mod api;
 mod attach;
+mod browser_attach;
 mod filter;
 mod ingest;
 mod investigate;
@@ -74,9 +76,12 @@ enum Commands {
         #[arg(short, long, default_value_t = 1738)]
         port: u16,
     },
-    /// Capture stdout/stderr from new interactive shells into Mizpah
+    /// Attach a log source (shell, browser, cursor, or claude)
     Attach {
-        /// Shared service name for all hooked shells (default: absolute cwd per command)
+        #[command(subcommand)]
+        target: Option<AttachTarget>,
+
+        /// Shared service name (shell when no subcommand; default: absolute cwd per command)
         #[arg(short, long)]
         service: Option<String>,
 
@@ -88,8 +93,17 @@ enum Commands {
         #[arg(short, long, default_value_t = 1738)]
         port: u16,
     },
-    /// Stop capturing shell stdout/stderr (hub stays up)
-    Detach,
+    /// Detach a log source (shell, cursor, claude, or all). Hub stays up.
+    Detach {
+        /// Target to detach (default: shell)
+        #[arg(value_enum, default_value_t = DetachTarget::Shell)]
+        target: DetachTarget,
+    },
+    /// Capture Chrome/Edge console + network via CDP into Mizpah
+    Browser {
+        #[command(subcommand)]
+        action: BrowserAction,
+    },
     /// Start, stop, or restart the background hub
     Hub {
         #[command(subcommand)]
@@ -130,6 +144,13 @@ enum Commands {
         #[arg(long)]
         tty_service: String,
     },
+    /// Forward Cursor/Claude hook JSON from stdin to the hub (internal)
+    #[command(name = "__hook-forward", hide = true)]
+    HookForward {
+        /// Hook source: cursor or claude
+        #[arg(long)]
+        source: String,
+    },
     /// Wait for parent exit then start hub (internal; used after self-update)
     #[command(name = "update-resume", hide = true)]
     UpdateResume {
@@ -156,6 +177,94 @@ enum Commands {
 }
 
 #[derive(Debug, Subcommand)]
+enum AttachTarget {
+    /// Capture stdout/stderr from new interactive shells
+    Shell {
+        /// Shared service name for all hooked shells (default: absolute cwd per command)
+        #[arg(short, long)]
+        service: Option<String>,
+
+        /// Hub host
+        #[arg(long, default_value = "127.0.0.1")]
+        host: String,
+
+        /// Hub port
+        #[arg(short, long, default_value_t = 1738)]
+        port: u16,
+    },
+    /// Capture Chrome/Edge console + network via CDP
+    Browser {
+        /// Shared service name (default: page host, e.g. localhost:5173)
+        #[arg(short, long)]
+        service: Option<String>,
+
+        /// Hub host
+        #[arg(long, default_value = "127.0.0.1")]
+        host: String,
+
+        /// Hub port
+        #[arg(short, long, default_value_t = 1738)]
+        port: u16,
+
+        /// Chrome remote-debugging port
+        #[arg(long, default_value_t = 9222)]
+        cdp_port: u16,
+
+        /// CDP browser websocket URL (overrides --cdp-port)
+        #[arg(long)]
+        cdp_url: Option<String>,
+
+        /// Launch Chrome/Edge with a dedicated Mizpah profile and debugging enabled
+        #[arg(long, default_value_t = false)]
+        launch: bool,
+
+        /// Also ingest Image/Font/Media/Stylesheet network metadata (no bodies)
+        #[arg(long, default_value_t = false)]
+        all_network: bool,
+    },
+    /// Install Cursor agent hooks that forward lifecycle events into the hub
+    Cursor {
+        /// Hub service name (default: cursor)
+        #[arg(short, long)]
+        service: Option<String>,
+
+        /// Hub host
+        #[arg(long, default_value = "127.0.0.1")]
+        host: String,
+
+        /// Hub port
+        #[arg(short, long, default_value_t = 1738)]
+        port: u16,
+    },
+    /// Install Claude Code hooks that forward lifecycle events into the hub
+    Claude {
+        /// Hub service name (default: claude)
+        #[arg(short, long)]
+        service: Option<String>,
+
+        /// Hub host
+        #[arg(long, default_value = "127.0.0.1")]
+        host: String,
+
+        /// Hub port
+        #[arg(short, long, default_value_t = 1738)]
+        port: u16,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+enum DetachTarget {
+    /// Disable shell stdout/stderr capture
+    Shell,
+    /// Remove Mizpah-managed Cursor hooks
+    Cursor,
+    /// Remove Mizpah-managed Claude Code hooks
+    Claude,
+    /// Detach shell + cursor + claude
+    All,
+}
+
+#[derive(Debug, Subcommand)]
 enum McpAction {
     /// Register Mizpah in Cursor, Claude Desktop, Claude Code, and Codex configs
     Install,
@@ -171,6 +280,40 @@ enum HubAction {
     Stop,
     /// Stop then start the hub (clears the in-memory buffer)
     Restart,
+}
+
+#[derive(Debug, Subcommand)]
+enum BrowserAction {
+    /// Attach to Chrome/Edge DevTools and forward console + network into the hub
+    Attach {
+        /// Shared service name (default: page host, e.g. localhost:5173)
+        #[arg(short, long)]
+        service: Option<String>,
+
+        /// Hub host
+        #[arg(long, default_value = "127.0.0.1")]
+        host: String,
+
+        /// Hub port
+        #[arg(short, long, default_value_t = 1738)]
+        port: u16,
+
+        /// Chrome remote-debugging port
+        #[arg(long, default_value_t = 9222)]
+        cdp_port: u16,
+
+        /// CDP browser websocket URL (overrides --cdp-port)
+        #[arg(long)]
+        cdp_url: Option<String>,
+
+        /// Launch Chrome/Edge with a dedicated Mizpah profile and debugging enabled
+        #[arg(long, default_value_t = false)]
+        launch: bool,
+
+        /// Also ingest Image/Font/Media/Stylesheet network metadata (no bodies)
+        #[arg(long, default_value_t = false)]
+        all_network: bool,
+    },
 }
 
 fn init_tracing_stderr() {
@@ -206,21 +349,95 @@ async fn main() {
             }
         },
         Some(Commands::Attach {
+            target,
             service,
             host,
             port,
         }) => {
             init_tracing_stderr();
-            if let Err(err) = shell_attach::run_attach(service, host, port).await {
+            let result = match target {
+                None => shell_attach::run_attach(service, host, port).await,
+                Some(AttachTarget::Shell {
+                    service,
+                    host,
+                    port,
+                }) => shell_attach::run_attach(service, host, port).await,
+                Some(AttachTarget::Browser {
+                    service,
+                    host,
+                    port,
+                    cdp_port,
+                    cdp_url,
+                    launch,
+                    all_network,
+                }) => {
+                    browser_attach::run_browser_attach(browser_attach::BrowserAttachOpts {
+                        service,
+                        host,
+                        port,
+                        cdp_port,
+                        cdp_url,
+                        launch,
+                        all_network,
+                    })
+                    .await
+                }
+                Some(AttachTarget::Cursor {
+                    service,
+                    host,
+                    port,
+                }) => agent_hooks::run_attach_cursor(service, host, port).await,
+                Some(AttachTarget::Claude {
+                    service,
+                    host,
+                    port,
+                }) => agent_hooks::run_attach_claude(service, host, port).await,
+            };
+            if let Err(err) = result {
                 eprintln!("error: {err}");
                 std::process::exit(1);
             }
         }
-        Some(Commands::Detach) => {
+        Some(Commands::Detach { target }) => {
             init_tracing_stderr();
-            if let Err(err) = shell_attach::run_detach() {
+            let result = match target {
+                DetachTarget::Shell => shell_attach::run_detach(),
+                DetachTarget::Cursor => agent_hooks::run_detach_cursor(),
+                DetachTarget::Claude => agent_hooks::run_detach_claude(),
+                DetachTarget::All => agent_hooks::run_detach_all(),
+            };
+            if let Err(err) = result {
                 eprintln!("error: {err}");
                 std::process::exit(1);
+            }
+        }
+        Some(Commands::Browser { action }) => {
+            // Alias for `mzp attach browser`
+            init_tracing_stderr();
+            match action {
+                BrowserAction::Attach {
+                    service,
+                    host,
+                    port,
+                    cdp_port,
+                    cdp_url,
+                    launch,
+                    all_network,
+                } => {
+                    let opts = browser_attach::BrowserAttachOpts {
+                        service,
+                        host,
+                        port,
+                        cdp_port,
+                        cdp_url,
+                        launch,
+                        all_network,
+                    };
+                    if let Err(err) = browser_attach::run_browser_attach(opts).await {
+                        eprintln!("error: {err}");
+                        std::process::exit(1);
+                    }
+                }
             }
         }
         Some(Commands::Hub {
@@ -267,6 +484,16 @@ async fn main() {
                 eprintln!("error: {err}");
                 std::process::exit(1);
             }
+        }
+        Some(Commands::HookForward { source }) => {
+            // stdout must stay empty (Claude injects SessionStart/UserPromptSubmit stdout)
+            init_tracing_stderr();
+            let Some(src) = agent_hooks::HookSource::parse(&source) else {
+                // Fail-open for the agent loop
+                std::process::exit(0);
+            };
+            agent_hooks::run_hook_forward(src).await;
+            std::process::exit(0);
         }
         Some(Commands::UpdateResume {
             wait_pid,
@@ -525,8 +752,44 @@ mod tests {
         assert!(help.contains("mcp"));
         assert!(help.contains("attach"));
         assert!(help.contains("detach"));
+        assert!(help.contains("browser"));
         assert!(help.contains("hub"));
         assert!(help.contains("open"));
+    }
+
+    #[test]
+    fn clap_accepts_browser_attach() {
+        let attach = Cli::try_parse_from([
+            "mizpah",
+            "browser",
+            "attach",
+            "--launch",
+            "--cdp-port",
+            "9223",
+            "--service",
+            "web",
+            "--all-network",
+            "--host",
+            "127.0.0.1",
+            "-p",
+            "1738",
+        ])
+        .unwrap();
+        match attach.command {
+            Some(Commands::Browser {
+                action:
+                    BrowserAction::Attach {
+                        service: Some(s),
+                        port: 1738,
+                        cdp_port: 9223,
+                        launch: true,
+                        all_network: true,
+                        cdp_url: None,
+                        ..
+                    },
+            }) => assert_eq!(s, "web"),
+            other => panic!("unexpected: {other:?}"),
+        }
     }
 
     #[test]
@@ -588,6 +851,7 @@ mod tests {
         .unwrap();
         match attach.command {
             Some(Commands::Attach {
+                target: None,
                 service: Some(s),
                 port: 1738,
                 ..
@@ -596,7 +860,12 @@ mod tests {
         }
 
         let detach = Cli::try_parse_from(["mizpah", "detach"]).unwrap();
-        assert!(matches!(detach.command, Some(Commands::Detach)));
+        assert!(matches!(
+            detach.command,
+            Some(Commands::Detach {
+                target: DetachTarget::Shell
+            })
+        ));
 
         let open = Cli::try_parse_from(["mizpah", "open", "--port", "9999"]).unwrap();
         match open.command {
@@ -605,6 +874,83 @@ mod tests {
                 port: Some(9999),
             }) => {}
             other => panic!("unexpected: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn clap_accepts_attach_targets() {
+        let shell = Cli::try_parse_from(["mizpah", "attach", "shell", "--service", "dev"]).unwrap();
+        match shell.command {
+            Some(Commands::Attach {
+                target:
+                    Some(AttachTarget::Shell {
+                        service: Some(s), ..
+                    }),
+                ..
+            }) => assert_eq!(s, "dev"),
+            other => panic!("unexpected: {other:?}"),
+        }
+
+        let browser = Cli::try_parse_from([
+            "mizpah",
+            "attach",
+            "browser",
+            "--launch",
+            "--cdp-port",
+            "9223",
+            "--all-network",
+        ])
+        .unwrap();
+        match browser.command {
+            Some(Commands::Attach {
+                target:
+                    Some(AttachTarget::Browser {
+                        launch: true,
+                        cdp_port: 9223,
+                        all_network: true,
+                        ..
+                    }),
+                ..
+            }) => {}
+            other => panic!("unexpected: {other:?}"),
+        }
+
+        let cursor = Cli::try_parse_from(["mizpah", "attach", "cursor", "-p", "1738"]).unwrap();
+        assert!(matches!(
+            cursor.command,
+            Some(Commands::Attach {
+                target: Some(AttachTarget::Cursor { port: 1738, .. }),
+                ..
+            })
+        ));
+
+        let claude =
+            Cli::try_parse_from(["mizpah", "attach", "claude", "--service", "my-claude"]).unwrap();
+        match claude.command {
+            Some(Commands::Attach {
+                target:
+                    Some(AttachTarget::Claude {
+                        service: Some(s), ..
+                    }),
+                ..
+            }) => assert_eq!(s, "my-claude"),
+            other => panic!("unexpected: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn clap_accepts_detach_targets() {
+        for (args, expected) in [
+            (vec!["mizpah", "detach", "shell"], DetachTarget::Shell),
+            (vec!["mizpah", "detach", "cursor"], DetachTarget::Cursor),
+            (vec!["mizpah", "detach", "claude"], DetachTarget::Claude),
+            (vec!["mizpah", "detach", "all"], DetachTarget::All),
+        ] {
+            let cli = Cli::try_parse_from(args).unwrap();
+            match cli.command {
+                Some(Commands::Detach { target }) => assert_eq!(target, expected),
+                other => panic!("unexpected: {other:?}"),
+            }
         }
     }
 
@@ -620,6 +966,12 @@ mod tests {
             Cli::try_parse_from(["mizpah", "__shell-forward", "--tty-service", "ttys001"]).unwrap();
         match fwd.command {
             Some(Commands::ShellForward { tty_service }) => assert_eq!(tty_service, "ttys001"),
+            other => panic!("unexpected: {other:?}"),
+        }
+
+        let hook = Cli::try_parse_from(["mizpah", "__hook-forward", "--source", "cursor"]).unwrap();
+        match hook.command {
+            Some(Commands::HookForward { source }) => assert_eq!(source, "cursor"),
             other => panic!("unexpected: {other:?}"),
         }
 
