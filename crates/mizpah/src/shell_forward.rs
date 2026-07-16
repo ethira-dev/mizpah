@@ -1,5 +1,6 @@
 //! Resilient shell stdout/stderr forwarder: drain stdin without backpressure.
 
+use crate::mzp_meta::MzpMeta;
 use crate::shell_attach::{self, AttachState};
 use base64::Engine;
 use serde::Serialize;
@@ -35,6 +36,7 @@ struct BatchBody<'a> {
     service: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
     cmd: Option<&'a str>,
+    mzp: &'a MzpMeta,
     lines: &'a [String],
 }
 
@@ -130,6 +132,7 @@ async fn forward_worker(mut rx: mpsc::Receiver<ForwardMsg>, tty_service: String)
         }
     };
 
+    let receiver = MzpMeta::capture();
     let mut meta = StreamMeta {
         cwd: tty_service,
         cmd: None,
@@ -154,6 +157,7 @@ async fn forward_worker(mut rx: mpsc::Receiver<ForwardMsg>, tty_service: String)
                         &client,
                         &mut buf,
                         &meta,
+                        &receiver,
                         &mut dropped_since_ok,
                         &mut backoff,
                     )
@@ -165,6 +169,7 @@ async fn forward_worker(mut rx: mpsc::Receiver<ForwardMsg>, tty_service: String)
                         &client,
                         &mut buf,
                         &meta,
+                        &receiver,
                         &mut dropped_since_ok,
                         &mut backoff,
                     )
@@ -181,6 +186,7 @@ async fn forward_worker(mut rx: mpsc::Receiver<ForwardMsg>, tty_service: String)
                         &client,
                         &mut buf,
                         &meta,
+                        &receiver,
                         &mut dropped_since_ok,
                         &mut backoff,
                     )
@@ -196,6 +202,7 @@ async fn forward_worker(mut rx: mpsc::Receiver<ForwardMsg>, tty_service: String)
                         &client,
                         &mut buf,
                         &meta,
+                        &receiver,
                         &mut dropped_since_ok,
                         &mut backoff,
                     )
@@ -210,6 +217,7 @@ async fn flush_batch(
     client: &reqwest::Client,
     buf: &mut Vec<String>,
     meta: &StreamMeta,
+    receiver: &MzpMeta,
     dropped_since_ok: &mut u64,
     backoff: &mut Duration,
 ) {
@@ -238,12 +246,18 @@ async fn flush_batch(
 
     let n = buf.len() as u64;
     let cmd = meta.cmd.as_deref();
-    match post_batch(client, &url, &service, cmd, buf).await {
+    let mzp = receiver.clone().with_cwd(meta.cwd.clone());
+    match post_batch(client, &url, &service, cmd, &mzp, buf).await {
         Ok(()) => {
             *dropped_since_ok = 0;
             *backoff = Duration::from_millis(100);
         }
-        Err(err) => {
+        Err(BatchError::Disconnected) => {
+            warn!(%service, "shell forward: service disconnected; dropping batch");
+            *dropped_since_ok = 0;
+            *backoff = Duration::from_millis(100);
+        }
+        Err(BatchError::Other(err)) => {
             warn!(error = %err, %service, "shell forward: batch ingest failed");
             *dropped_since_ok = dropped_since_ok.saturating_add(n);
             tokio::time::sleep(*backoff).await;
@@ -268,19 +282,27 @@ fn resolve_service(state: &AttachState, fallback_service: &str) -> String {
     }
 }
 
+#[derive(Debug)]
+enum BatchError {
+    Disconnected,
+    Other(String),
+}
+
 async fn post_batch(
     client: &reqwest::Client,
     url: &str,
     service: &str,
     cmd: Option<&str>,
+    mzp: &MzpMeta,
     lines: &[String],
-) -> Result<(), String> {
+) -> Result<(), BatchError> {
     if lines.is_empty() {
         return Ok(());
     }
     let body = BatchBody {
         service,
         cmd,
+        mzp,
         lines,
     };
     let resp = client
@@ -288,9 +310,12 @@ async fn post_batch(
         .json(&body)
         .send()
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| BatchError::Other(e.to_string()))?;
+    if resp.status() == reqwest::StatusCode::CONFLICT {
+        return Err(BatchError::Disconnected);
+    }
     if !resp.status().is_success() {
-        return Err(format!("status {}", resp.status()));
+        return Err(BatchError::Other(format!("status {}", resp.status())));
     }
     Ok(())
 }

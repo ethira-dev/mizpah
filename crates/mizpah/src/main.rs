@@ -5,6 +5,7 @@ mod ingest;
 mod investigate;
 mod mcp;
 mod models;
+mod mzp_meta;
 mod pretty_ingest;
 mod properties;
 mod shell_attach;

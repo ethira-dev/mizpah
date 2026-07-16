@@ -27,6 +27,7 @@ export const CEL_CHEAT_SHEET: CheatSheetGroup[] = [
       { code: "service", hint: "stream service tag" },
       { code: "level", hint: "level / severity / lvl" },
       { code: "cmd", hint: "shell command when present" },
+      { code: "_mzp.cwd", hint: "receiver terminal folder" },
       { code: "field.nested", hint: "JSON fields via ." },
     ],
   },

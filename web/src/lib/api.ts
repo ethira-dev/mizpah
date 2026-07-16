@@ -1,10 +1,12 @@
-import type { LogEntry, PropertyInfo, Stats } from "./types"
+import type { ActivityBucket, LogEntry, PropertyInfo, Stats } from "./types"
 
 export async function fetchLogs(opts: {
   service?: string
   cursor?: number
   limit?: number
   q?: string
+  from?: string
+  to?: string
 }): Promise<{ entries: LogEntry[]; hasMore: boolean }> {
   const params = new URLSearchParams()
   if (opts.service && opts.service !== "*") {
@@ -15,6 +17,8 @@ export async function fetchLogs(opts: {
   if (opts.q?.trim()) {
     params.set("q", opts.q.trim())
   }
+  if (opts.from) params.set("from", opts.from)
+  if (opts.to) params.set("to", opts.to)
   const res = await fetch(`/api/logs?${params}`)
   if (!res.ok) {
     const body = await res.text().catch(() => "")
@@ -23,11 +27,59 @@ export async function fetchLogs(opts: {
   return res.json()
 }
 
-export async function fetchServices(): Promise<string[]> {
+export async function fetchActivity(opts?: {
+  hours?: number
+  bucketMinutes?: number
+}): Promise<ActivityBucket[]> {
+  const params = new URLSearchParams()
+  if (opts?.hours != null) params.set("hours", String(opts.hours))
+  if (opts?.bucketMinutes != null) {
+    params.set("bucketMinutes", String(opts.bucketMinutes))
+  }
+  const qs = params.toString()
+  const res = await fetch(qs ? `/api/activity?${qs}` : "/api/activity")
+  if (!res.ok) throw new Error(`activity: ${res.status}`)
+  const data = (await res.json()) as { buckets: ActivityBucket[] }
+  return data.buckets
+}
+
+export type ServicesList = {
+  services: string[]
+  blocked: string[]
+}
+
+export async function fetchServices(): Promise<ServicesList> {
   const res = await fetch("/api/services")
   if (!res.ok) throw new Error(`services: ${res.status}`)
-  const data = (await res.json()) as { services: string[] }
-  return data.services
+  const data = (await res.json()) as { services: string[]; blocked?: string[] }
+  return {
+    services: data.services,
+    blocked: data.blocked ?? [],
+  }
+}
+
+export async function disconnectService(service: string): Promise<void> {
+  const res = await fetch("/api/services/disconnect", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ service }),
+  })
+  if (!res.ok) {
+    const body = await res.text().catch(() => "")
+    throw new Error(body || `disconnect: ${res.status}`)
+  }
+}
+
+export async function reconnectService(service: string): Promise<void> {
+  const res = await fetch("/api/services/reconnect", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ service }),
+  })
+  if (!res.ok) {
+    const body = await res.text().catch(() => "")
+    throw new Error(body || `reconnect: ${res.status}`)
+  }
 }
 
 export async function fetchProperties(opts?: {

@@ -15,6 +15,14 @@ type CelQueryEditorProps = {
   onChange: (value: string) => void
   properties: PropertyInfo[]
   error?: string | null
+  /** Entries currently shown in the list. */
+  showingCount?: number
+  /** Total entries stored in the hub buffer. */
+  storedCount?: number | null
+  /** True when a CEL or time filter is active. */
+  filterActive?: boolean
+  /** Clear all active filters (CEL + time). */
+  onClearFilter?: () => void
 }
 
 function isEditableTarget(target: EventTarget | null): boolean {
@@ -34,6 +42,10 @@ export function CelQueryEditor({
   onChange,
   properties,
   error,
+  showingCount,
+  storedCount = null,
+  filterActive = false,
+  onClearFilter,
 }: CelQueryEditorProps) {
   const [open, setOpen] = useState(false)
   const modKey = isMacPlatform() ? "⌘" : "Ctrl"
@@ -52,6 +64,15 @@ export function CelQueryEditor({
 
   const display = value.trim()
   const hasError = Boolean(error)
+  const showFilterChip = filterActive && showingCount != null
+
+  function clearFilter() {
+    if (onClearFilter) {
+      onClearFilter()
+      return
+    }
+    onChange("")
+  }
 
   return (
     <div className="min-w-0 flex-1">
@@ -104,17 +125,33 @@ export function CelQueryEditor({
           </Tooltip>
         ) : null}
 
-        {display ? (
+        {showFilterChip ? (
           <button
             type="button"
-            className="rounded-sm p-0.5 text-muted-foreground opacity-70 hover:opacity-100 focus-visible:ring-2 focus-visible:ring-ring"
-            onClick={(e) => {
-              e.stopPropagation()
-              onChange("")
-            }}
-            aria-label="Clear query"
+            className={cn(
+              "flex shrink-0 items-center gap-1.5 rounded-md border border-border",
+              "bg-muted/70 px-1.5 py-0.5",
+              "text-[10px] text-muted-foreground",
+              "hover:bg-muted hover:text-foreground",
+              "focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+            )}
+            onClick={clearFilter}
+            aria-label="Clear filter"
+            title="Clear filter"
           >
-            <X className="size-3.5" />
+            <span>
+              Showing{" "}
+              <span className="tabular-nums text-foreground">{showingCount}</span>
+              {storedCount != null ? (
+                <>
+                  {" "}
+                  /{" "}
+                  <span className="tabular-nums text-foreground">{storedCount}</span>{" "}
+                  stored
+                </>
+              ) : null}
+            </span>
+            <X className="size-3 opacity-70" />
           </button>
         ) : null}
       </div>

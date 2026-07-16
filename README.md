@@ -52,6 +52,8 @@ mzp detach    # stop forwarding (hub stays up)
 
 First process binds `:1738` and serves the UI. Everything else attaches. Tag streams with `--service` (defaults to absolute cwd), switch services in the UI, and keep a 1 GiB in-memory ring buffer hot without shipping logs to the cloud.
 
+Every row gets a reserved `_mzp` object identifying the Mizpah receiver: `cwd` (terminal folder), `user`, `pid`, and `exe`.
+
 Pretty-printed Nest / `util.inspect` dumps? Mizpah reassembles them into structured JSON when it can. Non-JSON lines land as `{ "_raw": "…" }`. Prefer NDJSON when you control the logger.
 
 ```bash
@@ -60,7 +62,7 @@ api-server | mzp --service api --project /path/to/repo
 
 ### Capture your terminal
 
-`mzp attach` installs shell hooks, starts a background hub if needed, and tees stdout/stderr from **new** interactive shells into Mizpah. Every line gets the command’s absolute cwd (updates after `cd`) and a `cmd` property with the full command string.
+`mzp attach` installs shell hooks, starts a background hub if needed, and tees stdout/stderr from **new** interactive shells into Mizpah. Every line gets the command’s absolute cwd (updates after `cd` via `_mzp.cwd`), a `cmd` property with the full command string, and the rest of `_mzp` for the shell-forward receiver.
 
 ```bash
 mzp attach --service my-project   # optional: one shared service name
@@ -90,6 +92,7 @@ The filter bar is a real query language — syntax highlighting, property autoco
 | `service` | Stream service tag |
 | `level` | First of `level` / `severity` / `lvl` in the JSON |
 | `cmd` | Full shell command (attach mode); also a normal JSON field when present |
+| `_mzp.*` | Receiver metadata (`cwd`, `user`, `pid`, `exe`) |
 | *fields* | Every top-level key from the log JSON (nested via `.`) |
 
 ```cel

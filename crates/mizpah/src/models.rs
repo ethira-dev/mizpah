@@ -52,6 +52,14 @@ pub struct Stats {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ActivityBucket {
+    pub start: DateTime<Utc>,
+    pub end: DateTime<Utc>,
+    pub count: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum WsEvent {
     #[serde(rename = "log")]
@@ -59,7 +67,14 @@ pub enum WsEvent {
     #[serde(rename = "evicted")]
     Evicted { ids: Vec<u64> },
     #[serde(rename = "services")]
-    Services { names: Vec<String> },
+    Services {
+        names: Vec<String>,
+        #[serde(default)]
+        blocked: Vec<String>,
+    },
     #[serde(rename = "properties")]
     Properties { paths: Vec<PropertyInfo> },
+    /// Heartbeat reply to a client `ping`.
+    #[serde(rename = "pong")]
+    Pong,
 }

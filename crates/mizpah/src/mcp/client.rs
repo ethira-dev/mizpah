@@ -35,6 +35,8 @@ pub struct LogsResponse {
 #[serde(rename_all = "camelCase")]
 pub struct ServicesResponse {
     pub services: Vec<String>,
+    #[serde(default)]
+    pub blocked: Vec<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

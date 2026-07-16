@@ -32,8 +32,21 @@ export type Stats = {
   services: ServiceInfo[]
 }
 
+export type ActivityBucket = {
+  start: string
+  end: string
+  count: number
+}
+
+/** Inclusive `from`, exclusive `to` (RFC3339). Omit `to` for an open upper bound (through now). */
+export type TimeRange = {
+  from: string
+  to?: string
+}
+
 export type WsEvent =
   | { type: "log"; entry: LogEntry }
   | { type: "evicted"; ids: number[] }
-  | { type: "services"; names: string[] }
+  | { type: "services"; names: string[]; blocked?: string[] }
   | { type: "properties"; paths: PropertyInfo[] }
+  | { type: "pong" }

@@ -1,3 +1,4 @@
+use crate::mzp_meta::MzpMeta;
 use crate::stdin_lines::for_each_stdin_line;
 use serde::Serialize;
 use tracing::{error, info, warn};
@@ -6,6 +7,7 @@ use tracing::{error, info, warn};
 struct IngestBody<'a> {
     service: &'a str,
     line: &'a str,
+    mzp: &'a MzpMeta,
 }
 
 /// Forward stdin lines to an existing Mizpah hub via POST /api/ingest.
@@ -31,6 +33,7 @@ pub async fn attach_and_forward(
 
     let ingest_url = format!("{base_url}/api/ingest");
     let service = service.to_string();
+    let mzp = MzpMeta::capture();
 
     type AttachError = Box<dyn std::error::Error + Send + Sync>;
 
@@ -38,13 +41,19 @@ pub async fn attach_and_forward(
         let client = client.clone();
         let ingest_url = ingest_url.clone();
         let service = service.clone();
+        let mzp = mzp.clone();
         async move {
             let body = IngestBody {
                 service: &service,
                 line: &line,
+                mzp: &mzp,
             };
             match client.post(&ingest_url).json(&body).send().await {
                 Ok(r) if r.status().is_success() => Ok::<(), AttachError>(()),
+                Ok(r) if r.status() == reqwest::StatusCode::CONFLICT => {
+                    warn!(%service, "service disconnected on hub; attach exiting");
+                    Err("service disconnected".into())
+                }
                 Ok(r) => {
                     warn!(status = %r.status(), "hub rejected ingest");
                     Ok(())

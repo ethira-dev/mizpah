@@ -1,12 +1,14 @@
 use crate::filter::{compile_query, matches_entry, CompiledQuery};
 use crate::investigate::{self, InvestigateTarget};
-use crate::store::{LogEntry, PropertyInfo, Stats, Store, WsEvent};
+use crate::mzp_meta::MzpMeta;
+use crate::store::{ActivityBucket, LogEntry, PropertyInfo, Stats, Store, WsEvent};
 use axum::extract::ws::{Message, WebSocket};
 use axum::extract::{Query, State, WebSocketUpgrade};
 use axum::http::{header, StatusCode, Uri};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
+use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use futures_util::{SinkExt, StreamExt};
 use rust_embed::Embed;
 use serde::{Deserialize, Serialize};
@@ -33,8 +35,11 @@ pub fn router(state: AppState) -> Router {
         .route("/api/ingest/batch", post(ingest_batch))
         .route("/api/logs", get(list_logs))
         .route("/api/services", get(list_services))
+        .route("/api/services/disconnect", post(disconnect_service))
+        .route("/api/services/reconnect", post(reconnect_service))
         .route("/api/properties", get(list_properties))
         .route("/api/stats", get(stats))
+        .route("/api/activity", get(activity))
         .route("/api/investigate", post(investigate))
         .route("/ws", get(ws_handler))
         .fallback(static_handler)
@@ -51,6 +56,8 @@ struct IngestRequest {
     line: String,
     #[serde(default)]
     cmd: Option<String>,
+    #[serde(default)]
+    mzp: Option<MzpMeta>,
 }
 
 #[derive(Debug, Serialize)]
@@ -67,9 +74,14 @@ async fn ingest(
     if body.service.is_empty() {
         return Err((StatusCode::BAD_REQUEST, "service is required".into()));
     }
+    if state.store.is_blocked(&body.service).await {
+        return Err((StatusCode::CONFLICT, "service disconnected".into()));
+    }
+    // Prefer client-provided receiver meta; fall back to hub process so every row has `_mzp`.
+    let mzp = body.mzp.unwrap_or_else(MzpMeta::capture);
     let entries = state
         .store
-        .push_line_with_meta(&body.service, &body.line, body.cmd.as_deref())
+        .push_line_with_meta(&body.service, &body.line, body.cmd.as_deref(), Some(&mzp))
         .await;
     Ok(Json(IngestResponse { entries }))
 }
@@ -81,6 +93,8 @@ struct IngestBatchRequest {
     lines: Vec<String>,
     #[serde(default)]
     cmd: Option<String>,
+    #[serde(default)]
+    mzp: Option<MzpMeta>,
 }
 
 async fn ingest_batch(
@@ -96,13 +110,17 @@ async fn ingest_batch(
             format!("at most {INGEST_BATCH_MAX} lines per batch"),
         ));
     }
+    if state.store.is_blocked(&body.service).await {
+        return Err((StatusCode::CONFLICT, "service disconnected".into()));
+    }
     let cmd = body.cmd.as_deref();
+    let mzp = body.mzp.unwrap_or_else(MzpMeta::capture);
     let mut entries = Vec::new();
     for line in &body.lines {
         entries.extend(
             state
                 .store
-                .push_line_with_meta(&body.service, line, cmd)
+                .push_line_with_meta(&body.service, line, cmd, Some(&mzp))
                 .await,
         );
     }
@@ -116,6 +134,10 @@ struct LogsQuery {
     limit: Option<usize>,
     /// CEL filter expression
     q: Option<String>,
+    /// Inclusive lower bound (RFC3339).
+    from: Option<String>,
+    /// Exclusive upper bound (RFC3339).
+    to: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -125,12 +147,25 @@ struct LogsResponse {
     has_more: bool,
 }
 
+fn parse_rfc3339(label: &str, value: Option<&str>) -> Result<Option<DateTime<Utc>>, String> {
+    match value.map(str::trim).filter(|s| !s.is_empty()) {
+        None => Ok(None),
+        Some(s) => DateTime::parse_from_rfc3339(s)
+            .map(|dt| Some(dt.with_timezone(&Utc)))
+            .map_err(|e| format!("invalid {label}: {e}")),
+    }
+}
+
 async fn list_logs(
     State(state): State<AppState>,
     Query(params): Query<LogsQuery>,
 ) -> Result<Json<LogsResponse>, (StatusCode, String)> {
     let query = compile_query(params.q.as_deref().unwrap_or(""))
         .map_err(|e| (StatusCode::BAD_REQUEST, e))?;
+    let from = parse_rfc3339("from", params.from.as_deref())
+        .map_err(|e| (StatusCode::BAD_REQUEST, e))?;
+    let to =
+        parse_rfc3339("to", params.to.as_deref()).map_err(|e| (StatusCode::BAD_REQUEST, e))?;
     let (entries, has_more) = state
         .store
         .query_logs(
@@ -138,21 +173,105 @@ async fn list_logs(
             params.cursor,
             params.limit.unwrap_or(100),
             &query,
+            from,
+            to,
         )
         .await;
     Ok(Json(LogsResponse { entries, has_more }))
+}
+
+#[derive(Debug, Deserialize)]
+struct ActivityQuery {
+    /// Trailing window in hours (default 24).
+    hours: Option<u64>,
+    /// Bucket size in minutes (default 25).
+    #[serde(rename = "bucketMinutes")]
+    bucket_minutes: Option<u64>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ActivityResponse {
+    buckets: Vec<ActivityBucket>,
+}
+
+async fn activity(
+    State(state): State<AppState>,
+    Query(params): Query<ActivityQuery>,
+) -> Json<ActivityResponse> {
+    // Up to ~31 days window; buckets from 1 minute to 1 day.
+    let hours = params.hours.unwrap_or(24).clamp(1, 744);
+    let bucket_minutes = params.bucket_minutes.unwrap_or(25).clamp(1, 1440);
+    let buckets = state
+        .store
+        .activity_histogram(
+            ChronoDuration::hours(hours as i64),
+            ChronoDuration::minutes(bucket_minutes as i64),
+        )
+        .await;
+    Json(ActivityResponse { buckets })
 }
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ServicesResponse {
     services: Vec<String>,
+    blocked: Vec<String>,
 }
 
 async fn list_services(State(state): State<AppState>) -> Json<ServicesResponse> {
     Json(ServicesResponse {
         services: state.store.service_names().await,
+        blocked: state.store.blocked_names().await,
     })
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ServiceNameRequest {
+    service: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DisconnectResponse {
+    service: String,
+    evicted: usize,
+}
+
+async fn disconnect_service(
+    State(state): State<AppState>,
+    Json(body): Json<ServiceNameRequest>,
+) -> Result<Json<DisconnectResponse>, (StatusCode, String)> {
+    if body.service.is_empty() {
+        return Err((StatusCode::BAD_REQUEST, "service is required".into()));
+    }
+    let evicted = state.store.disconnect_service(&body.service).await;
+    Ok(Json(DisconnectResponse {
+        service: body.service,
+        evicted: evicted.len(),
+    }))
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ReconnectResponse {
+    service: String,
+    reconnected: bool,
+}
+
+async fn reconnect_service(
+    State(state): State<AppState>,
+    Json(body): Json<ServiceNameRequest>,
+) -> Result<Json<ReconnectResponse>, (StatusCode, String)> {
+    if body.service.is_empty() {
+        return Err((StatusCode::BAD_REQUEST, "service is required".into()));
+    }
+    let reconnected = state.store.reconnect_service(&body.service).await;
+    Ok(Json(ReconnectResponse {
+        service: body.service,
+        reconnected,
+    }))
 }
 
 #[derive(Debug, Deserialize)]
@@ -228,6 +347,8 @@ struct WsSubscription {
     /// `*` or empty means all services.
     service: String,
     query: CompiledQuery,
+    from: Option<DateTime<Utc>>,
+    to: Option<DateTime<Utc>>,
 }
 
 impl Default for WsSubscription {
@@ -235,6 +356,8 @@ impl Default for WsSubscription {
         Self {
             service: "*".into(),
             query: CompiledQuery::MatchAll,
+            from: None,
+            to: None,
         }
     }
 }
@@ -248,11 +371,35 @@ enum WsClientMessage {
         service: String,
         #[serde(default)]
         q: String,
+        #[serde(default)]
+        from: Option<String>,
+        #[serde(default)]
+        to: Option<String>,
     },
+    #[serde(rename = "ping")]
+    Ping,
 }
 
 fn default_service() -> String {
     "*".into()
+}
+
+fn in_time_range(
+    ts: DateTime<Utc>,
+    from: Option<DateTime<Utc>>,
+    to: Option<DateTime<Utc>>,
+) -> bool {
+    if let Some(from) = from {
+        if ts < from {
+            return false;
+        }
+    }
+    if let Some(to) = to {
+        if ts >= to {
+            return false;
+        }
+    }
+    true
 }
 
 fn event_matches_subscription(event: &WsEvent, sub: &WsSubscription) -> bool {
@@ -261,6 +408,9 @@ fn event_matches_subscription(event: &WsEvent, sub: &WsSubscription) -> bool {
             let service_ok =
                 sub.service.is_empty() || sub.service == "*" || entry.service == sub.service;
             if !service_ok {
+                return false;
+            }
+            if !in_time_range(entry.received_at, sub.from, sub.to) {
                 return false;
             }
             matches_entry(&entry.service, &entry.data, &sub.query)
@@ -278,10 +428,12 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
     let mut rx = state.store.subscribe();
 
     let (sub_tx, sub_rx) = watch::channel(WsSubscription::default());
+    let (out_tx, mut out_rx) = tokio::sync::mpsc::unbounded_channel::<WsEvent>();
 
     // Send initial services snapshot
     let names = state.store.service_names().await;
-    let init = WsEvent::Services { names };
+    let blocked = state.store.blocked_names().await;
+    let init = WsEvent::Services { names, blocked };
     if let Ok(json) = serde_json::to_string(&init) {
         if sender.send(Message::Text(json.into())).await.is_err() {
             return;
@@ -290,27 +442,48 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
 
     let send_task = tokio::spawn(async move {
         loop {
-            match rx.recv().await {
-                Ok(event) => {
-                    let sub = sub_rx.borrow().clone();
-                    if !event_matches_subscription(&event, &sub) {
-                        continue;
-                    }
-                    match serde_json::to_string(&event) {
-                        Ok(json) => {
-                            if sender.send(Message::Text(json.into())).await.is_err() {
-                                break;
+            tokio::select! {
+                event = rx.recv() => {
+                    match event {
+                        Ok(event) => {
+                            let sub = sub_rx.borrow().clone();
+                            if !event_matches_subscription(&event, &sub) {
+                                continue;
+                            }
+                            match serde_json::to_string(&event) {
+                                Ok(json) => {
+                                    if sender.send(Message::Text(json.into())).await.is_err() {
+                                        break;
+                                    }
+                                }
+                                Err(err) => {
+                                    warn!(error = %err, "failed to serialize ws event");
+                                }
                             }
                         }
-                        Err(err) => {
-                            warn!(error = %err, "failed to serialize ws event");
+                        Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
+                            warn!(skipped = n, "websocket subscriber lagged");
                         }
+                        Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
                     }
                 }
-                Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
-                    warn!(skipped = n, "websocket subscriber lagged");
+                event = out_rx.recv() => {
+                    match event {
+                        Some(event) => {
+                            match serde_json::to_string(&event) {
+                                Ok(json) => {
+                                    if sender.send(Message::Text(json.into())).await.is_err() {
+                                        break;
+                                    }
+                                }
+                                Err(err) => {
+                                    warn!(error = %err, "failed to serialize ws event");
+                                }
+                            }
+                        }
+                        None => break,
+                    }
                 }
-                Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
             }
         }
     });
@@ -319,17 +492,45 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
         match msg {
             Message::Close(_) => break,
             Message::Text(text) => {
-                if let Ok(WsClientMessage::Subscribe { service, q }) =
-                    serde_json::from_str::<WsClientMessage>(&text)
-                {
-                    match compile_query(&q) {
+                let Ok(client_msg) = serde_json::from_str::<WsClientMessage>(&text) else {
+                    continue;
+                };
+                match client_msg {
+                    WsClientMessage::Ping => {
+                        let _ = out_tx.send(WsEvent::Pong);
+                    }
+                    WsClientMessage::Subscribe {
+                        service,
+                        q,
+                        from,
+                        to,
+                    } => match compile_query(&q) {
                         Ok(query) => {
-                            let _ = sub_tx.send(WsSubscription { service, query });
+                            let from = match parse_rfc3339("from", from.as_deref()) {
+                                Ok(v) => v,
+                                Err(err) => {
+                                    warn!(error = %err, "ignoring invalid WS from");
+                                    None
+                                }
+                            };
+                            let to = match parse_rfc3339("to", to.as_deref()) {
+                                Ok(v) => v,
+                                Err(err) => {
+                                    warn!(error = %err, "ignoring invalid WS to");
+                                    None
+                                }
+                            };
+                            let _ = sub_tx.send(WsSubscription {
+                                service,
+                                query,
+                                from,
+                                to,
+                            });
                         }
                         Err(err) => {
                             warn!(error = %err, "ignoring invalid WS CEL query");
                         }
-                    }
+                    },
                 }
             }
             _ => {}
@@ -386,7 +587,8 @@ mod tests {
 
     #[tokio::test]
     async fn ingest_single_line() {
-        let app = test_app();
+        let store = Arc::new(Store::new(1_000_000));
+        let app = router(test_state(Arc::clone(&store)));
         let resp = app
             .oneshot(
                 Request::builder()
@@ -401,6 +603,17 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
+
+        let (entries, _) = store
+            .query_logs(Some("api"), None, 1, &CompiledQuery::MatchAll, None, None)
+            .await;
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].data["msg"], json!("hi"));
+        let mzp = entries[0].data.get("_mzp").expect("_mzp injected");
+        assert!(mzp.get("cwd").is_some());
+        assert!(mzp.get("pid").is_some());
+        assert!(mzp.get("user").is_some());
+        assert!(mzp.get("exe").is_some());
     }
 
     #[tokio::test]
@@ -431,13 +644,14 @@ mod tests {
         assert_eq!(resp.status(), StatusCode::OK);
 
         let (entries, _) = store
-            .query_logs(Some("shell"), None, 10, &CompiledQuery::MatchAll)
+            .query_logs(Some("shell"), None, 10, &CompiledQuery::MatchAll, None, None)
             .await;
         assert_eq!(entries.len(), 3);
         // Newest first
         assert_eq!(entries[0].data["_raw"], json!("plain"));
         assert_eq!(entries[1].data["n"], json!(2));
         assert_eq!(entries[2].data["n"], json!(1));
+        assert!(entries.iter().all(|e| e.data.get("_mzp").is_some()));
     }
 
     #[tokio::test]
@@ -468,7 +682,14 @@ mod tests {
         assert_eq!(resp.status(), StatusCode::OK);
 
         let (entries, _) = store
-            .query_logs(Some("/Users/me/app"), None, 10, &CompiledQuery::MatchAll)
+            .query_logs(
+                Some("/Users/me/app"),
+                None,
+                10,
+                &CompiledQuery::MatchAll,
+                None,
+                None,
+            )
             .await;
         assert_eq!(entries.len(), 2);
         assert_eq!(entries[0].data["cmd"], json!("npm test"));
@@ -529,5 +750,106 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn disconnect_blocks_ingest_and_lists_blocked() {
+        let store = Arc::new(Store::new(1_000_000));
+        let app = router(test_state(Arc::clone(&store)));
+
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/ingest")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({"service":"api","line":"{\"msg\":\"hi\"}"}).to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/services/disconnect")
+                    .header("content-type", "application/json")
+                    .body(Body::from(json!({"service":"api"}).to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/ingest")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({"service":"api","line":"{\"msg\":\"again\"}"}).to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::CONFLICT);
+
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/api/services")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let parsed: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(parsed["services"], json!([]));
+        assert_eq!(parsed["blocked"], json!(["api"]));
+
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/services/reconnect")
+                    .header("content-type", "application/json")
+                    .body(Body::from(json!({"service":"api"}).to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/ingest")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({"service":"api","line":"{\"msg\":\"back\"}"}).to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        assert_eq!(store.stats().await.count, 1);
     }
 }

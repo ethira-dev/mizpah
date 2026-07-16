@@ -5,14 +5,15 @@ use crate::properties::{
     annotate_property_counts, discover_paths_into, filter_properties_by_query, paths_to_info,
     push_service_property, PathMeta,
 };
-use chrono::Utc;
+use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use serde_json::{Map, Value};
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::atomic::{AtomicU64, Ordering};
 use tokio::sync::{broadcast, RwLock};
 
 // Re-export public DTOs so existing `crate::store::{...}` imports keep working.
-pub use crate::models::{LogEntry, PropertyInfo, ServiceInfo, Stats, WsEvent};
+pub use crate::models::{ActivityBucket, LogEntry, PropertyInfo, ServiceInfo, Stats, WsEvent};
+pub use crate::mzp_meta::MzpMeta;
 
 pub const DEFAULT_MAX_BYTES: u64 = 1_073_741_824; // 1 GiB
 const BROADCAST_CAPACITY: usize = 1024;
@@ -22,6 +23,8 @@ struct Inner {
     approx_bytes: u64,
     max_bytes: u64,
     services: HashMap<String, u64>,
+    /// Services that must not accept further ingest until reconnected.
+    blocked: HashSet<String>,
     /// Global path discovery (session union).
     properties: HashMap<String, PathMeta>,
     /// Per-service path discovery.
@@ -45,6 +48,7 @@ impl Store {
                 approx_bytes: 0,
                 max_bytes: max_bytes.max(1),
                 services: HashMap::new(),
+                blocked: HashSet::new(),
                 properties: HashMap::new(),
                 properties_by_service: HashMap::new(),
                 pretty_buffers: HashMap::new(),
@@ -64,17 +68,23 @@ impl Store {
 
     /// Ingest a line. May emit zero entries (still buffering a pretty block),
     /// one entry (normal / completed block), or many (failed convert flush).
+    #[cfg(test)]
     pub async fn push_line(&self, service: &str, line: &str) -> Vec<LogEntry> {
-        self.push_line_with_meta(service, line, None).await
+        self.push_line_with_meta(service, line, None, None).await
     }
 
-    /// Ingest a line and optionally inject a `cmd` property into each emitted payload.
+    /// Ingest a line and optionally inject `cmd` / `_mzp` into each emitted payload.
+    /// Returns an empty vec when the service is blocked (callers should treat HTTP ingest as 409).
     pub async fn push_line_with_meta(
         &self,
         service: &str,
         line: &str,
         cmd: Option<&str>,
+        mzp: Option<&MzpMeta>,
     ) -> Vec<LogEntry> {
+        if self.is_blocked(service).await {
+            return Vec::new();
+        }
         let cleaned = strip_service_prefix(&strip_ansi(line), service);
         let payloads = self.resolve_payloads(service, &cleaned).await;
         let mut emitted = Vec::with_capacity(payloads.len());
@@ -82,9 +92,93 @@ impl Store {
             if let Some(cmd) = cmd {
                 inject_cmd(&mut data, cmd);
             }
+            if let Some(mzp) = mzp {
+                inject_mzp(&mut data, mzp);
+            }
             emitted.push(self.commit_entry(service, data).await);
         }
         emitted
+    }
+
+    pub async fn is_blocked(&self, service: &str) -> bool {
+        let inner = self.inner.read().await;
+        inner.blocked.contains(service)
+    }
+
+    pub async fn blocked_names(&self) -> Vec<String> {
+        let inner = self.inner.read().await;
+        let mut names: Vec<String> = inner.blocked.iter().cloned().collect();
+        names.sort();
+        names
+    }
+
+    /// Block ingest for `service`, purge its buffered entries, and broadcast updates.
+    pub async fn disconnect_service(&self, service: &str) -> Vec<u64> {
+        let (evicted_ids, names, blocked, properties) = {
+            let mut inner = self.inner.write().await;
+            inner.blocked.insert(service.to_string());
+            inner.pretty_buffers.remove(service);
+            inner.properties_by_service.remove(service);
+            inner.services.remove(service);
+
+            let mut kept = VecDeque::new();
+            let mut evicted_ids = Vec::new();
+            let mut approx_bytes = 0u64;
+            while let Some(entry) = inner.entries.pop_front() {
+                if entry.service == service {
+                    evicted_ids.push(entry.id);
+                } else {
+                    approx_bytes += entry.approx_bytes;
+                    kept.push_back(entry);
+                }
+            }
+            inner.entries = kept;
+            inner.approx_bytes = approx_bytes;
+
+            // Rebuild global property discovery from remaining entries.
+            let mut properties = HashMap::new();
+            for entry in &inner.entries {
+                discover_paths_into(&entry.data, "", &mut properties);
+            }
+            inner.properties = properties;
+
+            let mut props = paths_to_info(&inner.properties);
+            push_service_property(&mut props, &inner.services, None);
+            let mut names: Vec<String> = inner.services.keys().cloned().collect();
+            names.sort();
+            let mut blocked: Vec<String> = inner.blocked.iter().cloned().collect();
+            blocked.sort();
+            (evicted_ids, names, blocked, props)
+        };
+
+        if !evicted_ids.is_empty() {
+            self.publish(WsEvent::Evicted {
+                ids: evicted_ids.clone(),
+            });
+        }
+        self.publish(WsEvent::Services { names, blocked });
+        self.publish(WsEvent::Properties { paths: properties });
+        evicted_ids
+    }
+
+    /// Allow ingest for a previously disconnected service.
+    pub async fn reconnect_service(&self, service: &str) -> bool {
+        let removed = {
+            let mut inner = self.inner.write().await;
+            inner.blocked.remove(service)
+        };
+        if removed {
+            let names = self.service_names().await;
+            let blocked = self.blocked_names().await;
+            self.publish(WsEvent::Services { names, blocked });
+        }
+        removed
+    }
+
+    async fn publish_services(&self) {
+        let names = self.service_names().await;
+        let blocked = self.blocked_names().await;
+        self.publish(WsEvent::Services { names, blocked });
     }
 
     /// Decide which JSON payloads a cleaned line should become (may buffer).
@@ -197,8 +291,7 @@ impl Store {
             });
         }
         if services_changed {
-            let names = self.service_names().await;
-            self.publish(WsEvent::Services { names });
+            self.publish_services().await;
         }
         self.publish(WsEvent::Properties { paths: properties });
         self.publish(WsEvent::Log {
@@ -286,6 +379,8 @@ impl Store {
         cursor: Option<u64>,
         limit: usize,
         query: &crate::filter::CompiledQuery,
+        from: Option<DateTime<Utc>>,
+        to: Option<DateTime<Utc>>,
     ) -> (Vec<LogEntry>, bool) {
         let inner = self.inner.read().await;
         let limit = limit.clamp(1, 500);
@@ -304,6 +399,9 @@ impl Store {
                     continue;
                 }
             }
+            if !in_time_range(entry.received_at, from, to) {
+                continue;
+            }
             if !crate::filter::matches_entry(&entry.service, &entry.data, query) {
                 continue;
             }
@@ -316,6 +414,81 @@ impl Store {
 
         (matched, has_more)
     }
+
+    /// Bucket entry counts over a trailing window (oldest → newest).
+    pub async fn activity_histogram(
+        &self,
+        window: ChronoDuration,
+        bucket: ChronoDuration,
+    ) -> Vec<ActivityBucket> {
+        let window = if window <= ChronoDuration::zero() {
+            ChronoDuration::hours(24)
+        } else {
+            window
+        };
+        let bucket = if bucket <= ChronoDuration::zero() {
+            ChronoDuration::minutes(25)
+        } else {
+            bucket
+        };
+
+        let now = Utc::now();
+        let bucket_ms = bucket.num_milliseconds().max(1);
+        let window_ms = window.num_milliseconds().max(1);
+        let n_buckets = ((window_ms + bucket_ms - 1) / bucket_ms) as usize;
+        let n_buckets = n_buckets.max(1);
+
+        // Align to a fixed UTC grid so bucket boundaries stay stable across polls.
+        let now_ms = now.timestamp_millis();
+        let current_bucket_end = ((now_ms / bucket_ms) + 1) * bucket_ms;
+        let window_start_ms = current_bucket_end - bucket_ms * n_buckets as i64;
+        let window_start = DateTime::from_timestamp_millis(window_start_ms)
+            .unwrap_or_else(|| now - window);
+
+        let mut counts = vec![0u64; n_buckets];
+        {
+            let inner = self.inner.read().await;
+            for entry in &inner.entries {
+                let ts_ms = entry.received_at.timestamp_millis();
+                if ts_ms < window_start_ms {
+                    continue;
+                }
+                let offset = ts_ms - window_start_ms;
+                let idx = (offset / bucket_ms) as usize;
+                if idx < n_buckets {
+                    counts[idx] += 1;
+                }
+            }
+        }
+
+        counts
+            .into_iter()
+            .enumerate()
+            .map(|(i, count)| {
+                let start = window_start + ChronoDuration::milliseconds(bucket_ms * i as i64);
+                let end = start + ChronoDuration::milliseconds(bucket_ms);
+                ActivityBucket { start, end, count }
+            })
+            .collect()
+    }
+}
+
+fn in_time_range(
+    ts: DateTime<Utc>,
+    from: Option<DateTime<Utc>>,
+    to: Option<DateTime<Utc>>,
+) -> bool {
+    if let Some(from) = from {
+        if ts < from {
+            return false;
+        }
+    }
+    if let Some(to) = to {
+        if ts >= to {
+            return false;
+        }
+    }
+    true
 }
 
 pub fn parse_line(line: &str) -> Value {
@@ -343,6 +516,15 @@ fn inject_cmd(data: &mut Value, cmd: &str) {
     }
 }
 
+/// Inject or overwrite top-level `_mzp` receiver metadata on a log payload object.
+fn inject_mzp(data: &mut Value, mzp: &MzpMeta) {
+    if let Value::Object(map) = data {
+        if let Ok(value) = serde_json::to_value(mzp) {
+            map.insert("_mzp".to_string(), value);
+        }
+    }
+}
+
 fn try_parse_json_object(line: &str) -> Option<Value> {
     let trimmed = line.trim();
     match serde_json::from_str::<Value>(trimmed) {
@@ -367,6 +549,7 @@ fn estimate_bytes(service: &str, data: &Value) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::filter::CompiledQuery;
     use serde_json::json;
 
     #[tokio::test]
@@ -402,6 +585,7 @@ mod tests {
                 "/Users/me/app",
                 r#"{"level":"info","msg":"hi","cmd":"from-app"}"#,
                 Some("npm test"),
+                None,
             )
             .await;
         assert_eq!(json_entries.len(), 1);
@@ -409,11 +593,40 @@ mod tests {
         assert_eq!(json_entries[0].data["msg"], json!("hi"));
 
         let raw_entries = store
-            .push_line_with_meta("/Users/me/app", "plain text", Some("cargo run"))
+            .push_line_with_meta("/Users/me/app", "plain text", Some("cargo run"), None)
             .await;
         assert_eq!(raw_entries.len(), 1);
         assert_eq!(raw_entries[0].data["_raw"], json!("plain text"));
         assert_eq!(raw_entries[0].data["cmd"], json!("cargo run"));
+    }
+
+    #[tokio::test]
+    async fn injects_mzp_into_json_and_raw() {
+        let store = Store::new(1_000_000);
+        let mzp = MzpMeta {
+            cwd: "/Users/me/app".into(),
+            user: "me".into(),
+            pid: 4242,
+            exe: "/usr/local/bin/mzp".into(),
+        };
+        let json_entries = store
+            .push_line_with_meta(
+                "/Users/me/app",
+                r#"{"level":"info","msg":"hi","_mzp":{"cwd":"from-app"}}"#,
+                None,
+                Some(&mzp),
+            )
+            .await;
+        assert_eq!(json_entries.len(), 1);
+        assert_eq!(json_entries[0].data["msg"], json!("hi"));
+        assert_eq!(json_entries[0].data["_mzp"], json!(mzp));
+
+        let raw_entries = store
+            .push_line_with_meta("/Users/me/app", "plain text", None, Some(&mzp))
+            .await;
+        assert_eq!(raw_entries.len(), 1);
+        assert_eq!(raw_entries[0].data["_raw"], json!("plain text"));
+        assert_eq!(raw_entries[0].data["_mzp"], json!(mzp));
     }
 
     #[tokio::test]
@@ -567,5 +780,92 @@ mod tests {
 
         let by_path = store.search_properties(None, Some("user")).await;
         assert!(by_path.iter().any(|p| p.path == "user.id"));
+    }
+
+    #[tokio::test]
+    async fn activity_histogram_buckets_last_window() {
+        let store = Store::new(1_000_000);
+        store
+            .push_line("api", r#"{"level":"info","msg":"now"}"#)
+            .await;
+        let buckets = store
+            .activity_histogram(ChronoDuration::hours(24), ChronoDuration::minutes(25))
+            .await;
+        assert_eq!(buckets.len(), 58); // ceil(24h / 25m)
+        let total: u64 = buckets.iter().map(|b| b.count).sum();
+        assert_eq!(total, 1);
+        assert_eq!(buckets.last().unwrap().count, 1);
+    }
+
+    #[tokio::test]
+    async fn query_logs_respects_time_range() {
+        let store = Store::new(1_000_000);
+        store
+            .push_line("api", r#"{"msg":"hi"}"#)
+            .await;
+        let (all, _) = store
+            .query_logs(None, None, 10, &CompiledQuery::MatchAll, None, None)
+            .await;
+        assert_eq!(all.len(), 1);
+        let ts = all[0].received_at;
+        let (none, _) = store
+            .query_logs(
+                None,
+                None,
+                10,
+                &CompiledQuery::MatchAll,
+                Some(ts + ChronoDuration::seconds(1)),
+                None,
+            )
+            .await;
+        assert!(none.is_empty());
+        let (one, _) = store
+            .query_logs(
+                None,
+                None,
+                10,
+                &CompiledQuery::MatchAll,
+                Some(ts - ChronoDuration::seconds(1)),
+                Some(ts + ChronoDuration::seconds(1)),
+            )
+            .await;
+        assert_eq!(one.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn disconnect_blocks_ingest_and_purges() {
+        let store = Store::new(1_000_000);
+        store
+            .push_line("api", r#"{"level":"error","msg":"boom"}"#)
+            .await;
+        store
+            .push_line("web", r#"{"level":"info","msg":"ok"}"#)
+            .await;
+
+        let evicted = store.disconnect_service("api").await;
+        assert_eq!(evicted.len(), 1);
+        assert!(store.is_blocked("api").await);
+        assert_eq!(store.service_names().await, vec!["web".to_string()]);
+        assert_eq!(store.blocked_names().await, vec!["api".to_string()]);
+
+        let stats = store.stats().await;
+        assert_eq!(stats.count, 1);
+        assert_eq!(stats.services.len(), 1);
+        assert_eq!(stats.services[0].name, "web");
+
+        // Blocked ingest is a no-op.
+        assert!(store
+            .push_line("api", r#"{"level":"error","msg":"again"}"#)
+            .await
+            .is_empty());
+        assert_eq!(store.stats().await.count, 1);
+
+        assert!(store.reconnect_service("api").await);
+        assert!(!store.is_blocked("api").await);
+        let entries = store
+            .push_line("api", r#"{"level":"info","msg":"back"}"#)
+            .await;
+        assert_eq!(entries.len(), 1);
+        assert_eq!(store.stats().await.count, 2);
     }
 }
