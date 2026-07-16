@@ -1,0 +1,458 @@
+---
+import FlowIcons from "./FlowIcons.astro"
+
+type IconName =
+  | "chrome"
+  | "cursor"
+  | "claude"
+  | "shell"
+  | "pipe"
+  | "hub"
+  | "ui"
+  | "mcp"
+
+const sources: {
+  id: IconName
+  label: string
+  proto: string
+  detail: string
+  note: string
+}[] = [
+  {
+    id: "chrome",
+    label: "Chrome",
+    proto: "CDP",
+    detail: "mzp attach browser",
+    note: "console.* + network",
+  },
+  {
+    id: "cursor",
+    label: "Cursor",
+    proto: "hooks",
+    detail: "mzp attach cursor",
+    note: "~/.cursor/hooks.json",
+  },
+  {
+    id: "claude",
+    label: "Claude",
+    proto: "hooks",
+    detail: "mzp attach claude",
+    note: "~/.claude/settings.json",
+  },
+  {
+    id: "shell",
+    label: "Shell",
+    proto: "tee",
+    detail: "mzp attach shell",
+    note: "stdout/stderr -> ingest",
+  },
+  {
+    id: "pipe",
+    label: "Pipe",
+    proto: "stdin",
+    detail: "app 2>&1 | mzp",
+    note: "JSON / NDJSON / _raw",
+  },
+]
+
+const outputs: {
+  id: IconName
+  label: string
+  proto: string
+  detail: string
+  note: string
+}[] = [
+  {
+    id: "ui",
+    label: "Web UI",
+    proto: "HTTP",
+    detail: "GET /  ·  WS /ws",
+    note: "127.0.0.1:1738",
+  },
+  {
+    id: "mcp",
+    label: "MCP",
+    proto: "stdio",
+    detail: "mzp mcp",
+    note: "search_logs · get_logs_around",
+  },
+]
+---
+
+<figure class="flow">
+  <div class="flow__frame">
+    <header class="flow__meta">
+      <span class="flow__meta-key">schema</span>
+      <span class="flow__meta-val">ingest -&gt; hub -&gt; expose</span>
+      <span class="flow__meta-key">bind</span>
+      <span class="flow__meta-val">127.0.0.1:1738</span>
+    </header>
+
+    <div class="flow__board">
+      <div class="flow__col">
+        <p class="flow__col-label">
+          <span class="flow__idx">01</span> sources
+        </p>
+        <ul class="flow__list">
+          {
+            sources.map((s) => (
+              <li class={`flow__node flow__node--${s.id}`}>
+                <div class="flow__node-top">
+                  <span class="flow__icon-wrap">
+                    <FlowIcons name={s.id} />
+                  </span>
+                  <span class="flow__node-label">{s.label}</span>
+                  <span class="flow__tag">{s.proto}</span>
+                </div>
+                <code class="flow__node-cmd">{s.detail}</code>
+                <span class="flow__node-note">{s.note}</span>
+              </li>
+            ))
+          }
+        </ul>
+      </div>
+
+      <div class="flow__bus" aria-hidden="true">
+        <div class="flow__bus-rail">
+          <span class="flow__bus-label">POST /api/ingest</span>
+          <span class="flow__bus-arrow">▶</span>
+        </div>
+      </div>
+
+      <div class="flow__col flow__col--hub">
+        <p class="flow__col-label">
+          <span class="flow__idx">02</span> hub
+        </p>
+        <div class="flow__node flow__node--hub">
+          <div class="flow__node-top flow__node-top--hub">
+            <span class="flow__icon-wrap flow__icon-wrap--hub">
+              <FlowIcons name="hub" />
+            </span>
+            <span class="flow__hub-brand">mizpah</span>
+          </div>
+          <code class="flow__node-cmd">axum · ring buffer · :1738</code>
+          <div class="flow__hub-ports">
+            <span>/api/ingest</span>
+            <span>/api/logs</span>
+            <span>/ws</span>
+            <span>mcp stdio</span>
+          </div>
+          <span class="flow__node-note">shared in-memory buffer (1 GiB default)</span>
+        </div>
+      </div>
+
+      <div class="flow__bus" aria-hidden="true">
+        <div class="flow__bus-rail">
+          <span class="flow__bus-label">read path</span>
+          <span class="flow__bus-arrow">▶</span>
+        </div>
+      </div>
+
+      <div class="flow__col">
+        <p class="flow__col-label">
+          <span class="flow__idx">03</span> expose
+        </p>
+        <ul class="flow__list flow__list--outputs">
+          {
+            outputs.map((o) => (
+              <li class={`flow__node flow__node--${o.id}`}>
+                <div class="flow__node-top">
+                  <span class="flow__icon-wrap">
+                    <FlowIcons name={o.id} />
+                  </span>
+                  <span class="flow__node-label">{o.label}</span>
+                  <span class="flow__tag">{o.proto}</span>
+                </div>
+                <code class="flow__node-cmd">{o.detail}</code>
+                <span class="flow__node-note">{o.note}</span>
+              </li>
+            ))
+          }
+        </ul>
+      </div>
+    </div>
+
+    <footer class="flow__footer">
+      <span>fan-in: 5 sources</span>
+      <span class="flow__footer-sep">·</span>
+      <span>fan-out: ui + mcp</span>
+      <span class="flow__footer-sep">·</span>
+      <span>no cloud egress</span>
+    </footer>
+  </div>
+
+  <figcaption class="flow__caption">
+    Chrome, Cursor, Claude, shell, and anything you pipe in land in one local
+    hub. You browse it in the web UI; agents query the same buffer over MCP with
+    small slices instead of pastes and re-runs.
+  </figcaption>
+</figure>
+
+<style>
+  .flow {
+    margin: 0;
+  }
+
+  .flow__frame {
+    border: 1px solid var(--border);
+    border-radius: 0.65rem;
+    background: color-mix(in oklch, var(--card) 70%, black);
+    overflow: hidden;
+  }
+
+  .flow__meta,
+  .flow__footer {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.35rem 0.65rem;
+    padding: 0.4rem 0.75rem;
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    border-color: var(--border);
+    color: var(--muted-foreground);
+  }
+
+  .flow__meta {
+    border-bottom: 1px solid var(--border);
+    background: color-mix(in oklch, var(--background) 55%, transparent);
+  }
+
+  .flow__footer {
+    border-top: 1px solid var(--border);
+    background: color-mix(in oklch, var(--background) 55%, transparent);
+  }
+
+  .flow__meta-key {
+    color: var(--primary);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  .flow__meta-val {
+    color: var(--foreground);
+    margin-right: 0.5rem;
+  }
+
+  .flow__footer-sep {
+    opacity: 0.5;
+  }
+
+  .flow__board {
+    display: grid;
+    gap: 0.65rem;
+    padding: 0.75rem 0.85rem 0.85rem;
+    align-items: start;
+  }
+
+  @media (min-width: 960px) {
+    .flow__board {
+      grid-template-columns: minmax(0, 1.2fr) 2rem minmax(11rem, 0.9fr) 2rem minmax(
+          0,
+          1fr
+        );
+      gap: 0.35rem 0.4rem;
+      padding: 0.85rem 0.9rem;
+      align-items: center;
+    }
+  }
+
+  .flow__col-label {
+    margin: 0 0 0.4rem;
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted-foreground);
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+  }
+
+  .flow__idx {
+    color: var(--primary);
+    opacity: 0.85;
+  }
+
+  .flow__list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 0.35rem;
+  }
+
+  .flow__list--outputs {
+    gap: 0.45rem;
+  }
+
+  .flow__node {
+    display: grid;
+    gap: 0.12rem;
+    padding: 0.4rem 0.55rem;
+    border: 1px dashed color-mix(in oklch, var(--border) 85%, white);
+    border-radius: 0.35rem;
+    background: color-mix(in oklch, var(--background) 70%, transparent);
+  }
+
+  .flow__node--hub {
+    border-style: solid;
+    border-color: color-mix(in oklch, var(--primary) 40%, var(--border));
+    background: color-mix(in oklch, var(--background) 40%, black);
+    padding: 0.7rem 0.65rem;
+  }
+
+  .flow__node-top {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    min-width: 0;
+  }
+
+  .flow__node-top--hub {
+    justify-content: center;
+    margin-bottom: 0.15rem;
+  }
+
+  .flow__icon-wrap {
+    display: grid;
+    place-items: center;
+    width: 1.6rem;
+    height: 1.6rem;
+    border-radius: 0.3rem;
+    border: 1px solid var(--border);
+    background: color-mix(in oklch, var(--muted) 70%, transparent);
+    color: var(--foreground);
+    flex-shrink: 0;
+    overflow: hidden;
+  }
+
+  .flow__icon-wrap :global(.flow-icon--brand) {
+    width: 0.95rem;
+    height: 0.95rem;
+  }
+
+  .flow__icon-wrap--hub {
+    border-color: color-mix(in oklch, var(--primary) 35%, var(--border));
+    color: var(--primary);
+    background: color-mix(in oklch, var(--primary) 10%, transparent);
+  }
+
+  .flow__node-label {
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: var(--foreground);
+    flex: 1;
+    min-width: 0;
+  }
+
+  .flow__tag {
+    font-family: var(--font-mono);
+    font-size: 0.58rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--primary);
+    border: 1px solid color-mix(in oklch, var(--primary) 30%, var(--border));
+    border-radius: 0.2rem;
+    padding: 0.08rem 0.3rem;
+    flex-shrink: 0;
+  }
+
+  .flow__hub-brand {
+    font-family: var(--font-sans);
+    font-size: 1.2rem;
+    letter-spacing: -0.02em;
+    color: var(--primary);
+  }
+
+  .flow__node-cmd {
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    color: color-mix(in oklch, var(--primary) 85%, white);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .flow__node-note {
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    color: var(--muted-foreground);
+  }
+
+  .flow__hub-ports {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.25rem;
+    margin: 0.3rem 0 0.1rem;
+  }
+
+  .flow__hub-ports span {
+    font-family: var(--font-mono);
+    font-size: 0.58rem;
+    padding: 0.12rem 0.35rem;
+    border-radius: 0.2rem;
+    border: 1px solid var(--border);
+    color: var(--muted-foreground);
+    background: color-mix(in oklch, var(--muted) 40%, transparent);
+  }
+
+  .flow__bus {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .flow__bus-rail {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.1rem;
+    color: color-mix(in oklch, var(--primary) 70%, var(--muted-foreground));
+    font-family: var(--font-mono);
+    font-size: 0.55rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .flow__bus-arrow {
+    font-size: 0.75rem;
+    line-height: 1;
+    transform: rotate(90deg);
+  }
+
+  @media (min-width: 960px) {
+    .flow__bus-rail {
+      writing-mode: vertical-rl;
+      transform: rotate(180deg);
+      gap: 0.25rem;
+    }
+
+    .flow__bus-arrow {
+      transform: rotate(-90deg);
+      font-size: 0.7rem;
+    }
+
+    .flow__bus-label {
+      letter-spacing: 0.1em;
+    }
+  }
+
+  .flow__caption {
+    margin: 0.75rem 0 0;
+    max-width: 40rem;
+    font-size: 0.9rem;
+    color: var(--muted-foreground);
+  }
+
+  .flow__node--shell .flow__icon-wrap,
+  .flow__node--ui .flow__icon-wrap {
+    color: var(--primary);
+  }
+  .flow__node--pipe .flow__icon-wrap,
+  .flow__node--mcp .flow__icon-wrap {
+    color: #8ab4f8;
+  }
+</style>

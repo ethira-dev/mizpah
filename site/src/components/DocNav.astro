@@ -1,0 +1,37 @@
+---
+import { DOCS_NAV } from "../lib/nav"
+
+interface Props {
+  base: string
+  currentSlug: string
+}
+
+const { base, currentSlug } = Astro.props
+const withBase = (path: string) =>
+  `${base}${path.replace(/^\//, "")}`.replace(/\/{2,}/g, "/")
+---
+
+<aside class="w-full shrink-0 md:w-52 lg:w-56">
+  <p
+    class="mb-3 font-mono text-[10px] tracking-widest text-muted-foreground uppercase"
+  >
+    Docs
+  </p>
+  <nav class="flex flex-row gap-1 overflow-x-auto pb-2 md:flex-col md:overflow-visible md:pb-0">
+    {
+      DOCS_NAV.map((item) => (
+        <a
+          href={withBase(`/docs/${item.slug}/`)}
+          class:list={[
+            "whitespace-nowrap rounded-md px-2.5 py-1.5 text-sm transition-colors",
+            currentSlug === item.slug
+              ? "bg-muted text-primary"
+              : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+          ]}
+        >
+          {item.title}
+        </a>
+      ))
+    }
+  </nav>
+</aside>

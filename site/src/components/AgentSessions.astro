@@ -1,0 +1,152 @@
+---
+import { ClaudeMcpSession } from "./sessions/ClaudeMcpSession"
+import { CodexMcpSession } from "./sessions/CodexMcpSession"
+import { GrokMcpSession } from "./sessions/GrokMcpSession"
+
+const agents = [
+  { id: "claude", label: "Claude", title: "Claude Code" },
+  { id: "codex", label: "Codex", title: "Codex" },
+  { id: "grok", label: "Grok", title: "Grok" },
+] as const
+---
+
+<div class="agent-sessions" data-agent-sessions>
+  <div
+    class="agent-sessions__tabs"
+    role="tablist"
+    aria-label="Agent console examples"
+  >
+    {
+      agents.map((agent, i) => (
+        <button
+          type="button"
+          class="agent-sessions__tab"
+          role="tab"
+          id={`agent-tab-${agent.id}`}
+          data-agent={agent.id}
+          aria-selected={i === 0 ? "true" : "false"}
+          aria-controls={`agent-panel-${agent.id}`}
+          tabindex={i === 0 ? 0 : -1}
+        >
+          {agent.label}
+        </button>
+      ))
+    }
+  </div>
+
+  <div class="mac-window">
+    <div class="mac-window__titlebar">
+      <div class="mac-window__traffic">
+        <span class="mac-window__dot mac-window__dot--close"></span>
+        <span class="mac-window__dot mac-window__dot--min"></span>
+        <span class="mac-window__dot mac-window__dot--max"></span>
+      </div>
+      <span class="mac-window__title" data-agent-title>Claude Code</span>
+      <span class="mac-window__titlebar-spacer"></span>
+    </div>
+
+    <div class="agent-sessions__body">
+      {
+        agents.map((agent, i) => (
+          <div
+            class="agent-sessions__panel"
+            id={`agent-panel-${agent.id}`}
+            role="tabpanel"
+            aria-labelledby={`agent-tab-${agent.id}`}
+            data-panel={agent.id}
+            hidden={i !== 0}
+          >
+            {agent.id === "claude" && <ClaudeMcpSession client:load />}
+            {agent.id === "codex" && <CodexMcpSession client:load />}
+            {agent.id === "grok" && <GrokMcpSession client:load />}
+          </div>
+        ))
+      }
+    </div>
+  </div>
+</div>
+
+<script>
+  const root = document.querySelector<HTMLElement>("[data-agent-sessions]")
+  if (root) {
+    const tabs = [
+      ...root.querySelectorAll<HTMLButtonElement>("[data-agent]"),
+    ]
+    const panels = [
+      ...root.querySelectorAll<HTMLElement>("[data-panel]"),
+    ]
+    const title = root.querySelector<HTMLElement>("[data-agent-title]")
+    const titles: Record<string, string> = {
+      claude: "Claude Code",
+      codex: "Codex",
+      grok: "Grok",
+    }
+
+    function select(id: string) {
+      for (const tab of tabs) {
+        const on = tab.dataset.agent === id
+        tab.setAttribute("aria-selected", on ? "true" : "false")
+        tab.tabIndex = on ? 0 : -1
+      }
+      for (const panel of panels) {
+        panel.hidden = panel.dataset.panel !== id
+      }
+      if (title) title.textContent = titles[id] ?? id
+    }
+
+    for (const tab of tabs) {
+      tab.addEventListener("click", () => {
+        const id = tab.dataset.agent
+        if (id) select(id)
+      })
+    }
+  }
+</script>
+
+<style>
+  .agent-sessions__tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.15rem;
+    margin-bottom: 1rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .agent-sessions__tab {
+    position: relative;
+    z-index: 1;
+    padding: 0.5rem 1rem;
+    font-family: var(--font-mono);
+    font-size: 0.875rem;
+    color: var(--muted-foreground);
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    cursor: pointer;
+  }
+
+  .agent-sessions__tab:hover {
+    color: var(--foreground);
+  }
+
+  .agent-sessions__tab[aria-selected="true"] {
+    color: var(--foreground);
+    border-bottom-color: var(--primary);
+  }
+
+  .agent-sessions__body {
+    background: #000;
+    padding: 0.75rem 1rem 1rem;
+  }
+
+  @media (min-width: 640px) {
+    .agent-sessions__body {
+      padding: 1rem 1.15rem 1.15rem;
+    }
+  }
+
+  .agent-sessions__panel[hidden] {
+    display: none;
+  }
+</style>

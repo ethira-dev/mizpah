@@ -7,6 +7,11 @@ web/node_modules/
 web/dist/
 web/.vite/
 
+# Docs site (GitHub Pages)
+site/node_modules/
+site/dist/
+site/.astro/
+
 # Embedded UI is produced by `npm run build` in web/
 # Keep a placeholder so rust-embed always has a folder; built assets are committed optionally.
 # Uncomment to ignore built static assets:
@@ -15,3 +20,4 @@ web/.vite/
 
 .env
 .env.*
+!.env.example

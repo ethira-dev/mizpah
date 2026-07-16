@@ -48,6 +48,16 @@ run service='demo' *args='':
 test:
     cargo test -p mizpah
 
+# Docs / marketing site (GitHub Pages)
+site-install:
+    cd site && npm install
+
+site-dev:
+    cd site && npm run dev
+
+site-build:
+    cd site && npm run build
+
 # Frontend lint + typecheck
 lint-web:
     cd web && npm run lint && npm run typecheck

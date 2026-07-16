@@ -1,0 +1,183 @@
+---
+import { siClaude, siCursor, siGooglechrome } from "simple-icons"
+
+interface Props {
+  name:
+    | "chrome"
+    | "cursor"
+    | "claude"
+    | "shell"
+    | "pipe"
+    | "hub"
+    | "ui"
+    | "mcp"
+  class?: string
+}
+
+const { name, class: className } = Astro.props
+
+const brands = {
+  chrome: siGooglechrome,
+  cursor: siCursor,
+  claude: siClaude,
+} as const
+
+const brand = name in brands ? brands[name as keyof typeof brands] : null
+
+/** Cursor's mark is black; lighten for dark UI. */
+const brandFill =
+  name === "cursor" ? "#f4f4f5" : brand ? `#${brand.hex}` : undefined
+
+/** Strip outer <svg> wrapper; we control size/attrs ourselves. */
+function innerSvg(svg: string): string {
+  return svg
+    .replace(/^<svg[^>]*>/, "")
+    .replace(/<\/svg>\s*$/, "")
+    .replace(/<title>[^<]*<\/title>/, "")
+}
+---
+
+{
+  brand ? (
+    <svg
+      class:list={["flow-icon", "flow-icon--brand", className]}
+      viewBox="0 0 24 24"
+      xmlns="http://www.w3.org/2000/svg"
+      role="img"
+      aria-label={brand.title}
+      set:html={innerSvg(brand.svg)}
+      style={`fill: ${brandFill}`}
+    />
+  ) : (
+    <svg
+      class:list={["flow-icon", className]}
+      viewBox="0 0 24 24"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+    >
+      {name === "shell" && (
+        <>
+          <rect
+            x="3"
+            y="4.5"
+            width="18"
+            height="15"
+            rx="2"
+            stroke="currentColor"
+            stroke-width="1.5"
+          />
+          <path
+            d="M7 10.5 9.5 13 7 15.5M12 15.5h5"
+            stroke="currentColor"
+            stroke-width="1.5"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          />
+        </>
+      )}
+      {name === "pipe" && (
+        <>
+          <path
+            d="M4 8h5l3 4 3-4h5"
+            stroke="currentColor"
+            stroke-width="1.5"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          />
+          <path
+            d="M4 16h16"
+            stroke="currentColor"
+            stroke-width="1.5"
+            stroke-linecap="round"
+            stroke-dasharray="2 2.5"
+          />
+          <circle cx="12" cy="12" r="1.4" fill="currentColor" />
+        </>
+      )}
+      {name === "hub" && (
+        <>
+          <rect
+            x="4"
+            y="5"
+            width="16"
+            height="14"
+            rx="1.5"
+            stroke="currentColor"
+            stroke-width="1.5"
+          />
+          <path
+            d="M4 9.5h16M8 13h.01M11 13h.01M14 13h.01"
+            stroke="currentColor"
+            stroke-width="1.5"
+            stroke-linecap="round"
+          />
+        </>
+      )}
+      {name === "ui" && (
+        <>
+          <rect
+            x="3"
+            y="4"
+            width="18"
+            height="13"
+            rx="1.5"
+            stroke="currentColor"
+            stroke-width="1.5"
+          />
+          <path
+            d="M3 8h18M8 20h8M12 17v3"
+            stroke="currentColor"
+            stroke-width="1.5"
+            stroke-linecap="round"
+          />
+        </>
+      )}
+      {name === "mcp" && (
+        <>
+          <path
+            d="M8 8v8M16 8v8M8 12h8"
+            stroke="currentColor"
+            stroke-width="1.5"
+            stroke-linecap="round"
+          />
+          <circle cx="8" cy="8" r="2" stroke="currentColor" stroke-width="1.5" />
+          <circle
+            cx="16"
+            cy="8"
+            r="2"
+            stroke="currentColor"
+            stroke-width="1.5"
+          />
+          <circle
+            cx="8"
+            cy="16"
+            r="2"
+            stroke="currentColor"
+            stroke-width="1.5"
+          />
+          <circle
+            cx="16"
+            cy="16"
+            r="2"
+            stroke="currentColor"
+            stroke-width="1.5"
+          />
+        </>
+      )}
+    </svg>
+  )
+}
+
+<style>
+  .flow-icon {
+    width: 1.15rem;
+    height: 1.15rem;
+    flex-shrink: 0;
+    display: block;
+  }
+
+  .flow-icon--brand {
+    /* Brand paths use fill from inline style */
+  }
+</style>

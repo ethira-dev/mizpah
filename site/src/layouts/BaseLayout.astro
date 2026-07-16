@@ -1,0 +1,48 @@
+---
+import "../styles/global.css"
+import SiteNav from "../components/SiteNav.astro"
+
+interface Props {
+  title: string
+  description?: string
+  current?: "home" | "docs"
+}
+
+const {
+  title,
+  description = "Pipe JSON into mzp, get a live web UI, and let agents query your logs.",
+  current = "home",
+} = Astro.props
+
+const base = import.meta.env.BASE_URL
+const pageTitle = title === "mizpah" ? title : `${title} · mizpah`
+---
+
+<!doctype html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content={description} />
+    <link rel="icon" type="image/svg+xml" href={`${base}favicon.svg`} />
+    <meta name="generator" content={Astro.generator} />
+    <title>{pageTitle}</title>
+  </head>
+  <body class="site-bg antialiased">
+    <SiteNav base={base} current={current} />
+    <slot />
+    <footer
+      class="mx-auto mt-20 max-w-6xl border-t border-border px-4 py-10 sm:px-6"
+    >
+      <div
+        class="flex flex-col gap-3 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between"
+      >
+        <p>
+          <span class="text-foreground">mizpah</span>
+          is a local JSON log hub for humans and agents.
+        </p>
+        <p class="font-mono text-xs">MIT · ethira-dev</p>
+      </div>
+    </footer>
+  </body>
+</html>

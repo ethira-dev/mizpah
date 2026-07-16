@@ -1,0 +1,257 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro"
+import AgentSessions from "../components/AgentSessions.astro"
+import FlowDiagram from "../components/FlowDiagram.astro"
+import HubDemo from "../components/HubDemo.astro"
+import { GITHUB_URL } from "../lib/nav"
+
+const base = import.meta.env.BASE_URL
+const withBase = (path: string) =>
+  `${base}${path.replace(/^\//, "")}`.replace(/\/{2,}/g, "/")
+---
+
+<BaseLayout
+  title="mizpah"
+  description="Local JSON log hub with a searchable UI for you and MCP tools for your agents. Faster debugging, smaller context, fewer wasted tokens."
+  current="home"
+>
+  <main>
+    <section class="relative overflow-hidden pb-14 pt-10 sm:pb-16 sm:pt-12">
+      <div
+        class="relative z-10 mx-auto flex max-w-6xl flex-col px-4 sm:px-6"
+      >
+        <p
+          class="animate-fade-up font-sans text-4xl tracking-tight text-primary sm:text-5xl"
+          style="animation-delay: 0.05s"
+        >
+          mizpah
+        </p>
+        <h1
+          class="animate-fade-up mt-3 max-w-2xl text-xl leading-snug tracking-tight text-foreground sm:text-2xl"
+          style="animation-delay: 0.15s"
+        >
+          <code class="font-mono text-primary/90">tail -f</code> is a slog. Pipe
+          JSON into <code class="font-mono text-primary/90">mzp</code> for a live
+          UI you can actually search, and agents that query the buffer instead of
+          burning tokens on paste and re-runs.
+        </h1>
+        <p
+          class="animate-fade-up mt-3 max-w-xl text-sm text-muted-foreground sm:text-base"
+          style="animation-delay: 0.25s"
+        >
+          One Homebrew install. Hub opens locally in under a second. No account,
+          nothing in the cloud. You get a fast filterable stream; Cursor, Claude,
+          Codex, and Grok pull small CEL slices over MCP when they need context.
+        </p>
+        <div
+          class="animate-fade-up mt-5 flex flex-wrap items-center gap-3"
+          style="animation-delay: 0.35s"
+        >
+          <a
+            href={withBase("/docs/install/")}
+            class="inline-flex items-center rounded-lg bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground transition-transform duration-200 hover:-translate-y-0.5 hover:brightness-110 active:translate-y-0"
+          >
+            Install
+          </a>
+          <a
+            href={withBase("/docs/quick-start/")}
+            class="inline-flex items-center rounded-lg border border-border bg-card/60 px-5 py-2.5 text-sm text-foreground transition-colors duration-200 hover:border-primary/40 hover:bg-muted"
+          >
+            Quick start
+          </a>
+          <a
+            href={GITHUB_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            class="inline-flex items-center rounded-lg px-4 py-2.5 text-sm text-muted-foreground transition-colors duration-200 hover:text-foreground"
+          >
+            GitHub →
+          </a>
+        </div>
+        <pre
+          class="animate-fade-up mt-4 max-w-xl overflow-x-auto rounded-lg border border-border bg-card/80 px-4 py-3 font-mono text-[13px] leading-relaxed text-foreground/90"
+          style="animation-delay: 0.45s"
+        ><code
+            ><span class="text-muted-foreground">$</span> brew install ethira-dev/mizpah/mizpah
+<span class="text-muted-foreground">$</span> my-app 2&gt;&amp;1 | mzp --service api</code
+          ></pre>
+
+        <div
+          class="animate-hero-settle mt-8 w-full sm:mt-10"
+          style="animation-delay: 0.2s"
+        >
+          <HubDemo variant="hero" id="hub-demo-hero" />
+        </div>
+      </div>
+    </section>
+
+    <section class="mx-auto max-w-6xl px-4 py-20 sm:px-6 sm:py-28">
+      <h2 class="text-3xl tracking-tight text-foreground sm:text-4xl">
+        Why mizpah
+      </h2>
+      <p class="mt-3 max-w-2xl text-muted-foreground">
+        A calmer log UX for you, and a cheaper way for agents to see the same
+        buffer.
+      </p>
+      <ul class="mt-12 grid gap-10 sm:grid-cols-2">
+        <li>
+          <h3 class="text-lg text-primary">Live JSON UI, zero cloud</h3>
+          <p class="mt-2 text-sm leading-relaxed text-muted-foreground">
+            First process binds <code class="font-mono text-foreground/80"
+              >:1738</code
+            >, serves a readable stream UI, and keeps a 1&nbsp;GiB ring buffer in
+            memory. Click a row, expand JSON, move on without drowning in a
+            terminal scrollback.
+          </p>
+        </li>
+        <li>
+          <h3 class="text-lg text-primary">Attach once, reuse often</h3>
+          <p class="mt-2 text-sm leading-relaxed text-muted-foreground">
+            Shell, browser DevTools, Cursor and Claude hooks all land in the
+            same hub via <code class="font-mono text-foreground/80"
+              >mzp attach</code
+            >. One capture you can keep browsing and agents can keep querying.
+          </p>
+        </li>
+        <li>
+          <h3 class="text-lg text-primary">Filter with CEL</h3>
+          <p class="mt-2 text-sm leading-relaxed text-muted-foreground">
+            Real queries in the search bar, with autocomplete for fields you've
+            actually logged. You find the needle fast; agents get a tiny result
+            set instead of a fat paste.
+          </p>
+        </li>
+        <li>
+          <h3 class="text-lg text-primary">Agents that search, not paste</h3>
+          <p class="mt-2 text-sm leading-relaxed text-muted-foreground">
+            MCP tools for Cursor, Claude, Codex, and Grok call <code
+              class="font-mono text-foreground/80">search_logs</code
+            > against the live buffer. Better answers for them, thinner prompts
+            and a lower bill for you.
+          </p>
+        </li>
+      </ul>
+    </section>
+
+    <section class="border-y border-border bg-card/30">
+      <div class="mx-auto max-w-6xl px-4 py-20 sm:px-6 sm:py-28">
+        <h2
+          id="flow-heading"
+          class="text-3xl tracking-tight text-foreground sm:text-4xl"
+        >
+          How it fits together
+        </h2>
+        <p class="mt-3 max-w-2xl text-muted-foreground">
+          Sources ingest into one hub. You watch it in the web UI; agents read
+          the same buffer over MCP without another full command run.
+        </p>
+        <div class="mt-10">
+          <FlowDiagram />
+        </div>
+      </div>
+    </section>
+
+    <section class="mx-auto max-w-6xl px-4 py-20 sm:px-6 sm:py-28">
+      <h2 class="text-3xl tracking-tight text-foreground sm:text-4xl">
+        Agents ask the hub
+      </h2>
+      <p class="mt-3 max-w-2xl text-muted-foreground">
+        With <code class="font-mono text-foreground/80">mzp mcp install</code>,
+        Claude Code, Codex, and Grok call <code
+          class="font-mono text-foreground/80">search_logs</code
+        > for a few matching rows. Feels like the agent can see your terminal;
+        costs like a small tool call instead of a dumped transcript.
+      </p>
+      <div class="mt-10">
+        <AgentSessions />
+      </div>
+    </section>
+
+    <section class="border-y border-border bg-card/30">
+      <div class="mx-auto max-w-6xl px-4 py-20 sm:px-6 sm:py-28">
+        <h2 class="text-3xl tracking-tight text-foreground sm:text-4xl">
+          Faster loops, lower bills
+        </h2>
+        <p class="mt-3 max-w-2xl text-muted-foreground">
+          Tests, lint, and debug get messy when every question means another
+          run or another paste. Pipe once into mizpah. Browse the stream
+          yourself; let agents search the same output without starting over.
+        </p>
+        <ul class="mt-12 grid gap-10 sm:grid-cols-3">
+          <li>
+            <h3 class="text-lg text-primary">Tests</h3>
+            <p class="mt-2 text-sm leading-relaxed text-muted-foreground">
+              Run the suite into <code class="font-mono text-foreground/80"
+                >mzp</code
+              >. Jump straight to failures in the UI, or have the agent pull them
+              with <code class="font-mono text-foreground/80">search_logs</code>
+              instead of waiting on another full run.
+            </p>
+          </li>
+          <li>
+            <h3 class="text-lg text-primary">Linting</h3>
+            <p class="mt-2 text-sm leading-relaxed text-muted-foreground">
+              One lint pass fills the hub. Skim warnings in a filterable list,
+              or let agents read them from the buffer without re-invoking the
+              linter and stuffing stdout into context.
+            </p>
+          </li>
+          <li>
+            <h3 class="text-lg text-primary">Debugging</h3>
+            <p class="mt-2 text-sm leading-relaxed text-muted-foreground">
+              Keep the app streaming. Open a row for JSON context, or call <code
+                class="font-mono text-foreground/80">get_logs_around</code
+              > for a tight slice. No more hunting a stack frame inside a 10k-line
+              paste.
+            </p>
+          </li>
+        </ul>
+        <p class="mt-10 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+          Clearer workflow for you, fewer tool rounds and thinner context for
+          agents. Same idea in Claude Code, Codex, Grok, or Cursor.
+        </p>
+      </div>
+    </section>
+
+    <section class="mx-auto max-w-6xl px-4 py-20 sm:px-6 sm:py-28">
+      <h2 class="text-3xl tracking-tight text-foreground sm:text-4xl">
+        Get going in 30 seconds
+      </h2>
+      <p class="mt-3 max-w-xl text-muted-foreground">
+        Homebrew, then pipe. Or attach a source.
+      </p>
+      <div
+        class="mt-10 overflow-x-auto rounded-xl border border-border bg-card p-5 sm:p-6"
+      >
+        <pre
+          class="font-mono text-sm leading-relaxed text-foreground/90"><code
+            ><span class="text-muted-foreground"># install</span>
+brew install ethira-dev/mizpah/mizpah
+
+<span class="text-muted-foreground"># pipe a service</span>
+api-server 2&gt;&amp;1 | mzp --service api
+
+<span class="text-muted-foreground"># or attach</span>
+mzp attach              <span class="text-muted-foreground"># shell</span>
+mzp attach browser --launch
+mzp attach cursor
+mzp open</code
+          ></pre>
+      </div>
+      <div class="mt-8 flex flex-wrap gap-3">
+        <a
+          href={withBase("/docs/install/")}
+          class="inline-flex items-center rounded-lg bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground transition-transform duration-200 hover:-translate-y-0.5 hover:brightness-110"
+        >
+          Full install guide
+        </a>
+        <a
+          href={withBase("/docs/quick-start/")}
+          class="inline-flex items-center rounded-lg border border-border px-5 py-2.5 text-sm text-foreground transition-colors hover:border-primary/40 hover:bg-muted"
+        >
+          Quick start
+        </a>
+      </div>
+    </section>
+  </main>
+</BaseLayout>

@@ -1,0 +1,54 @@
+---
+import { GITHUB_URL } from "../lib/nav"
+
+interface Props {
+  base: string
+  current?: "home" | "docs"
+}
+
+const { base, current } = Astro.props
+const withBase = (path: string) =>
+  `${base}${path.replace(/^\//, "")}`.replace(/\/{2,}/g, "/")
+---
+
+<header
+  class="animate-fade-in sticky top-0 z-50 border-b border-border/80 bg-background/75 backdrop-blur-md"
+>
+  <nav
+    class="mx-auto flex h-14 max-w-6xl items-center justify-between gap-4 px-4 sm:px-6"
+  >
+    <a
+      href={withBase("/")}
+      class="font-sans text-lg tracking-tight text-foreground transition-colors hover:text-primary"
+    >
+      mizpah
+    </a>
+    <div class="flex items-center gap-1 sm:gap-2">
+      <a
+        href={withBase("/docs/quick-start/")}
+        class:list={[
+          "rounded-md px-3 py-1.5 text-sm transition-colors",
+          current === "docs"
+            ? "text-primary"
+            : "text-muted-foreground hover:text-foreground",
+        ]}
+      >
+        Docs
+      </a>
+      <a
+        href={withBase("/docs/install/")}
+        class="rounded-md px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+      >
+        Install
+      </a>
+      <a
+        href={GITHUB_URL}
+        class="rounded-md px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        GitHub
+      </a>
+    </div>
+  </nav>
+</header>

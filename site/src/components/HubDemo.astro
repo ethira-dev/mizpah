@@ -1,0 +1,769 @@
+---
+import { SOURCE_META, SOURCES, type DemoSource } from "../lib/demo-logs"
+
+interface Props {
+  variant?: "hero" | "section"
+  id?: string
+}
+
+const { variant = "section", id = "hub-demo" } = Astro.props
+const initialSource: DemoSource | "all" = variant === "hero" ? "all" : "shell"
+const activityHeights = [18, 28, 22, 40, 55, 35, 70, 48, 90, 62, 44, 80, 58, 95, 72]
+---
+
+<div
+  class:list={[
+    "hub-demo",
+    variant === "hero" ? "hub-demo--hero" : "hub-demo--section",
+  ]}
+  id={id}
+  data-variant={variant}
+  data-source={initialSource}
+>
+  <div class="hub-demo__source-bar">
+    <div class="hub-demo__tabs" role="tablist" aria-label="Attach sources">
+      {
+        variant === "hero" && (
+          <button
+            type="button"
+            class="hub-demo__tab"
+            role="tab"
+            data-source="all"
+            aria-selected="true"
+          >
+            all
+          </button>
+        )
+      }
+      {
+        SOURCES.map((source) => (
+          <button
+            type="button"
+            class="hub-demo__tab"
+            role="tab"
+            data-source={source}
+            aria-selected={
+              variant === "section" && source === "shell" ? "true" : "false"
+            }
+          >
+            {SOURCE_META[source].label}
+          </button>
+        ))
+      }
+    </div>
+    {
+      variant === "section" && (
+        <>
+          <p class="hub-demo__blurb" data-blurb>
+            {SOURCE_META.shell.blurb}
+          </p>
+          <code class="hub-demo__cmd" data-cmd>
+            {SOURCE_META.shell.command}
+          </code>
+        </>
+      )
+    }
+  </div>
+
+  <div class="mac-window">
+    <div class="mac-window__titlebar" aria-hidden="true">
+      <div class="mac-window__traffic">
+        <span class="mac-window__dot mac-window__dot--close"></span>
+        <span class="mac-window__dot mac-window__dot--min"></span>
+        <span class="mac-window__dot mac-window__dot--max"></span>
+      </div>
+      <span class="mac-window__title">127.0.0.1:1738</span>
+      <span class="mac-window__titlebar-spacer"></span>
+    </div>
+
+    <div class="mzp-app">
+      <header class="mzp-header">
+        <span class="mzp-brand">mizpah</span>
+        <div class="mzp-cel">
+          <svg
+            class="mzp-cel__icon"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <circle cx="11" cy="11" r="8"></circle>
+            <path d="m21 21-4.3-4.3"></path>
+          </svg>
+          <span class="mzp-cel__query" data-filter>
+            {
+              variant === "hero"
+                ? "Filter with CEL…"
+                : SOURCE_META.shell.filter
+            }
+          </span>
+          <span class="mzp-cel__kbd">⌘K</span>
+        </div>
+        <button type="button" class="mzp-pause" tabindex="-1">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <rect x="6" y="4" width="4" height="16" rx="1"></rect>
+            <rect x="14" y="4" width="4" height="16" rx="1"></rect>
+          </svg>
+          Pause
+        </button>
+      </header>
+
+      <div class="mzp-activity">
+        <div class="mzp-activity__bars">
+          {
+            activityHeights.map((h, i) => (
+              <span
+                class:list={[
+                  "mzp-activity__bar",
+                  i === activityHeights.length - 1 && "mzp-activity__bar--now",
+                ]}
+                style={`height:${h}%`}
+              />
+            ))
+          }
+        </div>
+        <div class="mzp-activity__zoom">
+          <span>−</span>
+          <span>+</span>
+        </div>
+      </div>
+
+      <div class="mzp-main">
+        <div class="mzp-stream" data-stream></div>
+      </div>
+
+      <footer class="mzp-footer">
+        <span class="mzp-live">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <path
+              d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9"></path>
+            <path
+              d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5"></path>
+            <circle cx="12" cy="12" r="2"></circle>
+            <path
+              d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5"></path>
+            <path
+              d="M19.1 4.9C23 8.8 23 15.1 19.1 19"></path>
+          </svg>
+          live
+        </span>
+        <span class="mzp-footer__stat">
+          Showing <span class="mzp-footer__em" data-count>0</span> / <span
+            data-stored>0</span
+          > stored
+        </span>
+        <div class="mzp-mem" title="Buffer memory">
+          <div class="mzp-mem__fill"></div>
+        </div>
+        <span class="mzp-footer__stat" data-services>4 services</span>
+      </footer>
+    </div>
+  </div>
+</div>
+
+<script>
+  import { createDemoLogDialog } from "../lib/demo-log-dialog"
+  import {
+    DEMO_LOGS,
+    SOURCE_META,
+    SOURCES,
+    type DemoLog,
+    type DemoSource,
+  } from "../lib/demo-logs"
+
+  function escapeHtml(s: string) {
+    return s
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+  }
+
+  function formatTime(offsetSec: number) {
+    return new Date(Date.now() - offsetSec * 1000).toLocaleTimeString()
+  }
+
+  function rowHtml(log: DemoLog, index: number) {
+    const level = log.level
+      ? `<span class="mzp-badge mzp-badge--level mzp-badge--${log.level}">${log.level}</span>`
+      : ""
+    const receivedAt = Date.now() - (DEMO_LOGS.length - index) * 4000
+    return `
+      <div class="mzp-row" data-source="${log.source}" data-log-id="${log.id}" data-received-at="${receivedAt}">
+        <button type="button" class="mzp-row__btn">
+          <span class="mzp-row__time">${formatTime((DEMO_LOGS.length - index) * 4)}</span>
+          <span class="mzp-badge mzp-badge--svc">${escapeHtml(log.service)}</span>
+          ${level}
+          <span class="mzp-row__msg">${escapeHtml(log.msg)}</span>
+        </button>
+      </div>
+    `
+  }
+
+  function logsFor(source: DemoSource | "all"): DemoLog[] {
+    if (source === "all") return DEMO_LOGS
+    return DEMO_LOGS.filter((l) => l.source === source)
+  }
+
+  function serviceCount(logs: DemoLog[]) {
+    return new Set(logs.map((l) => l.service)).size
+  }
+
+  function mount(root: HTMLElement) {
+    const stream = root.querySelector<HTMLElement>("[data-stream]")
+    const countEl = root.querySelector<HTMLElement>("[data-count]")
+    const storedEl = root.querySelector<HTMLElement>("[data-stored]")
+    const servicesEl = root.querySelector<HTMLElement>("[data-services]")
+    const filterEl = root.querySelector<HTMLElement>("[data-filter]")
+    const blurbEl = root.querySelector<HTMLElement>("[data-blurb]")
+    const cmdEl = root.querySelector<HTMLElement>("[data-cmd]")
+    const tabs = root.querySelectorAll<HTMLButtonElement>(".hub-demo__tab")
+    const variant = root.dataset.variant ?? "section"
+
+    let source: DemoSource | "all" =
+      (root.dataset.source as DemoSource | "all") ?? "all"
+    let timer: number | undefined
+    let cycleTimer: number | undefined
+    let visible = 0
+    let pool: DemoLog[] = []
+    let pausedForDialog = false
+
+    const dialog = createDemoLogDialog({
+      onOpenChange(open) {
+        pausedForDialog = open
+        if (open) {
+          window.clearInterval(timer)
+          timer = undefined
+          window.clearInterval(cycleTimer)
+          cycleTimer = undefined
+        } else if (root.getBoundingClientRect().top < window.innerHeight) {
+          startStream(false)
+        }
+      },
+    })
+
+    function setSource(next: DemoSource | "all", { restart = true } = {}) {
+      source = next
+      root.dataset.source = next
+
+      tabs.forEach((tab) => {
+        tab.setAttribute(
+          "aria-selected",
+          tab.dataset.source === next ? "true" : "false",
+        )
+      })
+
+      if (next !== "all") {
+        const meta = SOURCE_META[next]
+        if (filterEl) {
+          filterEl.textContent = meta.filter
+          filterEl.classList.add("mzp-cel__query--active")
+        }
+        if (blurbEl) blurbEl.textContent = meta.blurb
+        if (cmdEl) cmdEl.textContent = meta.command
+      } else if (filterEl) {
+        filterEl.textContent = "Filter with CEL…"
+        filterEl.classList.remove("mzp-cel__query--active")
+      }
+
+      if (restart && !pausedForDialog) startStream()
+    }
+
+    function startStream(reset = true) {
+      if (pausedForDialog) return
+      window.clearInterval(timer)
+      if (reset) {
+        pool = logsFor(source)
+        visible = 0
+        if (stream) stream.innerHTML = ""
+        if (countEl) countEl.textContent = "0"
+        if (storedEl) storedEl.textContent = String(pool.length)
+        if (servicesEl) {
+          servicesEl.textContent = `${serviceCount(pool)} service${serviceCount(pool) === 1 ? "" : "s"}`
+        }
+
+        const seed = Math.min(4, pool.length)
+        for (let i = 0; i < seed; i++) appendNext()
+      }
+
+      timer = window.setInterval(() => {
+        if (pausedForDialog) return
+        if (visible >= pool.length) {
+          visible = 0
+          if (stream) stream.innerHTML = ""
+        }
+        appendNext()
+      }, 850)
+    }
+
+    function appendNext() {
+      if (!stream || pool.length === 0) return
+      const log = pool[visible % pool.length]!
+      stream.insertAdjacentHTML("afterbegin", rowHtml(log, visible))
+      const rows = stream.querySelectorAll(".mzp-row")
+      if (rows.length > 8) rows[rows.length - 1]?.remove()
+      visible += 1
+      if (countEl) countEl.textContent = String(Math.min(visible, pool.length))
+    }
+
+    stream?.addEventListener("click", (e) => {
+      const row = (e.target as HTMLElement).closest<HTMLElement>(".mzp-row")
+      if (!row) return
+      const id = Number(row.dataset.logId)
+      const log = pool.find((l) => l.id === id) ?? DEMO_LOGS.find((l) => l.id === id)
+      if (!log) return
+      const at = Number(row.dataset.receivedAt) || Date.now()
+      dialog.open(log, pool.length ? pool : DEMO_LOGS, at)
+    })
+
+    tabs.forEach((tab) => {
+      tab.addEventListener("click", () => {
+        window.clearInterval(cycleTimer)
+        const next = tab.dataset.source as DemoSource | "all"
+        setSource(next)
+      })
+    })
+
+    setSource(source)
+
+    if (variant === "section") {
+      let idx = 0
+      cycleTimer = window.setInterval(() => {
+        if (pausedForDialog) return
+        idx = (idx + 1) % SOURCES.length
+        setSource(SOURCES[idx]!)
+      }, 7000)
+    }
+
+    const io = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry) return
+        if (entry.isIntersecting) {
+          if (!timer && !pausedForDialog) startStream(false)
+        } else {
+          window.clearInterval(timer)
+          timer = undefined
+        }
+      },
+      { threshold: 0.15 },
+    )
+    io.observe(root)
+  }
+
+  document.querySelectorAll<HTMLElement>(".hub-demo").forEach(mount)
+</script>
+
+<style>
+  .hub-demo--hero,
+  .hub-demo--section {
+    width: 100%;
+    display: grid;
+    gap: 1rem;
+  }
+
+  .hub-demo--section {
+    gap: 1.25rem;
+  }
+
+  .hub-demo__source-bar {
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  /* Match AgentSessions underline tabs (outside the mac window) */
+  .hub-demo__tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.15rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .hub-demo__tab {
+    position: relative;
+    z-index: 1;
+    padding: 0.5rem 1rem;
+    font-family: var(--font-mono);
+    font-size: 0.875rem;
+    color: var(--muted-foreground);
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    cursor: pointer;
+  }
+
+  .hub-demo__tab:hover {
+    color: var(--foreground);
+  }
+
+  .hub-demo__tab[aria-selected="true"] {
+    color: var(--foreground);
+    border-bottom-color: var(--primary);
+  }
+
+  .hub-demo__blurb {
+    margin: 0;
+    max-width: 36rem;
+    font-size: 0.95rem;
+    color: var(--muted-foreground);
+  }
+
+  .hub-demo__cmd {
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    color: var(--primary);
+    width: fit-content;
+    padding: 0.35rem 0.6rem;
+    border-radius: 0.4rem;
+    background: var(--muted);
+  }
+
+  /* App shell: mirrors web/src/App.tsx */
+  .mzp-app {
+    display: flex;
+    flex-direction: column;
+    background: oklch(0.145 0 0);
+    color: oklch(0.985 0 0);
+  }
+
+  .mzp-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.65rem 1rem;
+    border-bottom: 1px solid oklch(1 0 0 / 10%);
+  }
+
+  .mzp-brand {
+    font-family: var(--font-sans);
+    font-size: 1.05rem;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    color: #a9fbc0;
+    flex-shrink: 0;
+  }
+
+  .mzp-cel {
+    flex: 1 1 12rem;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    height: 2rem;
+    padding: 0 0.65rem;
+    border-radius: 0.5rem;
+    border: 1px solid oklch(1 0 0 / 12%);
+    background: oklch(0.18 0.005 160);
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+  }
+
+  .mzp-cel__icon {
+    width: 0.85rem;
+    height: 0.85rem;
+    color: oklch(0.65 0.02 160);
+    flex-shrink: 0;
+  }
+
+  .mzp-cel__query {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: oklch(0.55 0.02 160);
+  }
+
+  .mzp-cel__query--active {
+    color: oklch(0.92 0.01 160);
+  }
+
+  .mzp-cel__kbd {
+    flex-shrink: 0;
+    font-size: 0.65rem;
+    color: oklch(0.55 0.02 160);
+    border: 1px solid oklch(1 0 0 / 12%);
+    border-radius: 0.3rem;
+    padding: 0.05rem 0.3rem;
+  }
+
+  .mzp-pause {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    height: 2rem;
+    padding: 0 0.7rem;
+    border-radius: 0.5rem;
+    border: 1px solid oklch(1 0 0 / 12%);
+    background: transparent;
+    color: oklch(0.92 0.01 160);
+    font-size: 0.75rem;
+    flex-shrink: 0;
+  }
+
+  .mzp-pause svg {
+    width: 0.85rem;
+    height: 0.85rem;
+  }
+
+  .mzp-activity {
+    display: flex;
+    align-items: flex-end;
+    gap: 0.5rem;
+    height: 2.4rem;
+    padding: 0.35rem 1rem 0.4rem;
+    border-bottom: 1px solid oklch(1 0 0 / 10%);
+  }
+
+  .mzp-activity__bars {
+    flex: 1;
+    display: flex;
+    align-items: flex-end;
+    gap: 2px;
+    height: 100%;
+  }
+
+  .mzp-activity__bar {
+    flex: 1;
+    min-width: 0;
+    border-radius: 1px 1px 0 0;
+    background: oklch(0.708 0 0 / 25%);
+  }
+
+  .mzp-activity__bar--now {
+    background: #a9fbc0;
+  }
+
+  .mzp-activity__zoom {
+    display: flex;
+    gap: 0.25rem;
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    color: oklch(0.55 0.02 160);
+  }
+
+  .mzp-activity__zoom span {
+    width: 1.25rem;
+    height: 1.25rem;
+    display: grid;
+    place-items: center;
+    border: 1px solid oklch(1 0 0 / 12%);
+    border-radius: 0.35rem;
+  }
+
+  .mzp-main {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .mzp-stream {
+    height: 13.5rem;
+    overflow: hidden;
+    /* Match LogList: font-mono text-xs */
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    line-height: 1.25rem;
+    background: oklch(0.145 0 0);
+  }
+
+  .hub-demo--section .mzp-stream {
+    height: 15.5rem;
+  }
+
+  @media (min-width: 640px) {
+    .mzp-stream {
+      height: 14.5rem;
+    }
+    .hub-demo--section .mzp-stream {
+      height: 16.5rem;
+    }
+  }
+
+  /*
+   * Rows are injected via JS, so they never get Astro's scoped data attribute.
+   * :global under .hub-demo keeps styles applied without leaking site-wide.
+   * Structure mirrors web/src/components/log-list.tsx.
+   */
+  .hub-demo :global(.mzp-row) {
+    border-bottom: 1px solid oklch(1 0 0 / 6%); /* border-border/60 */
+    animation: mzp-row-in 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .hub-demo :global(.mzp-row__btn) {
+    display: flex;
+    width: 100%;
+    align-items: flex-start;
+    gap: 0.5rem; /* gap-2 */
+    padding: 0.5rem 0.75rem; /* py-2 px-3 */
+    border: 0;
+    background: transparent;
+    color: inherit;
+    text-align: left;
+    font: inherit;
+    cursor: pointer;
+    transition: background 0.15s ease;
+  }
+
+  .hub-demo :global(.mzp-row__btn:hover) {
+    background: oklch(0.269 0 0 / 50%); /* hover:bg-muted/50 */
+  }
+
+  .hub-demo :global(.mzp-row__time) {
+    width: 5rem; /* w-20 */
+    flex-shrink: 0;
+    font-variant-numeric: tabular-nums;
+    color: oklch(0.708 0 0); /* text-muted-foreground */
+  }
+
+  /* Badge base: h-5, text-xs, rounded-md (log-list override), mono */
+  .hub-demo :global(.mzp-badge) {
+    display: inline-flex;
+    height: 1.25rem;
+    max-width: 14rem;
+    flex-shrink: 0;
+    align-items: center;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    padding: 0 0.5rem; /* px-2 */
+    border-radius: 0.375rem; /* rounded-md */
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    font-weight: 500;
+    line-height: 1;
+  }
+
+  /* variant="secondary" */
+  .hub-demo :global(.mzp-badge--svc) {
+    background: oklch(0.269 0 0);
+    color: oklch(0.985 0 0);
+    border: 1px solid transparent;
+  }
+
+  /* variant="outline" + levelBadgeClass (uppercase mono + level tint) */
+  .hub-demo :global(.mzp-badge--level) {
+    border: 1px solid transparent;
+    text-transform: uppercase;
+    font-family: var(--font-mono);
+  }
+
+  .hub-demo :global(.mzp-badge--debug) {
+    background: oklch(0.72 0.04 250 / 12%);
+    color: oklch(0.72 0.04 250);
+  }
+  .hub-demo :global(.mzp-badge--info) {
+    background: oklch(0.74 0.1 220 / 12%);
+    color: oklch(0.74 0.1 220);
+  }
+  .hub-demo :global(.mzp-badge--warn) {
+    background: oklch(0.78 0.14 75 / 12%);
+    color: oklch(0.78 0.14 75);
+  }
+  .hub-demo :global(.mzp-badge--error) {
+    background: oklch(0.76 0.16 8 / 12%);
+    color: oklch(0.76 0.16 8);
+  }
+
+  .hub-demo :global(.mzp-row__msg) {
+    min-width: 0;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: oklch(0.985 0 0); /* text-foreground */
+  }
+
+  .mzp-footer {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem 1rem;
+    padding: 0.4rem 1rem;
+    border-top: 1px solid oklch(1 0 0 / 10%);
+    font-size: 0.7rem;
+    color: oklch(0.65 0.02 160);
+  }
+
+  .mzp-live {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.1rem 0.45rem;
+    border-radius: 0.35rem;
+    border: 1px solid color-mix(in oklch, #a9fbc0 40%, transparent);
+    background: color-mix(in oklch, #a9fbc0 10%, transparent);
+    color: #a9fbc0;
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+  }
+
+  .mzp-live svg {
+    width: 0.7rem;
+    height: 0.7rem;
+    animation: mzp-pulse 1.8s ease-out infinite;
+  }
+
+  .mzp-footer__em {
+    color: oklch(0.95 0.01 160);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .mzp-mem {
+    width: 5.5rem;
+    height: 0.35rem;
+    border-radius: 999px;
+    background: oklch(0.269 0 0);
+    overflow: hidden;
+  }
+
+  .mzp-mem__fill {
+    width: 28%;
+    height: 100%;
+    border-radius: inherit;
+    background: #a9fbc0;
+  }
+
+  @keyframes mzp-row-in {
+    from {
+      opacity: 0;
+      transform: translateY(-8px);
+      background: color-mix(in oklch, #a9fbc0 8%, transparent);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+      background: transparent;
+    }
+  }
+
+  @keyframes mzp-pulse {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.45;
+    }
+  }
+</style>

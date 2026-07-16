@@ -1,0 +1,289 @@
+@import "tailwindcss";
+@import "@fontsource/ibm-plex-mono/400.css";
+@import "@fontsource/ibm-plex-mono/500.css";
+
+@font-face {
+  font-family: "Geist Pixel";
+  src: url("../assets/fonts/GeistPixel-Square.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@theme inline {
+  --font-sans: "Geist Pixel", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-card: var(--card);
+  --color-accent: var(--accent);
+}
+
+:root {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --primary: #a9fbc0;
+  --primary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.22 0.01 160);
+  --muted-foreground: oklch(0.72 0.02 160);
+  --border: oklch(1 0 0 / 12%);
+  --card: oklch(0.18 0.01 160);
+  --accent: oklch(0.269 0.02 160);
+}
+
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+
+  html {
+    font-family: var(--font-sans);
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+    min-height: 100dvh;
+  }
+
+  ::selection {
+    background: color-mix(in oklch, var(--primary) 35%, transparent);
+    color: var(--foreground);
+  }
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes hero-settle {
+  from {
+    opacity: 0;
+    transform: translateY(28px) scale(1.02);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.animate-fade-up {
+  animation: fade-up 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.animate-fade-in {
+  animation: fade-in 0.6s ease both;
+}
+
+.animate-hero-settle {
+  animation: hero-settle 1s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.site-bg {
+  background-color: var(--background);
+}
+
+/* Dark macOS window — shared by HubDemo and agent console mocks */
+.mac-window {
+  overflow: hidden;
+  border-radius: 12px;
+  border: 1px solid oklch(1 0 0 / 12%);
+  background: oklch(0.145 0 0);
+  box-shadow:
+    0 0 0 1px oklch(0 0 0 / 40%),
+    0 18px 50px -12px oklch(0 0 0 / 65%),
+    0 8px 20px -8px oklch(0 0 0 / 45%);
+}
+
+.mac-window__titlebar {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 0.75rem;
+  height: 2.35rem;
+  padding: 0 0.85rem;
+  background: oklch(0.24 0.005 160);
+  border-bottom: 1px solid oklch(0 0 0 / 45%);
+}
+
+.mac-window__traffic {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  justify-self: start;
+}
+
+.mac-window__dot {
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 0.5px oklch(0 0 0 / 35%);
+}
+
+.mac-window__dot--close {
+  background: #ff5f57;
+}
+
+.mac-window__dot--min {
+  background: #febc2e;
+}
+
+.mac-window__dot--max {
+  background: #28c840;
+}
+
+.mac-window__title {
+  justify-self: center;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: oklch(0.72 0.01 160);
+}
+
+.mac-window__titlebar-spacer {
+  width: 3.2rem;
+  justify-self: end;
+}
+
+.prose-docs {
+  max-width: 42rem;
+  line-height: 1.7;
+}
+
+.prose-docs h1 {
+  font-size: 2rem;
+  letter-spacing: -0.02em;
+  margin-bottom: 0.75rem;
+}
+
+.prose-docs h2 {
+  font-size: 1.35rem;
+  margin-top: 2.25rem;
+  margin-bottom: 0.75rem;
+  letter-spacing: -0.01em;
+}
+
+.prose-docs h3 {
+  font-size: 1.1rem;
+  margin-top: 1.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.prose-docs h4 {
+  font-size: 0.95rem;
+  margin-top: 1.5rem;
+  margin-bottom: 0.5rem;
+  color: var(--muted-foreground);
+}
+
+.prose-docs p,
+.prose-docs ul,
+.prose-docs ol,
+.prose-docs table {
+  margin-bottom: 1rem;
+  color: color-mix(in oklch, var(--foreground) 88%, transparent);
+}
+
+.prose-docs a {
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.prose-docs a:hover {
+  color: color-mix(in oklch, var(--primary) 85%, white);
+}
+
+.prose-docs code {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  background: var(--muted);
+  padding: 0.15em 0.4em;
+  border-radius: 0.35rem;
+}
+
+.prose-docs pre {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 0.65rem;
+  padding: 1rem 1.1rem;
+  overflow-x: auto;
+  margin-bottom: 1.25rem;
+}
+
+.prose-docs pre code {
+  background: none;
+  padding: 0;
+  font-size: inherit;
+}
+
+.prose-docs table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+  display: block;
+  overflow-x: auto;
+}
+
+.prose-docs th,
+.prose-docs td {
+  border: 1px solid var(--border);
+  padding: 0.55rem 0.75rem;
+  text-align: left;
+}
+
+.prose-docs th {
+  background: var(--muted);
+  font-weight: 500;
+}
+
+.prose-docs ul,
+.prose-docs ol {
+  padding-left: 1.25rem;
+}
+
+.prose-docs li {
+  margin-bottom: 0.35rem;
+}
+
+.prose-docs details {
+  margin-bottom: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 0.65rem;
+  padding: 0.75rem 1rem;
+  background: var(--card);
+}
+
+.prose-docs summary {
+  cursor: pointer;
+  font-weight: 500;
+  color: var(--foreground);
+}
+
+.prose-docs strong {
+  color: var(--foreground);
+  font-weight: 500;
+}
