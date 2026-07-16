@@ -9,7 +9,7 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tar::Archive;
 use tokio::sync::{mpsc, Mutex};
 use tracing::{debug, warn};
@@ -17,6 +17,8 @@ use tracing::{debug, warn};
 const GITHUB_REPO: &str = "ethira-dev/mizpah";
 const CHECK_TIMEOUT: Duration = Duration::from_secs(10);
 const DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(300);
+/// Re-fetch GitHub latest when status is read and the cache is older than this.
+const CHECK_TTL: Duration = Duration::from_secs(15 * 60);
 const BREW_FORMULA: &str = "ethira-dev/mizpah/mizpah";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -61,6 +63,7 @@ struct Inner {
     latest_version: Option<Version>,
     channel: UpdateChannel,
     busy: bool,
+    last_checked_at: Option<Instant>,
 }
 
 pub struct UpdateManager {
@@ -78,12 +81,14 @@ impl UpdateManager {
                 latest_version: None,
                 channel: detect_channel(),
                 busy: false,
+                last_checked_at: None,
             }),
             restart,
         })
     }
 
     pub async fn status(&self) -> UpdateStatus {
+        self.ensure_fresh().await;
         let g = self.inner.lock().await;
         let update_available = g
             .latest_version
@@ -99,6 +104,20 @@ impl UpdateManager {
         }
     }
 
+    /// Refresh from GitHub when never checked or the cache is past [`CHECK_TTL`].
+    pub async fn ensure_fresh(&self) {
+        let stale = {
+            let g = self.inner.lock().await;
+            if g.busy {
+                return;
+            }
+            is_check_stale(g.last_checked_at, Instant::now(), CHECK_TTL)
+        };
+        if stale {
+            self.check_now().await;
+        }
+    }
+
     pub async fn check_now(&self) {
         {
             let g = self.inner.lock().await;
@@ -111,9 +130,13 @@ impl UpdateManager {
                 let mut g = self.inner.lock().await;
                 g.latest_version = Some(info.version);
                 g.channel = detect_channel();
+                g.last_checked_at = Some(Instant::now());
             }
             Err(err) => {
                 debug!(error = %err, "update check failed");
+                // Still advance the TTL so failed checks do not hammer GitHub on every poll.
+                let mut g = self.inner.lock().await;
+                g.last_checked_at = Some(Instant::now());
             }
         }
     }
@@ -182,6 +205,13 @@ pub fn release_target() -> Option<&'static str> {
 pub fn parse_tag_version(tag: &str) -> Option<Version> {
     let trimmed = tag.trim().trim_start_matches('v');
     Version::parse(trimmed).ok()
+}
+
+fn is_check_stale(last_checked_at: Option<Instant>, now: Instant, ttl: Duration) -> bool {
+    match last_checked_at {
+        None => true,
+        Some(at) => now.saturating_duration_since(at) >= ttl,
+    }
 }
 
 pub fn parse_cli_version(stdout: &str) -> Option<Version> {
@@ -924,5 +954,28 @@ mod tests {
         let latest = Version::parse("0.8.0").unwrap();
         assert!(latest > cur);
         assert!(!(cur > latest));
+    }
+
+    #[test]
+    fn check_stale_when_never_checked_or_past_ttl() {
+        let ttl = Duration::from_secs(15 * 60);
+        let now = Instant::now();
+        assert!(is_check_stale(None, now, ttl));
+        assert!(!is_check_stale(Some(now), now, ttl));
+        assert!(!is_check_stale(
+            Some(now - Duration::from_secs(14 * 60)),
+            now,
+            ttl
+        ));
+        assert!(is_check_stale(
+            Some(now - Duration::from_secs(15 * 60)),
+            now,
+            ttl
+        ));
+        assert!(is_check_stale(
+            Some(now - Duration::from_secs(16 * 60)),
+            now,
+            ttl
+        ));
     }
 }
