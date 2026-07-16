@@ -275,8 +275,8 @@ fn homebrew_prefix_from_env_only() -> Option<PathBuf> {
 pub fn stable_exe_path() -> io::Result<PathBuf> {
     let raw = std::env::current_exe()?;
     let prefix = homebrew_prefix();
-    let prefer_homebrew = detect_channel() == UpdateChannel::Homebrew
-        || path_looks_like_homebrew_cellar(&raw);
+    let prefer_homebrew =
+        detect_channel() == UpdateChannel::Homebrew || path_looks_like_homebrew_cellar(&raw);
     Ok(resolve_stable_exe_path(
         &raw,
         prefer_homebrew,
@@ -571,12 +571,7 @@ async fn apply_homebrew(latest: &Version, tx: &ProgressTx) -> Result<(), String>
     })
     .await
     .map_err(|e| e.to_string())?
-    .map_err(|e| {
-        format!(
-            "failed to run --version on {}: {e}",
-            stable.display()
-        )
-    })?;
+    .map_err(|e| format!("failed to run --version on {}: {e}", stable.display()))?;
 
     let stdout = String::from_utf8_lossy(&ver_out.stdout);
     let installed = parse_cli_version(&stdout)

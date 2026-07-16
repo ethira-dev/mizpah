@@ -46,16 +46,6 @@ export function UpdateDialog({
   }, [expectedLatest])
 
   useEffect(() => {
-    if (!open) {
-      setStep("Starting update…")
-      setProgress(0)
-      setError(null)
-      setPhase("confirm")
-      setRunToken(0)
-    }
-  }, [open])
-
-  useEffect(() => {
     if (!open || runToken === 0) return
 
     const ac = new AbortController()
