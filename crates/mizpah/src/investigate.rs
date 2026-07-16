@@ -213,15 +213,15 @@ fn powershell_single_quote(s: &str) -> String {
 fn open_terminal(launcher: &Path) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
-        return open_terminal_macos(launcher);
+        open_terminal_macos(launcher)
     }
     #[cfg(target_os = "linux")]
     {
-        return open_terminal_linux(launcher);
+        open_terminal_linux(launcher)
     }
     #[cfg(windows)]
     {
-        return open_terminal_windows(launcher);
+        open_terminal_windows(launcher)
     }
     #[cfg(not(any(target_os = "macos", target_os = "linux", windows)))]
     {
@@ -299,10 +299,7 @@ fn open_terminal_linux(launcher: &Path) -> Result<(), String> {
         }
     }
 
-    Err(
-        "no terminal emulator found (set $TERMINAL or install gnome-terminal/kitty/xterm)"
-            .into(),
-    )
+    Err("no terminal emulator found (set $TERMINAL or install gnome-terminal/kitty/xterm)".into())
 }
 
 #[cfg(windows)]

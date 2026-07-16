@@ -5,7 +5,13 @@ Stop drowning in `tail -f`. Pipe JSON into **`mzp`**, get a live web UI in under
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![GitHub Release](https://img.shields.io/github/v/release/ethira-dev/mizpah)](https://github.com/ethira-dev/mizpah/releases/latest)
 
-![Mizpah UI — live JSON logs with CEL filters](docs/images/ui.png)
+![Mizpah UI — live JSON log stream](docs/images/ui-stream.png)
+
+![Properties sidebar for services, levels, and fields](docs/images/ui-properties.png)
+
+![CEL filter modal with recipes and field inserts](docs/images/ui-filter.png)
+
+![Log detail with tree view and Check with Claude / Cursor](docs/images/ui-detail.png)
 
 ```bash
 my-app 2>&1 | mzp --service api

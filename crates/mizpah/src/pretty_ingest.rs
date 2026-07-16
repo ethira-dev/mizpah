@@ -430,10 +430,7 @@ mod tests {
         );
         assert_eq!(strip_service_prefix("{", "api"), "{");
         // Bracket tags that contain spaces are not process-manager style.
-        assert_eq!(
-            strip_service_prefix("[my app] {", "api"),
-            "[my app] {"
-        );
+        assert_eq!(strip_service_prefix("[my app] {", "api"), "[my app] {");
     }
 
     #[test]

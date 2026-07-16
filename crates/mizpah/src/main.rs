@@ -428,13 +428,7 @@ mod tests {
 
     #[test]
     fn clap_accepts_project_flag() {
-        let cli = Cli::try_parse_from([
-            "mizpah",
-            "--project",
-            "/tmp/my-app",
-            "--no-open",
-        ])
-        .unwrap();
+        let cli = Cli::try_parse_from(["mizpah", "--project", "/tmp/my-app", "--no-open"]).unwrap();
         assert_eq!(
             cli.project.as_deref(),
             Some(std::path::Path::new("/tmp/my-app"))
@@ -515,14 +509,8 @@ mod tests {
             other => panic!("unexpected: {other:?}"),
         }
 
-        let restart = Cli::try_parse_from([
-            "mizpah",
-            "hub",
-            "restart",
-            "--project",
-            "/tmp/my-app",
-        ])
-        .unwrap();
+        let restart =
+            Cli::try_parse_from(["mizpah", "hub", "restart", "--project", "/tmp/my-app"]).unwrap();
         match restart.command {
             Some(Commands::Hub {
                 action: HubAction::Restart,

@@ -201,17 +201,23 @@ async fn investigate(
     State(state): State<AppState>,
     Json(body): Json<InvestigateRequest>,
 ) -> Result<Json<InvestigateResponse>, (StatusCode, String)> {
-    let entry = state
-        .store
-        .get_entry(body.id)
-        .await
-        .ok_or_else(|| (StatusCode::NOT_FOUND, format!("log entry {} not found", body.id)))?;
+    let entry = state.store.get_entry(body.id).await.ok_or_else(|| {
+        (
+            StatusCode::NOT_FOUND,
+            format!("log entry {} not found", body.id),
+        )
+    })?;
 
     let project_dir = state.project_dir.clone();
     let target = body.target;
     tokio::task::spawn_blocking(move || investigate::launch_session(target, &entry, &project_dir))
         .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("investigate task failed: {e}")))?
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("investigate task failed: {e}"),
+            )
+        })?
         .map_err(|e| (StatusCode::BAD_GATEWAY, e))?;
 
     Ok(Json(InvestigateResponse { ok: true }))
@@ -517,9 +523,7 @@ mod tests {
                     .method("POST")
                     .uri("/api/investigate")
                     .header("content-type", "application/json")
-                    .body(Body::from(
-                        json!({"target":"claude","id":999}).to_string(),
-                    ))
+                    .body(Body::from(json!({"target":"claude","id":999}).to_string()))
                     .unwrap(),
             )
             .await
