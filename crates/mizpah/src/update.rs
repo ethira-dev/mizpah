@@ -70,7 +70,8 @@ pub struct UpdateManager {
 
 impl UpdateManager {
     pub fn new(restart: RestartContext) -> Arc<Self> {
-        let current = Version::parse(env!("CARGO_PKG_VERSION")).unwrap_or_else(|_| Version::new(0, 0, 0));
+        let current =
+            Version::parse(env!("CARGO_PKG_VERSION")).unwrap_or_else(|_| Version::new(0, 0, 0));
         Arc::new(Self {
             inner: Mutex::new(Inner {
                 current_version: current,
@@ -285,11 +286,7 @@ fn homebrew_prefix() -> Option<PathBuf> {
             return Some(PathBuf::from(trimmed));
         }
     }
-    for candidate in [
-        "/opt/homebrew",
-        "/usr/local",
-        "/home/linuxbrew/.linuxbrew",
-    ] {
+    for candidate in ["/opt/homebrew", "/usr/local", "/home/linuxbrew/.linuxbrew"] {
         let brew = Path::new(candidate).join("bin/brew");
         if brew.is_file() {
             return Some(PathBuf::from(candidate));
@@ -413,11 +410,7 @@ async fn fetch_latest_release() -> Result<ReleaseInfo, String> {
 
 pub type ProgressTx = mpsc::UnboundedSender<UpdateEvent>;
 
-pub async fn apply_update(
-    manager: Arc<UpdateManager>,
-    latest: Version,
-    tx: ProgressTx,
-) {
+pub async fn apply_update(manager: Arc<UpdateManager>, latest: Version, tx: ProgressTx) {
     let channel = {
         let g = manager.inner.lock().await;
         g.channel
@@ -474,9 +467,8 @@ fn emit(tx: &ProgressTx, step: impl Into<String>, progress: f32) {
 
 async fn apply_homebrew(latest: &Version, tx: &ProgressTx) -> Result<(), String> {
     emit(tx, "Checking Homebrew…", 0.1);
-    let brew = find_brew_binary().ok_or_else(|| {
-        "Homebrew install detected but `brew` was not found".to_string()
-    })?;
+    let brew = find_brew_binary()
+        .ok_or_else(|| "Homebrew install detected but `brew` was not found".to_string())?;
 
     emit(tx, "Running brew upgrade…", 0.35);
     let output = tokio::task::spawn_blocking({
@@ -551,7 +543,10 @@ async fn apply_direct(latest: &Version, tx: &ProgressTx) -> Result<(), String> {
         // Shouldn't happen; continue with fetched.
     }
     let url = info.download_url.ok_or_else(|| {
-        format!("Release v{} has no asset mizpah-{target}.tar.gz", info.version)
+        format!(
+            "Release v{} has no asset mizpah-{target}.tar.gz",
+            info.version
+        )
     })?;
 
     emit(tx, "Downloading update…", 0.15);
@@ -769,7 +764,8 @@ fn spawn_update_resume(ctx: &RestartContext) -> Result<(), String> {
         }
     }
 
-    cmd.spawn().map_err(|e| format!("spawn update-resume: {e}"))?;
+    cmd.spawn()
+        .map_err(|e| format!("spawn update-resume: {e}"))?;
     Ok(())
 }
 
@@ -906,10 +902,7 @@ mod tests {
 
     #[test]
     fn running_and_sibling_names() {
-        assert_eq!(
-            running_bin_name(Path::new("/opt/homebrew/bin/mzp")),
-            "mzp"
-        );
+        assert_eq!(running_bin_name(Path::new("/opt/homebrew/bin/mzp")), "mzp");
         assert_eq!(sibling_bin_name("mzp"), "mizpah");
         assert_eq!(sibling_bin_name("mizpah"), "mzp");
     }

@@ -80,10 +80,13 @@ function zoomShortcutHint(): string {
 }
 
 function usePrefersReducedMotion(): boolean {
-  const [reduced, setReduced] = useState(false)
+  const [reduced, setReduced] = useState(() =>
+    typeof window !== "undefined"
+      ? window.matchMedia("(prefers-reduced-motion: reduce)").matches
+      : false
+  )
   useEffect(() => {
     const mq = window.matchMedia("(prefers-reduced-motion: reduce)")
-    setReduced(mq.matches)
     function onChange(e: MediaQueryListEvent) {
       setReduced(e.matches)
     }
@@ -105,8 +108,13 @@ export function TimeActivityStrip({
     () => buckets.reduce((m, b) => Math.max(m, b.count), 0),
     [buckets]
   )
-  const nowMs = Date.now()
+  const [nowMs, setNowMs] = useState(() => Date.now())
   const reducedMotion = usePrefersReducedMotion()
+
+  useEffect(() => {
+    const id = window.setInterval(() => setNowMs(Date.now()), 15_000)
+    return () => window.clearInterval(id)
+  }, [])
 
   const lastZoomAt = useRef(0)
   const zoomIndexRef = useRef(zoomIndex)

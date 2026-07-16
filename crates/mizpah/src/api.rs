@@ -171,10 +171,9 @@ async fn list_logs(
 ) -> Result<Json<LogsResponse>, (StatusCode, String)> {
     let query = compile_query(params.q.as_deref().unwrap_or(""))
         .map_err(|e| (StatusCode::BAD_REQUEST, e))?;
-    let from = parse_rfc3339("from", params.from.as_deref())
-        .map_err(|e| (StatusCode::BAD_REQUEST, e))?;
-    let to =
-        parse_rfc3339("to", params.to.as_deref()).map_err(|e| (StatusCode::BAD_REQUEST, e))?;
+    let from =
+        parse_rfc3339("from", params.from.as_deref()).map_err(|e| (StatusCode::BAD_REQUEST, e))?;
+    let to = parse_rfc3339("to", params.to.as_deref()).map_err(|e| (StatusCode::BAD_REQUEST, e))?;
     let (entries, has_more) = state
         .store
         .query_logs(
@@ -427,14 +426,10 @@ async fn post_update(
     let mut res = Sse::new(stream)
         .keep_alive(KeepAlive::new().interval(Duration::from_secs(15)))
         .into_response();
-    res.headers_mut().insert(
-        header::CACHE_CONTROL,
-        HeaderValue::from_static("no-cache"),
-    );
-    res.headers_mut().insert(
-        "x-accel-buffering",
-        HeaderValue::from_static("no"),
-    );
+    res.headers_mut()
+        .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-cache"));
+    res.headers_mut()
+        .insert("x-accel-buffering", HeaderValue::from_static("no"));
     Ok(res)
 }
 
@@ -746,7 +741,14 @@ mod tests {
         assert_eq!(resp.status(), StatusCode::OK);
 
         let (entries, _) = store
-            .query_logs(Some("shell"), None, 10, &CompiledQuery::MatchAll, None, None)
+            .query_logs(
+                Some("shell"),
+                None,
+                10,
+                &CompiledQuery::MatchAll,
+                None,
+                None,
+            )
             .await;
         assert_eq!(entries.len(), 3);
         // Newest first

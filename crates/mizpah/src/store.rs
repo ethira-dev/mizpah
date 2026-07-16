@@ -442,8 +442,8 @@ impl Store {
         let now_ms = now.timestamp_millis();
         let current_bucket_end = ((now_ms / bucket_ms) + 1) * bucket_ms;
         let window_start_ms = current_bucket_end - bucket_ms * n_buckets as i64;
-        let window_start = DateTime::from_timestamp_millis(window_start_ms)
-            .unwrap_or_else(|| now - window);
+        let window_start =
+            DateTime::from_timestamp_millis(window_start_ms).unwrap_or_else(|| now - window);
 
         let mut counts = vec![0u64; n_buckets];
         {
@@ -800,9 +800,7 @@ mod tests {
     #[tokio::test]
     async fn query_logs_respects_time_range() {
         let store = Store::new(1_000_000);
-        store
-            .push_line("api", r#"{"msg":"hi"}"#)
-            .await;
+        store.push_line("api", r#"{"msg":"hi"}"#).await;
         let (all, _) = store
             .query_logs(None, None, 10, &CompiledQuery::MatchAll, None, None)
             .await;
