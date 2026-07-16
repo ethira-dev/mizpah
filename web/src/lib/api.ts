@@ -155,7 +155,7 @@ export async function startInvestigate(
 export type UpdateChannel = "homebrew" | "direct"
 
 export type UpdateStatus = {
-  currentVersion: string
+  installedVersion: string
   latestVersion?: string
   updateAvailable: boolean
   channel: UpdateChannel

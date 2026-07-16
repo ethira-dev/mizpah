@@ -874,7 +874,7 @@ mod tests {
             .await
             .unwrap();
         let parsed: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(parsed["currentVersion"], env!("CARGO_PKG_VERSION"));
+        assert_eq!(parsed["installedVersion"], env!("CARGO_PKG_VERSION"));
         assert_eq!(parsed["updateAvailable"], false);
         assert_eq!(parsed["busy"], false);
         assert!(parsed["channel"].is_string());

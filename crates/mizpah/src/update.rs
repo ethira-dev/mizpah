@@ -31,7 +31,7 @@ pub enum UpdateChannel {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateStatus {
-    pub current_version: String,
+    pub installed_version: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub latest_version: Option<String>,
     pub update_available: bool,
@@ -59,7 +59,7 @@ pub struct RestartContext {
 }
 
 struct Inner {
-    current_version: Version,
+    installed_version: Version,
     latest_version: Option<Version>,
     channel: UpdateChannel,
     busy: bool,
@@ -77,7 +77,7 @@ impl UpdateManager {
             Version::parse(env!("CARGO_PKG_VERSION")).unwrap_or_else(|_| Version::new(0, 0, 0));
         Arc::new(Self {
             inner: Mutex::new(Inner {
-                current_version: current,
+                installed_version: current,
                 latest_version: None,
                 channel: detect_channel(),
                 busy: false,
@@ -93,10 +93,10 @@ impl UpdateManager {
         let update_available = g
             .latest_version
             .as_ref()
-            .map(|l| l > &g.current_version)
+            .map(|l| l > &g.installed_version)
             .unwrap_or(false);
         UpdateStatus {
-            current_version: g.current_version.to_string(),
+            installed_version: g.installed_version.to_string(),
             latest_version: g.latest_version.as_ref().map(|v| v.to_string()),
             update_available,
             channel: g.channel,
@@ -161,7 +161,7 @@ impl UpdateManager {
         let Some(latest) = g.latest_version.clone() else {
             return Err(ApplyBeginError::NoUpdate);
         };
-        if latest <= g.current_version {
+        if latest <= g.installed_version {
             return Err(ApplyBeginError::NoUpdate);
         }
         g.busy = true;

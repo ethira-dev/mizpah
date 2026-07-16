@@ -62,7 +62,7 @@ export function UpdateDialog({
           if (ac.signal.aborted) return
           try {
             const status = await fetchUpdateStatus()
-            if (status.currentVersion === expectedRef.current) {
+            if (status.installedVersion === expectedRef.current) {
               setPhase("done")
               setProgress(1)
               setStep("Update complete")
