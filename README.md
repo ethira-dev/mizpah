@@ -4,6 +4,7 @@ Stop drowning in `tail -f`. Pipe JSON into **`mzp`**, get a live web UI in under
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![GitHub Release](https://img.shields.io/github/v/release/ethira-dev/mizpah)](https://github.com/ethira-dev/mizpah/releases/latest)
+[![dependency status](https://deps.rs/repo/github/ethira-dev/mizpah/status.svg)](https://deps.rs/repo/github/ethira-dev/mizpah)
 
 ![Mizpah UI — live JSON log stream](docs/images/ui-stream.png)
 
