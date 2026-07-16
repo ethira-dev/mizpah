@@ -10,6 +10,7 @@ import { TooltipProvider } from "@/components/ui/tooltip"
 import { useMizpah } from "@/hooks/use-mizpah"
 import { formatBytes } from "@/lib/api"
 import { readQueryFromSession, writeQueryToSession } from "@/lib/filter-storage"
+import { pushHistory } from "@/lib/query-library-storage"
 
 export function App() {
   const [query, setQuery] = useState(() => readQueryFromSession())
@@ -19,7 +20,10 @@ export function App() {
     writeQueryToSession(query)
   }, [query])
 
-  const onQueryChange = useCallback((q: string) => setQuery(q), [])
+  const onQueryChange = useCallback((q: string) => {
+    setQuery(q)
+    if (q.trim()) pushHistory(q)
+  }, [])
 
   const { entries, services, properties, propertiesRevision, stats, connected, loading, queryError } =
     useMizpah(query)
@@ -33,7 +37,7 @@ export function App() {
     <TooltipProvider>
       <div className="flex h-svh flex-col bg-background text-foreground">
         <header className="flex flex-wrap items-center gap-3 border-b px-4 py-3">
-          <span className="text-lg font-semibold tracking-tight">mizpah</span>
+          <span className="text-lg font-semibold tracking-tight text-primary">mizpah</span>
 
           <CelQueryEditor
             value={query}
@@ -65,6 +69,8 @@ export function App() {
         <div className="flex min-h-0 flex-1">
           <PropertyFilterDrawer
             propertiesRevision={propertiesRevision}
+            propertyCount={properties.length}
+            services={services}
             onApplyFilter={onQueryChange}
           />
           <main className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -77,12 +83,24 @@ export function App() {
                 entries={entries}
                 autoScroll={autoScroll}
                 onAutoScrollChange={setAutoScroll}
+                onApplyFilter={onQueryChange}
               />
             )}
           </main>
         </div>
 
         <footer className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t px-4 py-2 text-xs text-muted-foreground">
+          <Badge
+            variant={connected ? "outline" : "destructive"}
+            className={
+              connected
+                ? "gap-1 rounded-md border-primary/40 bg-primary/10 text-primary"
+                : "gap-1 rounded-md"
+            }
+          >
+            <Radio className={`size-3 ${connected ? "animate-pulse" : ""}`} />
+            {connected ? "live" : "offline"}
+          </Badge>
           <span>
             Showing <span className="tabular-nums text-foreground">{entries.length}</span>
             {stats ? (
@@ -97,13 +115,6 @@ export function App() {
             {stats?.services.length ?? services.length} service
             {(stats?.services.length ?? services.length) === 1 ? "" : "s"}
           </span>
-          <Badge
-            variant={connected ? "secondary" : "destructive"}
-            className="ml-auto gap-1 rounded-md"
-          >
-            <Radio className="size-3" />
-            {connected ? "live" : "offline"}
-          </Badge>
         </footer>
       </div>
     </TooltipProvider>

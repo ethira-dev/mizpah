@@ -166,7 +166,7 @@ impl ServerHandler for MizpahMcp {
                  Keep limits small (default 20, max 50) — never dump the full buffer. \
                  Use list_properties to discover fields, get_logs_around to expand context around an id. \
                  If tools fail because the hub is unreachable, tell the user to start a stream: \
-                 `my-app | mizpah --service <name>`."
+                 `my-app | mizpah` or `my-app | mizpah --service <name>`."
                     .to_string(),
             )
     }

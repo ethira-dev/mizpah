@@ -88,21 +88,37 @@ pub fn strip_ansi(input: &str) -> String {
     out
 }
 
-/// Remove a leading `[service]` tag when it matches the ingest service name.
+/// Remove a leading process-manager / service tag so pretty-block detection works.
 ///
-/// Upstream pipes sometimes echo the service name on every line (e.g. `[api] {`),
-/// which would otherwise prevent pretty-block detection.
+/// Prefer an exact `[service]` match when the ingest service name is set. Otherwise
+/// (or if that fails) strip a single leading `[token]` tag such as concurrently's
+/// `[api] {` — common in shell-attach where the service defaults to a cwd path.
 pub fn strip_service_prefix(line: &str, service: &str) -> String {
-    if service.is_empty() {
-        return line.to_string();
-    }
     let trimmed_start = line.trim_start();
-    let prefix = format!("[{service}]");
-    if let Some(rest) = trimmed_start.strip_prefix(&prefix) {
-        rest.trim_start().to_string()
-    } else {
-        line.to_string()
+
+    if !service.is_empty() {
+        let prefix = format!("[{service}]");
+        if let Some(rest) = trimmed_start.strip_prefix(&prefix) {
+            return rest.trim_start().to_string();
+        }
     }
+
+    if let Some(rest) = strip_process_manager_tag(trimmed_start) {
+        return rest.trim_start().to_string();
+    }
+
+    line.to_string()
+}
+
+/// Strip one leading `[token]` tag (non-empty, no spaces, ≤ 64 chars).
+fn strip_process_manager_tag(s: &str) -> Option<&str> {
+    let rest = s.strip_prefix('[')?;
+    let end = rest.find(']')?;
+    let tag = &rest[..end];
+    if tag.is_empty() || tag.contains(' ') || tag.len() > 64 {
+        return None;
+    }
+    Some(&rest[end + 1..])
 }
 
 /// True when the cleaned line is a bare object opener that should start buffering.
@@ -406,9 +422,18 @@ mod tests {
     }
 
     #[test]
-    fn strip_service_prefix_ignores_other_tags() {
-        assert_eq!(strip_service_prefix("[other] {", "api"), "[other] {");
+    fn strip_service_prefix_strips_process_manager_tags() {
+        assert_eq!(strip_service_prefix("[other] {", "api"), "{");
+        assert_eq!(
+            strip_service_prefix("[api] {", "/Users/lucas/Documents/GitHub/monorepo"),
+            "{"
+        );
         assert_eq!(strip_service_prefix("{", "api"), "{");
+        // Bracket tags that contain spaces are not process-manager style.
+        assert_eq!(
+            strip_service_prefix("[my app] {", "api"),
+            "[my app] {"
+        );
     }
 
     #[test]

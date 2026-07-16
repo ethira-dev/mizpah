@@ -1082,14 +1082,16 @@ dependencies = [
 
 [[package]]
 name = "mizpah"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "axum",
+ "base64",
  "cel",
  "chrono",
  "clap",
  "directories",
  "futures-util",
+ "libc",
  "open",
  "reqwest",
  "rmcp",
@@ -1100,6 +1102,7 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "toml_edit",
+ "tower",
  "tower-http",
  "tracing",
  "tracing-subscriber",

@@ -65,10 +65,23 @@ impl Store {
     /// Ingest a line. May emit zero entries (still buffering a pretty block),
     /// one entry (normal / completed block), or many (failed convert flush).
     pub async fn push_line(&self, service: &str, line: &str) -> Vec<LogEntry> {
+        self.push_line_with_meta(service, line, None).await
+    }
+
+    /// Ingest a line and optionally inject a `cmd` property into each emitted payload.
+    pub async fn push_line_with_meta(
+        &self,
+        service: &str,
+        line: &str,
+        cmd: Option<&str>,
+    ) -> Vec<LogEntry> {
         let cleaned = strip_service_prefix(&strip_ansi(line), service);
         let payloads = self.resolve_payloads(service, &cleaned).await;
         let mut emitted = Vec::with_capacity(payloads.len());
-        for data in payloads {
+        for mut data in payloads {
+            if let Some(cmd) = cmd {
+                inject_cmd(&mut data, cmd);
+            }
             emitted.push(self.commit_entry(service, data).await);
         }
         emitted
@@ -262,6 +275,11 @@ impl Store {
         infos
     }
 
+    pub async fn get_entry(&self, id: u64) -> Option<LogEntry> {
+        let inner = self.inner.read().await;
+        inner.entries.iter().find(|e| e.id == id).cloned()
+    }
+
     pub async fn query_logs(
         &self,
         service: Option<&str>,
@@ -318,6 +336,13 @@ pub fn parse_line(line: &str) -> Value {
     }
 }
 
+/// Inject or overwrite top-level `cmd` on a log payload object.
+fn inject_cmd(data: &mut Value, cmd: &str) {
+    if let Value::Object(map) = data {
+        map.insert("cmd".to_string(), Value::String(cmd.to_string()));
+    }
+}
+
 fn try_parse_json_object(line: &str) -> Option<Value> {
     let trimmed = line.trim();
     match serde_json::from_str::<Value>(trimmed) {
@@ -367,6 +392,28 @@ mod tests {
             .await;
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0].data["level"], json!("warn"));
+    }
+
+    #[tokio::test]
+    async fn injects_cmd_into_json_and_raw() {
+        let store = Store::new(1_000_000);
+        let json_entries = store
+            .push_line_with_meta(
+                "/Users/me/app",
+                r#"{"level":"info","msg":"hi","cmd":"from-app"}"#,
+                Some("npm test"),
+            )
+            .await;
+        assert_eq!(json_entries.len(), 1);
+        assert_eq!(json_entries[0].data["cmd"], json!("npm test"));
+        assert_eq!(json_entries[0].data["msg"], json!("hi"));
+
+        let raw_entries = store
+            .push_line_with_meta("/Users/me/app", "plain text", Some("cargo run"))
+            .await;
+        assert_eq!(raw_entries.len(), 1);
+        assert_eq!(raw_entries[0].data["_raw"], json!("plain text"));
+        assert_eq!(raw_entries[0].data["cmd"], json!("cargo run"));
     }
 
     #[tokio::test]
@@ -429,11 +476,56 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn foreign_service_prefix_not_stripped() {
+    async fn strips_process_manager_prefix_when_service_is_cwd() {
+        // Shell attach defaults service to absolute cwd; concurrently still prefixes [api].
+        let service = "/Users/lucas/Documents/GitHub/monorepo";
         let store = Store::new(1_000_000);
-        let entries = store.push_line("api", "[other] {").await;
+        assert!(store.push_line(service, "[api] {").await.is_empty());
+        assert!(store
+            .push_line(service, "[api]   context: { context: 'bootstrap' },")
+            .await
+            .is_empty());
+        assert!(store
+            .push_line(service, "[api]   level: 'info',")
+            .await
+            .is_empty());
+        assert!(store
+            .push_line(
+                service,
+                "[api]   message: 'Application is running on: http://localhost:3000/api',"
+            )
+            .await
+            .is_empty());
+        assert!(store
+            .push_line(service, "[api]   timestamp: '2026-07-15T19:47:22.775Z',")
+            .await
+            .is_empty());
+        assert!(store
+            .push_line(service, "[api]   ms: '+0ms'")
+            .await
+            .is_empty());
+        let entries = store.push_line(service, "[api] }").await;
         assert_eq!(entries.len(), 1);
-        assert_eq!(entries[0].data["_raw"], json!("[other] {"));
+        assert_eq!(entries[0].data["level"], json!("info"));
+        assert_eq!(
+            entries[0].data["message"],
+            json!("Application is running on: http://localhost:3000/api")
+        );
+        assert_eq!(entries[0].data["ms"], json!("+0ms"));
+        assert_eq!(entries[0].data["context"]["context"], json!("bootstrap"));
+    }
+
+    #[tokio::test]
+    async fn foreign_process_prefix_starts_pretty_block() {
+        let store = Store::new(1_000_000);
+        assert!(store.push_line("api", "[other] {").await.is_empty());
+        assert!(store
+            .push_line("api", "[other]   level: 'warn',")
+            .await
+            .is_empty());
+        let entries = store.push_line("api", "[other] }").await;
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].data["level"], json!("warn"));
     }
 
     #[tokio::test]

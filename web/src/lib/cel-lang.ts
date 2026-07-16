@@ -199,10 +199,76 @@ function celCompletionSource(paths: string[]) {
 export type CelEditorOptions = {
   placeholder?: string
   paths?: string[]
+  /** Larger type and padding for the modal editor. */
+  multiline?: boolean
+}
+
+function celEditorTheme(multiline: boolean) {
+  const fontSize = multiline ? "13px" : "12px"
+  return EditorView.theme({
+    "&": {
+      fontSize,
+      fontFamily: "var(--font-mono)",
+      backgroundColor: "transparent",
+      color: "var(--color-foreground)",
+      height: multiline ? "100%" : "auto",
+    },
+    ".cm-content": {
+      fontFamily: "var(--font-mono)",
+      padding: multiline ? "10px 0" : "2px 0",
+      caretColor: "var(--color-foreground)",
+      backgroundColor: "transparent",
+      minHeight: multiline ? "100%" : null,
+    },
+    ".cm-scroller": {
+      fontFamily: "var(--font-mono)",
+      lineHeight: multiline ? "1.55" : "1.4",
+      overflowX: "auto",
+      overflowY: multiline ? "auto" : "hidden",
+    },
+    "&.cm-focused": {
+      outline: "none",
+    },
+    ".cm-gutters": {
+      display: "none",
+    },
+    ".cm-activeLine": {
+      backgroundColor: multiline
+        ? "color-mix(in oklch, var(--color-muted) 55%, transparent)"
+        : "transparent",
+    },
+    ".cm-selectionBackground, &.cm-focused .cm-selectionBackground": {
+      backgroundColor:
+        "color-mix(in oklch, var(--color-foreground) 22%, transparent) !important",
+    },
+    ".cm-cursor, .cm-dropCursor": {
+      borderLeftColor: "var(--color-foreground)",
+    },
+    ".cm-tooltip": {
+      backgroundColor: "var(--color-popover)",
+      color: "var(--color-popover-foreground)",
+      border: "1px solid var(--color-border)",
+      borderRadius: "8px",
+      fontFamily: "var(--font-mono)",
+      fontSize,
+    },
+    ".cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected]": {
+      backgroundColor: "var(--color-accent)",
+      color: "var(--color-accent-foreground)",
+    },
+    ".cm-completionIcon": {
+      opacity: 0.5,
+    },
+    ".cm-placeholder": {
+      color: "var(--color-muted-foreground)",
+      fontStyle: "normal",
+    },
+  })
 }
 
 export function createCelExtensions(opts: CelEditorOptions = {}): Extension[] {
   const paths = opts.paths ?? []
+  const multiline = opts.multiline ?? false
   return [
     celLanguage,
     syntaxHighlighting(celHighlight),
@@ -214,59 +280,10 @@ export function createCelExtensions(opts: CelEditorOptions = {}): Extension[] {
     }),
     EditorState.allowMultipleSelections.of(false),
     EditorView.lineWrapping,
-    cmPlaceholder(opts.placeholder ?? 'CEL filter, e.g. level == "error" && msg.contains("timeout")'),
-    EditorView.theme({
-      "&": {
-        fontSize: "12px",
-        fontFamily: "var(--font-mono)",
-        backgroundColor: "transparent",
-        color: "var(--color-foreground)",
-      },
-      ".cm-content": {
-        fontFamily: "var(--font-mono)",
-        padding: "2px 0",
-        caretColor: "var(--color-foreground)",
-        backgroundColor: "transparent",
-      },
-      ".cm-scroller": {
-        fontFamily: "var(--font-mono)",
-        lineHeight: "1.4",
-        overflowX: "auto",
-      },
-      "&.cm-focused": {
-        outline: "none",
-      },
-      ".cm-gutters": {
-        display: "none",
-      },
-      ".cm-activeLine": {
-        backgroundColor: "transparent",
-      },
-      ".cm-selectionBackground, &.cm-focused .cm-selectionBackground": {
-        backgroundColor: "color-mix(in oklch, var(--color-foreground) 22%, transparent) !important",
-      },
-      ".cm-cursor, .cm-dropCursor": {
-        borderLeftColor: "var(--color-foreground)",
-      },
-      ".cm-tooltip": {
-        backgroundColor: "var(--color-popover)",
-        color: "var(--color-popover-foreground)",
-        border: "1px solid var(--color-border)",
-        borderRadius: "8px",
-        fontFamily: "var(--font-mono)",
-        fontSize: "12px",
-      },
-      ".cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected]": {
-        backgroundColor: "var(--color-accent)",
-        color: "var(--color-accent-foreground)",
-      },
-      ".cm-completionIcon": {
-        opacity: 0.5,
-      },
-      ".cm-placeholder": {
-        color: "var(--color-muted-foreground)",
-        fontStyle: "normal",
-      },
-    }),
+    cmPlaceholder(
+      opts.placeholder ??
+        'CEL filter, e.g. level == "error" && msg.contains("timeout")'
+    ),
+    celEditorTheme(multiline),
   ]
 }

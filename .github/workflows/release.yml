@@ -54,7 +54,7 @@ jobs:
           set -euo pipefail
           BIN="target/${{ matrix.target }}/release/mizpah"
           ARCHIVE="mizpah-${{ matrix.target }}.tar.gz"
-          tar -czf "$ARCHIVE" -C "$(dirname "$BIN")" mizpah
+          tar -czf "$ARCHIVE" -C "$(dirname "$BIN")" mizpah mzp
           echo "ARCHIVE=$ARCHIVE" >> "$GITHUB_ENV"
 
       - name: Upload artifact

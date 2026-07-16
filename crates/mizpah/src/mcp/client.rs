@@ -10,9 +10,7 @@ pub const MAX_LIMIT: usize = 50;
 
 #[derive(Debug, Error)]
 pub enum HubError {
-    #[error(
-        "Mizpah hub is not reachable at {url}. Start a hub first, e.g. `my-app | mizpah --service api`"
-    )]
+    #[error("Mizpah hub is not reachable at {url}. Start a hub first, e.g. `my-app | mizpah`")]
     Unreachable { url: String, source: reqwest::Error },
     #[error("hub request failed: {0}")]
     Request(#[from] reqwest::Error),
@@ -187,6 +185,7 @@ mod tests {
         let store = Arc::new(Store::new(1024 * 1024));
         let state = AppState {
             store: Arc::clone(&store),
+            project_dir: std::env::temp_dir(),
         };
         let app = api::router(state);
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();

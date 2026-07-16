@@ -82,3 +82,20 @@ export function levelOf(data: Record<string, unknown>): string | null {
   }
   return null
 }
+
+export type InvestigateTarget = "claude" | "cursor"
+
+export async function startInvestigate(
+  target: InvestigateTarget,
+  id: number
+): Promise<void> {
+  const res = await fetch("/api/investigate", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ target, id }),
+  })
+  if (!res.ok) {
+    const body = await res.text().catch(() => "")
+    throw new Error(body || `investigate: ${res.status}`)
+  }
+}

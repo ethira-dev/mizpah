@@ -24,11 +24,22 @@ build: ui
 release: ui
     cargo build --release
 
-# Install `mizpah` onto PATH (~/.cargo/bin) and register MCP with AI clients
+# Install `mizpah` and `mzp` onto PATH (~/.cargo/bin) and register MCP with AI clients
 install: ui
     cargo install --path crates/mizpah --force
     # Prefer the cargo-installed binary so Homebrew's older `mizpah` does not shadow `mcp`
     "{{env_var_or_default('CARGO_HOME', home_directory() / '.cargo')}}/bin/mizpah" mcp install
+
+# Same as install, then restart the hub only if it is already running
+reinstall: install
+    #!/usr/bin/env bash
+    set -euo pipefail
+    bin="{{env_var_or_default('CARGO_HOME', home_directory() / '.cargo')}}/bin/mzp"
+    if curl -sf --max-time 1 "http://127.0.0.1:1738/api/stats" >/dev/null; then
+        "$bin" hub restart
+    else
+        echo "mizpah hub not running; skip restart"
+    fi
 
 # Run hub (example): just run api
 run service='demo' *args='':
