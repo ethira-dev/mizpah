@@ -1,6 +1,6 @@
 ---
 title: Install
-description: Homebrew, build from source, or grab a prebuilt binary from GitHub Releases.
+description: Homebrew, Cargo from source, or prebuilt release archives.
 order: 2
 ---
 
@@ -11,47 +11,56 @@ brew install ethira-dev/mizpah/mizpah
 mzp --help
 ```
 
+After install, start a hub once (or run `mzp mcp install`) so Cursor / Claude Desktop / Claude Code / Codex pick up the MCP server. Restart those clients afterward.
+
 ## From source
 
 Requirements: [Rust](https://rustup.rs/) (stable) and Node.js 20+.
 
 ```bash
-# Puts `mzp` and `mizpah` on PATH (~/.cargo/bin)
 just install
+# Builds web/ → crates/mizpah/static, cargo install --path crates/mizpah --force,
+# then mzp mcp install when clients are present.
+```
 
-# Without just:
+Without just:
+
+```bash
 cd web && npm ci && npm run build
 cargo install --path crates/mizpah --force
 mzp mcp install
 ```
 
-`just install` (and the first hub start) register mizpah as an MCP server in Cursor, Claude Desktop, Claude Code, and Codex when those apps are present. Restart the client after install so tools appear.
+Smoke test:
 
 ```bash
-echo '{"msg":"hi"}' | mzp
+echo '{"msg":"hi","level":"info"}' | mzp --no-open
+curl -sS "http://127.0.0.1:1738/api/stats"
 ```
 
-If you get `command not found`, put Cargo’s bin dir on `PATH`:
+### PATH notes
+
+Cargo installs to `~/.cargo/bin`. If `mzp` is not found:
 
 ```bash
 export PATH="$HOME/.cargo/bin:$PATH"
 ```
 
-If you also have a Homebrew install, ensure `~/.cargo/bin` is before `/opt/homebrew/bin`, or run `~/.cargo/bin/mzp mcp install`. An older brew binary will not understand `mcp` until the tap is updated.
+If Homebrew and Cargo both provide `mzp`, put `~/.cargo/bin` first, or invoke `~/.cargo/bin/mzp` explicitly. Older brew builds may not include `mcp` until the tap is updated.
 
-## Prebuilt binaries (GitHub Releases)
+## Prebuilt binaries
 
-Download the archive for your platform from [Releases](https://github.com/ethira-dev/mizpah/releases):
-
-```bash
-# Apple Silicon example
-curl -L https://github.com/ethira-dev/mizpah/releases/latest/download/mizpah-aarch64-apple-darwin.tar.gz \
-  | tar -xz
-mv mizpah mzp ~/.local/bin/   # or: sudo mv mizpah mzp /usr/local/bin/
-```
+Archives from [Releases](https://github.com/ethira-dev/mizpah/releases) contain `mizpah` and `mzp` (same binary, two names):
 
 | Platform | Archive |
 |----------|---------|
 | macOS Apple Silicon | `mizpah-aarch64-apple-darwin.tar.gz` |
 | macOS Intel | `mizpah-x86_64-apple-darwin.tar.gz` |
 | Linux x86_64 | `mizpah-x86_64-unknown-linux-gnu.tar.gz` |
+
+```bash
+curl -L https://github.com/ethira-dev/mizpah/releases/latest/download/mizpah-aarch64-apple-darwin.tar.gz \
+  | tar -xz
+mv mizpah mzp ~/.local/bin/
+mzp mcp install
+```

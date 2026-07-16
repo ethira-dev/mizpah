@@ -1,100 +1,107 @@
 ---
 title: Attach sources
-description: Capture shell, browser DevTools, Cursor, and Claude into the same hub.
+description: Shell tee, Chromium CDP, and observe-only Cursor / Claude hooks into one hub.
 order: 4
 ---
 
-`mzp attach` takes a target. Bare `mzp attach` is **shell** (backward compatible).
+`mzp attach <target>` feeds sources into the same ring buffer as stdin pipes. Capture once; browse in the UI and let agents search without re-running the underlying work.
 
-| Target | What it does |
-|--------|----------------|
-| `shell` (default) | Tee stdout/stderr from **new** interactive zsh/bash shells |
-| `browser` | Chrome/Edge DevTools: console + network (foreground CDP session) |
-| `cursor` | Install observe-only Cursor agent hooks → hub |
-| `claude` | Install observe-only Claude Code hooks → hub |
+Bare `mzp attach` is **shell** (backward compatible).
+
+| Target | Mechanism | Default service |
+|--------|-----------|-----------------|
+| `shell` | Shell rc hooks tee stdout/stderr from **new** interactive zsh/bash | absolute cwd / `--service` |
+| `browser` | Foreground CDP session (console, exceptions, network) | page `location.host` |
+| `cursor` | Merge observe-only hooks into `~/.cursor/hooks.json` | `cursor` |
+| `claude` | Merge observe-only hooks into `~/.claude/settings.json` | `claude` / `--service` |
 
 ```bash
-mzp attach                         # shell
+mzp attach
 mzp attach shell --service my-project
 mzp attach browser --launch
-mzp attach cursor                  # service default: cursor
+mzp attach cursor
 mzp attach claude --service agents
-mzp detach                         # shell
-mzp detach cursor                  # or: claude | all
-mzp hub stop                       # also: start / restart
+mzp detach                 # shell
+mzp detach cursor          # or: claude | all
+mzp hub start|stop|restart
 ```
 
 ## Shell
 
-Installs shell hooks, starts a background hub if needed, and tees stdout/stderr from **new** interactive shells. Every line gets the command’s absolute cwd (updates after `cd` via `_mzp.cwd`), a `cmd` property with the full command string, and `_mzp` for the shell-forward receiver.
+Installs markers in `${ZDOTDIR:-$HOME}/.zshrc`, `~/.bashrc`, and a bash login file (`# >>> mizpah >>>` … `# <<< mizpah <<<`). Starts a background hub if needed. New interactive shells tee stdout/stderr to `/api/ingest/batch`.
+
+Enriched fields:
+
+- `cmd`: full command string from shell hooks (not child argv)
+- `_mzp.cwd`: updates after `cd`
+- `_mzp.user` / `pid` / `exe`: receiver process
 
 <details>
-<summary>Know before you attach shell</summary>
+<summary>Constraints</summary>
 
-- Captures stdout/stderr that inherit the shell redirect (not typed input, and not TUI apps that write only to `/dev/tty`)
-- `cmd` / per-command cwd come from shell hooks, not child process argv
-- Programs see pipes instead of a TTY, so colors, buffering, and interactivity may change
-- Capture is best-effort if the hub is down; your terminal stays responsive
-- Shells already open when you first attach need a new window/tab
-
-Hooks live in `${ZDOTDIR:-$HOME}/.zshrc`, `~/.bashrc`, and a bash login file. Remove the `# >>> mizpah >>>` … `# <<< mizpah <<<` blocks anytime, or leave them; `detach` makes `__shell-init` a no-op.
+- Captures inherited stdout/stderr only (not `/dev/tty` TUIs, not typed input)
+- Children see pipes instead of a TTY (colors, buffering, interactivity may change)
+- If the hub is down, capture is best-effort; the shell stays responsive
+- Shells already open at first attach need a new tab/window
+- `mzp detach` leaves hooks installed but makes `__shell-init` a no-op; delete the marker blocks to remove entirely
 
 </details>
 
 ## Browser
 
-`mzp attach browser` (alias: `mzp browser attach`) connects to Chromium via CDP and forwards `console.*`, uncaught exceptions, and network calls (with request/response bodies for Document/XHR/Fetch) into the hub as JSON.
+`mzp attach browser` (alias `mzp browser attach`) connects to Chromium DevTools Protocol and forwards:
 
-Each event’s hub **service** is the page’s `location.host` (e.g. `localhost:5173`). Optional `--service` overrides that for the whole session. There is no `detach browser`; stop with Ctrl-C.
+- `console.*` and uncaught exceptions (`kind: "console"`)
+- Network (Document / XHR / Fetch / WebSocket by default; bodies for Document/XHR/Fetch, truncated at 256 KiB)
 
 ```bash
-mzp attach browser --launch
-# Or: mzp browser attach --cdp-port 9222
+mzp attach browser --launch          # separate Mizpah Chrome profile
+mzp browser attach --cdp-port 9222   # existing debug port
 ```
 
-```
+Example CEL:
+
+```cel
 source == "browser" && kind == "console" && level == "error"
 kind == "network" && status >= 400
 service == "localhost:5173"
 ```
 
 <details>
-<summary>Know before you attach browser</summary>
+<summary>Constraints</summary>
 
-- Requires Chrome/Edge with a DevTools debugging port, or `--launch` (opens a **separate** mizpah profile, not your default cookies/extensions)
-- You cannot inject debugging into an already-running normal Chrome; use `--launch` or restart Chrome with `--remote-debugging-port`
-- Default network ingest: Document, XHR, Fetch, WebSocket. Bodies for Document/XHR/Fetch (truncated at 256 KiB). Use `--all-network` for static asset metadata
-- Bodies and headers may contain secrets. The hub is local only, but still treat the stream as sensitive
-- Foreground process; Ctrl-C stops forwarding (launched browser stays open)
+- Needs a debugging port, or `--launch` (not your default profile cookies/extensions)
+- Cannot inject into an already-running normal Chrome without restarting with `--remote-debugging-port`
+- `--all-network` includes static asset metadata
+- Bodies/headers may contain secrets; hub is local but treat the stream as sensitive
+- Foreground; Ctrl-C stops forwarding (launched browser stays open). No `detach browser`.
 
 </details>
 
-## Cursor / Claude agent hooks
+## Cursor / Claude hooks
 
-`mzp attach cursor` and `mzp attach claude` merge **observe-only** lifecycle hooks into user-global config (`~/.cursor/hooks.json`, `~/.claude/settings.json`). Each event is forwarded as JSON with `source`, `kind`, `level`, and `msg` (plus the original hook fields). String values larger than 64 KiB are truncated.
+Observe-only lifecycle hooks. Always exit 0 with empty stdout (never block or mutate the agent). Events are JSON with `source`, `kind`, `level`, `msg`, plus original hook fields. Strings larger than 64 KiB are truncated.
 
 ```bash
 mzp attach cursor
 mzp attach claude
-mzp open
-# …use Cursor Agent or Claude Code…
+# use the agent…
 mzp detach cursor
 mzp detach claude
 ```
 
-```
+```cel
 source == "cursor" && kind == "afterShellExecution"
 source == "claude" && kind == "PreToolUse"
 source == "claude" && level == "error"
 ```
 
 <details>
-<summary>Know before you attach cursor / claude</summary>
+<summary>Constraints</summary>
 
-- Hooks never block or modify agent actions (always exit 0, empty stdout)
-- Prompts, file contents, shell output, and thoughts may be ingested; treat the hub as sensitive
+- Prompts, file contents, shell output, and thoughts may be ingested
 - Cursor cloud agents ignore `~/.cursor/hooks.json` (project `.cursor/hooks.json` only)
-- Re-run attach after moving the `mzp` binary so absolute hook command paths stay valid
-- Skipped on purpose: Cursor Tab hooks; Claude `MessageDisplay`, `WorktreeCreate`, `FileChanged`
+- Re-run attach after moving the `mzp` binary so absolute hook paths stay valid
+- Intentionally skipped: Cursor Tab hooks; Claude `MessageDisplay`, `WorktreeCreate`, `FileChanged`
 
 </details>

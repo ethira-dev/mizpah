@@ -1,37 +1,43 @@
 ---
 title: Quick start
-description: Pipe a service or attach a source and open the live UI in under a second.
+description: Bind a hub, stream NDJSON, filter in the UI, and optionally wire MCP.
 order: 1
 ---
 
-**Pipe a service:**
+mizpah is a local in-memory JSON log hub. The first process that can bind `127.0.0.1:1738` becomes the hub (Axum API, WebSocket fan-out, SPA, ring buffer). Later processes attach by POSTing to `/api/ingest`.
+
+**UX:** virtualized live stream, CEL search with field autocomplete, click-through JSON detail.
+
+**Cost:** agents should query that buffer over MCP (`search_logs`, default limit 20) instead of pasting stdout or re-running tests and lint for every question.
+
+## Pipe a service
 
 ```bash
 api-server 2>&1 | mzp --service api
-# UI opens at http://127.0.0.1:1738. More streams join the same hub automatically.
-worker | mzp --service worker
+# opens http://127.0.0.1:1738
+worker | mzp --service worker   # joins the same hub
 ```
 
-**Or attach a source:**
+`--service` tags the stream (default: absolute cwd). Prefer NDJSON. Non-JSON lines become `{ "_raw": "…" }`; pretty Nest / `util.inspect` blocks are reassembled when possible.
+
+## Or attach a source
 
 ```bash
-mzp attach              # shell (default): enable + ensure hub
+mzp attach                 # shell: tee new interactive zsh/bash shells
 mzp attach browser --launch
-mzp attach cursor       # Cursor agent hooks → hub
-mzp attach claude       # Claude Code hooks → hub
+mzp attach cursor          # observe-only Cursor hooks → hub
+mzp attach claude          # observe-only Claude Code hooks → hub
 mzp open
-mzp detach              # shell only
-mzp detach cursor       # or: claude | all
+mzp mcp install            # register MCP in Cursor / Claude / Codex
 ```
 
-(`mizpah` is the same binary if you prefer the long name.)
+`mizpah` is an alias for `mzp`.
 
-## What you get
+## Next
 
-- **Live JSON UI, zero SaaS.** Local hub on `:1738`, multi-service, virtualized, pause/resume. No account. No Docker compose novel.
-- **Attach anything.** `mzp attach shell|browser|cursor|claude` pipes terminal output, Chromium DevTools, or agent lifecycle hooks into the same hub.
-- **Filter like you mean it.** [CEL](https://cel.dev/) in the search bar, with autocomplete for every property you've actually logged.
-- **Agents that can see.** MCP tools so Cursor / Claude / Codex search the live buffer instead of eating a 10k-line dump.
-- **One-click investigate.** Open a log → **Check with Claude** or **Check with Cursor** and drop into a local agent session already seeded with that entry.
-
-Next: [Install](../install/) · [Attach sources](../attach/) · [CEL filters](../cel/)
+- [Install](../install/)
+- [Streaming & hub protocol](../streaming/)
+- [Attach sources](../attach/)
+- [CEL](../cel/)
+- [MCP tools](../mcp/)
+- [CLI reference](../cli/)

@@ -4,17 +4,26 @@ description: Flags and subcommands for mzp / mizpah.
 order: 7
 ---
 
-| Flag / command | Description |
-|----------------|-------------|
+`mizpah` and `mzp` are the same binary.
+
+## Global / stream flags
+
+| Flag | Description |
+|------|-------------|
 | `--service` / `-s` | Service name for this stdin stream (default: absolute cwd) |
 | `--host` | Bind/connect host (default `127.0.0.1`) |
 | `--port` / `-p` | Bind/connect port (default `1738`) |
 | `--max-bytes` | Ring buffer cap in bytes (default `1073741824`, hub only) |
 | `--no-open` | Do not open a browser when starting as hub |
 | `--project` / `MIZPAH_PROJECT` | Project directory for Check with Claude/Cursor (default: hub cwd) |
+
+## Subcommands
+
+| Command | Description |
+|---------|-------------|
 | `mzp attach` / `attach shell` | Enable shell stdout/stderr capture for new interactive shells |
 | `mzp attach browser` | CDP console + network (alias: `mzp browser attach`) |
-| `mzp attach cursor` / `attach claude` | Install observe-only agent hooks into the hub |
+| `mzp attach cursor` / `attach claude` | Install observe-only agent hooks |
 | `mzp detach` / `detach shell` / `cursor` / `claude` / `all` | Disable shell and/or remove agent hooks (hub left running) |
 | `mzp hub start` | Start a detached hub if one is not already healthy |
 | `mzp hub stop` | Stop the hub for this port (via PID file) |
@@ -24,4 +33,4 @@ order: 7
 | `mzp mcp install` | Merge MCP config into Cursor / Claude / Codex |
 | `mzp mcp uninstall` | Remove those MCP entries |
 
-`mizpah` is an alias for the same binary as `mzp`.
+See [attach](../attach/), [streaming](../streaming/), and [MCP](../mcp/) for behavior details.

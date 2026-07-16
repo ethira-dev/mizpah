@@ -1,29 +1,54 @@
 ---
 title: MCP & agents
-description: Point Cursor, Claude, or Codex at the hub, and investigate from any log row.
+description: Stdio MCP tools, install targets, limits, and UI investigate hooks.
 order: 6
 ---
 
-## Let agents query the hub
+mizpah exposes the live hub as a stdio MCP server (`mzp mcp`). Agents get structured tools against `/api/*` instead of pasted transcripts. That is both a clearer workflow (ask for errors, get rows) and a cheaper one (default 20 hits, max 50).
 
-Keep a hub running. Point Cursor, Claude Desktop, Claude Code, or Codex at mizpah MCP. Agents use `search_logs`, `list_services`, `get_stats`, `list_properties`, and `get_logs_around` for small CEL slices, not a paste of the whole buffer.
+## Install
 
 ```bash
-my-app 2>&1 | mzp --service api
-mzp mcp install     # or: first hub start auto-registers
-# restart your IDE/client, then ask: "what errors did api emit in the last few minutes?"
-mzp mcp uninstall   # opt out
+# hub must be reachable (pipe a process or mzp hub start)
+mzp mcp install     # merges config into Cursor, Claude Desktop, Claude Code, Codex when present
+# restart clients
+mzp mcp uninstall   # remove those entries
 ```
 
-Homebrew / release installs: run `mzp mcp install` once after install (or start a hub once).
+First hub start also attempts registration. Homebrew / release installs: run `mzp mcp install` once after install if tools do not appear.
+
+Override hub URL with `MIZPAH_URL` (default `http://127.0.0.1:1738`).
+
+## Tools
+
+| Tool | Parameters | Notes |
+|------|------------|--------|
+| `list_services` | (none) | Service names in the buffer |
+| `get_stats` | (none) | Entry count, approx bytes, max bytes, per-service counts |
+| `list_properties` | `service?`, `q?` | Discovered paths + sample values (for writing CEL) |
+| `search_logs` | `q?` (CEL), `service?`, `limit?`, `cursor?` | Newest-first; **default limit 20, max 50**; `hasMore` for pagination |
+| `get_logs_around` | `id`, `before?` (default 5), `after?` (default 5), `service?`, `q?` | Window around an entry for stack/context |
+
+Server instructions tell the model to keep limits small and never dump the full buffer. If the hub is down, start a stream: `my-app 2>&1 | mzp --service <name>`.
+
+### Example agent flow
+
+```text
+1. list_properties (optional) → learn fields
+2. search_logs q='level == "error"' service='api' limit=10
+3. get_logs_around id=<id> before=5 after=5
+```
 
 ## Investigate from the UI
 
-Open a log → **Check with Claude** or **Check with Cursor**. mizpah launches a local `claude` or `agent` session seeded with that entry and instructions to pull surrounding context via MCP.
+Log detail → **Check with Claude** or **Check with Cursor** calls `POST /api/investigate`, which launches a local `claude` or `agent` CLI session seeded with that entry and instructions to use MCP for surrounding context.
 
-Requires the Claude Code (`claude`) or Cursor Agent (`agent`) CLI on `PATH`. If the hub was started elsewhere (or via `mzp attach`), set `--project` / `MIZPAH_PROJECT` so the agent lands in the right repo.
+Requirements:
+
+- `claude` or `agent` on `PATH`
+- `--project` / `MIZPAH_PROJECT` set if the hub was started outside the repo you care about
 
 ## Related
 
-- [Attach Cursor / Claude hooks](../attach/) to ingest agent lifecycle events into the same buffer
-- [CEL filters](../cel/) for the queries agents (and you) should prefer
+- [CEL](../cel/) for filter syntax
+- [Attach](../attach/) to also ingest Cursor / Claude lifecycle events into the buffer
