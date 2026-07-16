@@ -274,24 +274,57 @@ fn homebrew_prefix_from_env_only() -> Option<PathBuf> {
 /// Stable path for re-exec after brew/self-update.
 pub fn stable_exe_path() -> io::Result<PathBuf> {
     let raw = std::env::current_exe()?;
-    let name = running_bin_name(&raw);
+    let prefix = homebrew_prefix();
+    let prefer_homebrew = detect_channel() == UpdateChannel::Homebrew
+        || path_looks_like_homebrew_cellar(&raw);
+    Ok(resolve_stable_exe_path(
+        &raw,
+        prefer_homebrew,
+        prefix.as_deref(),
+        |p| p.exists(),
+    ))
+}
 
-    if let Some(parent) = raw.parent() {
-        if parent.file_name().is_some_and(|n| n == "bin") {
-            return Ok(raw);
-        }
-    }
+/// Pick a re-exec path that survives Homebrew Cellar version swaps.
+///
+/// Cellar paths end in `…/bin/<name>` but are deleted on upgrade; prefer
+/// `$prefix/bin/<name>` when available.
+fn resolve_stable_exe_path(
+    raw: &Path,
+    prefer_homebrew: bool,
+    prefix: Option<&Path>,
+    exists: impl Fn(&Path) -> bool,
+) -> PathBuf {
+    let name = running_bin_name(raw);
 
-    if detect_channel() == UpdateChannel::Homebrew {
-        if let Some(prefix) = homebrew_prefix() {
+    if prefer_homebrew {
+        if let Some(prefix) = prefix {
             let candidate = prefix.join("bin").join(&name);
-            if candidate.exists() {
-                return Ok(candidate);
+            if exists(&candidate) {
+                return candidate;
             }
         }
     }
 
-    Ok(raw)
+    // Prefer current_exe only when it is already the prefix bin symlink, not Cellar.
+    if let Some(prefix) = prefix {
+        let prefix_bin = prefix.join("bin");
+        if raw.parent() == Some(prefix_bin.as_path()) && exists(raw) {
+            return raw.to_path_buf();
+        }
+    } else if !path_looks_like_homebrew_cellar(raw) {
+        if let Some(parent) = raw.parent() {
+            if parent.file_name().is_some_and(|n| n == "bin") && exists(raw) {
+                return raw.to_path_buf();
+            }
+        }
+    }
+
+    raw.to_path_buf()
+}
+
+fn path_looks_like_homebrew_cellar(path: &Path) -> bool {
+    path.to_string_lossy().contains("/Cellar/mizpah/")
 }
 
 pub fn running_bin_name(exe: &Path) -> String {
@@ -538,7 +571,12 @@ async fn apply_homebrew(latest: &Version, tx: &ProgressTx) -> Result<(), String>
     })
     .await
     .map_err(|e| e.to_string())?
-    .map_err(|e| format!("failed to run --version: {e}"))?;
+    .map_err(|e| {
+        format!(
+            "failed to run --version on {}: {e}",
+            stable.display()
+        )
+    })?;
 
     let stdout = String::from_utf8_lossy(&ver_out.stdout);
     let installed = parse_cli_version(&stdout)
@@ -928,6 +966,41 @@ mod tests {
             Some(Path::new("/usr/local/bin/mizpah")),
             None
         ));
+    }
+
+    #[test]
+    fn stable_exe_prefers_prefix_bin_over_cellar() {
+        let prefix = Path::new("/opt/homebrew");
+        let cellar = Path::new("/opt/homebrew/Cellar/mizpah/0.7.0/bin/mizpah");
+        let prefix_bin = Path::new("/opt/homebrew/bin/mizpah");
+        let exists = |p: &Path| p == prefix_bin;
+
+        let resolved = resolve_stable_exe_path(cellar, true, Some(prefix), exists);
+        assert_eq!(resolved, prefix_bin);
+
+        // Even without prefer_homebrew flag, Cellar path alone should still
+        // resolve via prefix when the path looks like Cellar… handled by caller.
+        // Here prefer_homebrew=true is the apply_homebrew case.
+        let gone = |_: &Path| false;
+        let fallback = resolve_stable_exe_path(cellar, true, Some(prefix), gone);
+        assert_eq!(fallback, cellar);
+    }
+
+    #[test]
+    fn stable_exe_keeps_prefix_bin_when_already_there() {
+        let prefix = Path::new("/opt/homebrew");
+        let prefix_bin = Path::new("/opt/homebrew/bin/mzp");
+        let exists = |p: &Path| p == prefix_bin;
+        let resolved = resolve_stable_exe_path(prefix_bin, true, Some(prefix), exists);
+        assert_eq!(resolved, prefix_bin);
+    }
+
+    #[test]
+    fn stable_exe_non_homebrew_bin_unchanged() {
+        let cargo = Path::new("/Users/me/.cargo/bin/mizpah");
+        let exists = |p: &Path| p == cargo;
+        let resolved = resolve_stable_exe_path(cargo, false, None, exists);
+        assert_eq!(resolved, cargo);
     }
 
     #[test]

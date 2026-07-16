@@ -9,6 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { WaveText } from "@/components/ui/wave-text"
 import {
   fetchUpdateStatus,
   streamUpdate,
@@ -25,7 +26,7 @@ type UpdateDialogProps = {
   expectedLatest: string
 }
 
-type Phase = "running" | "waiting" | "error" | "done"
+type Phase = "confirm" | "running" | "waiting" | "error" | "done"
 
 export function UpdateDialog({
   open,
@@ -35,7 +36,9 @@ export function UpdateDialog({
   const [step, setStep] = useState("Starting update…")
   const [progress, setProgress] = useState(0)
   const [error, setError] = useState<string | null>(null)
-  const [phase, setPhase] = useState<Phase>("running")
+  const [phase, setPhase] = useState<Phase>("confirm")
+  /** Incremented on confirm so the stream effect runs once without re-aborting on waiting. */
+  const [runToken, setRunToken] = useState(0)
   const expectedRef = useRef(expectedLatest)
 
   useEffect(() => {
@@ -43,7 +46,17 @@ export function UpdateDialog({
   }, [expectedLatest])
 
   useEffect(() => {
-    if (!open) return
+    if (!open) {
+      setStep("Starting update…")
+      setProgress(0)
+      setError(null)
+      setPhase("confirm")
+      setRunToken(0)
+    }
+  }, [open])
+
+  useEffect(() => {
+    if (!open || runToken === 0) return
 
     const ac = new AbortController()
     let waiting = false
@@ -115,66 +128,119 @@ export function UpdateDialog({
     return () => {
       ac.abort()
     }
-  }, [open])
+  }, [open, runToken])
 
   const inProgress = phase === "running" || phase === "waiting"
+  const canDismiss = phase === "confirm" || phase === "error"
   const progressPct = Math.round(progress * 100)
+
+  function confirmUpdate() {
+    setError(null)
+    setProgress(0)
+    setStep("Starting update…")
+    setPhase("running")
+    setRunToken((n) => n + 1)
+  }
 
   return (
     <Dialog
       open={open}
       onOpenChange={(next) => {
-        if (inProgress) return
+        if (!canDismiss) return
         onOpenChange(next)
       }}
     >
       <DialogContent
-        showCloseButton={!inProgress}
+        showCloseButton={canDismiss}
         className="sm:max-w-md"
         onPointerDownOutside={(e) => {
-          if (inProgress) e.preventDefault()
+          if (!canDismiss) e.preventDefault()
         }}
         onEscapeKeyDown={(e) => {
-          if (inProgress) e.preventDefault()
+          if (!canDismiss) e.preventDefault()
         }}
         onInteractOutside={(e) => {
-          if (inProgress) e.preventDefault()
+          if (!canDismiss) e.preventDefault()
         }}
       >
         <DialogHeader>
-          <DialogTitle>Updating Mizpah</DialogTitle>
+          <DialogTitle>
+            {phase === "confirm" ? "Update Mizpah?" : "Updating Mizpah"}
+          </DialogTitle>
           <DialogDescription>
-            Installing v{expectedLatest}. The log buffer will clear when the hub
-            restarts.
+            {phase === "confirm"
+              ? `Install v${expectedLatest}? The log buffer will clear when the hub restarts.`
+              : `Installing v${expectedLatest}. The log buffer will clear when the hub restarts.`}
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-3 px-1 py-2">
-          <p className="text-sm text-foreground">{step}</p>
-          <div
-            className="h-2 w-full overflow-hidden rounded-full bg-muted"
-            role="progressbar"
-            aria-label="Update progress"
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-valuenow={progressPct}
-          >
+        {phase !== "confirm" ? (
+          <div className="space-y-3 px-1 py-2">
+            {inProgress ? (
+              <p className="text-sm text-foreground">
+                <WaveText className="text-sm text-foreground">{step}</WaveText>
+              </p>
+            ) : (
+              <p className="text-sm text-foreground">{step}</p>
+            )}
             <div
-              className={cn(
-                "h-full rounded-full bg-primary transition-[width] duration-300",
-                phase === "error" && "bg-destructive"
-              )}
-              style={{ width: `${progressPct}%` }}
-            />
+              className="h-2 w-full overflow-hidden rounded-full bg-muted"
+              role="progressbar"
+              aria-label="Update progress"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={progressPct}
+            >
+              <div
+                className={cn(
+                  "relative h-full overflow-hidden rounded-full transition-[width] duration-300",
+                  phase === "error" ? "bg-destructive" : "bg-primary"
+                )}
+                style={{ width: `${progressPct}%` }}
+              >
+                {inProgress ? (
+                  <div
+                    aria-hidden="true"
+                    className="absolute inset-0 motion-safe:animate-[progress-shimmer_1.4s_linear_infinite]"
+                    style={{
+                      backgroundImage:
+                        "linear-gradient(90deg, transparent 0%, color-mix(in oklch, var(--primary-foreground) 35%, transparent) 50%, transparent 100%)",
+                      backgroundSize: "200% 100%",
+                    }}
+                  />
+                ) : null}
+              </div>
+            </div>
+            {error ? (
+              <p className="text-xs text-destructive whitespace-pre-wrap">
+                {error}
+              </p>
+            ) : null}
           </div>
-          {error ? (
-            <p className="text-xs text-destructive whitespace-pre-wrap">{error}</p>
-          ) : null}
-        </div>
+        ) : null}
+
+        {phase === "confirm" ? (
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+            >
+              Cancel
+            </Button>
+            <Button type="button" onClick={confirmUpdate}>
+              Update
+            </Button>
+          </DialogFooter>
+        ) : null}
 
         {phase === "error" ? (
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+            >
               Close
             </Button>
           </DialogFooter>
