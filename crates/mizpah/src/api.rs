@@ -2,19 +2,26 @@ use crate::filter::{compile_query, matches_entry, CompiledQuery};
 use crate::investigate::{self, InvestigateTarget};
 use crate::mzp_meta::MzpMeta;
 use crate::store::{ActivityBucket, LogEntry, PropertyInfo, Stats, Store, WsEvent};
+use crate::update::{self, ApplyBeginError, UpdateEvent, UpdateManager};
 use axum::extract::ws::{Message, WebSocket};
-use axum::extract::{Query, State, WebSocketUpgrade};
-use axum::http::{header, StatusCode, Uri};
+use axum::extract::{ConnectInfo, FromRequestParts, Query, State, WebSocketUpgrade};
+use axum::http::request::Parts;
+use axum::http::{header, HeaderValue, StatusCode, Uri};
+use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
+use futures_util::stream;
 use futures_util::{SinkExt, StreamExt};
 use rust_embed::Embed;
 use serde::{Deserialize, Serialize};
+use std::convert::Infallible;
+use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tokio::sync::watch;
+use std::time::Duration;
+use tokio::sync::{mpsc, watch};
 use tower_http::cors::CorsLayer;
 use tracing::warn;
 
@@ -22,6 +29,7 @@ use tracing::warn;
 pub struct AppState {
     pub store: Arc<Store>,
     pub project_dir: PathBuf,
+    pub update: Arc<UpdateManager>,
 }
 
 #[derive(Embed)]
@@ -41,6 +49,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/stats", get(stats))
         .route("/api/activity", get(activity))
         .route("/api/investigate", post(investigate))
+        .route("/api/update", get(get_update).post(post_update))
         .route("/ws", get(ws_handler))
         .fallback(static_handler)
         .layer(CorsLayer::permissive())
@@ -342,6 +351,93 @@ async fn investigate(
     Ok(Json(InvestigateResponse { ok: true }))
 }
 
+async fn get_update(State(state): State<AppState>) -> Json<update::UpdateStatus> {
+    Json(state.update.status().await)
+}
+
+/// Peer address for privileged routes. Missing connect info is treated as non-loopback.
+struct PeerAddr(SocketAddr);
+
+impl<S> FromRequestParts<S> for PeerAddr
+where
+    S: Send + Sync,
+{
+    type Rejection = Infallible;
+
+    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+        if let Some(ConnectInfo(addr)) = parts.extensions.get::<ConnectInfo<SocketAddr>>() {
+            return Ok(PeerAddr(*addr));
+        }
+        Ok(PeerAddr(SocketAddr::from(([203, 0, 113, 1], 0))))
+    }
+}
+
+async fn post_update(
+    PeerAddr(peer): PeerAddr,
+    State(state): State<AppState>,
+) -> Result<Response, (StatusCode, String)> {
+    if !peer.ip().is_loopback() {
+        return Err((
+            StatusCode::FORBIDDEN,
+            "updates are only allowed from localhost".into(),
+        ));
+    }
+
+    let latest = match state.update.try_begin_apply().await {
+        Ok(v) => v,
+        Err(ApplyBeginError::Busy) => {
+            return Err((
+                StatusCode::CONFLICT,
+                "an update is already in progress".into(),
+            ));
+        }
+        Err(ApplyBeginError::NoUpdate) => {
+            return Err((StatusCode::BAD_REQUEST, "no update available".into()));
+        }
+    };
+
+    let (tx, rx) = mpsc::unbounded_channel::<UpdateEvent>();
+    let _ = tx.send(UpdateEvent {
+        step: "Starting update…".into(),
+        progress: 0.0,
+        error: None,
+        restarting: None,
+    });
+
+    let manager = Arc::clone(&state.update);
+    tokio::spawn(async move {
+        update::apply_update(manager, latest, tx).await;
+    });
+
+    let stream = stream::unfold((rx, false), |(mut rx, done)| async move {
+        if done {
+            return None;
+        }
+        match rx.recv().await {
+            Some(ev) => {
+                let terminal = ev.error.is_some() || ev.restarting == Some(true);
+                let data = serde_json::to_string(&ev).unwrap_or_else(|_| "{}".into());
+                let item = Ok::<_, Infallible>(Event::default().data(data));
+                Some((item, (rx, terminal)))
+            }
+            None => None,
+        }
+    });
+
+    let mut res = Sse::new(stream)
+        .keep_alive(KeepAlive::new().interval(Duration::from_secs(15)))
+        .into_response();
+    res.headers_mut().insert(
+        header::CACHE_CONTROL,
+        HeaderValue::from_static("no-cache"),
+    );
+    res.headers_mut().insert(
+        "x-accel-buffering",
+        HeaderValue::from_static("no"),
+    );
+    Ok(res)
+}
+
 #[derive(Clone)]
 struct WsSubscription {
     /// `*` or empty means all services.
@@ -578,6 +674,12 @@ mod tests {
         AppState {
             store,
             project_dir: std::env::temp_dir(),
+            update: update::UpdateManager::new(update::RestartContext {
+                host: "127.0.0.1".into(),
+                port: 1738,
+                project_dir: std::env::temp_dir(),
+                max_bytes: 1_000_000,
+            }),
         }
     }
 
@@ -750,6 +852,64 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn get_update_returns_status() {
+        let app = test_app();
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/api/update")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let parsed: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(parsed["currentVersion"], env!("CARGO_PKG_VERSION"));
+        assert_eq!(parsed["updateAvailable"], false);
+        assert_eq!(parsed["busy"], false);
+        assert!(parsed["channel"].is_string());
+    }
+
+    #[tokio::test]
+    async fn post_update_rejects_non_loopback() {
+        let app = test_app();
+        // No ConnectInfo → PeerAddr defaults to non-loopback → 403
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/update")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn post_update_no_update_is_400() {
+        use axum::extract::ConnectInfo;
+        use std::net::SocketAddr;
+
+        let app = test_app();
+        let mut req = Request::builder()
+            .method("POST")
+            .uri("/api/update")
+            .body(Body::empty())
+            .unwrap();
+        req.extensions_mut()
+            .insert(ConnectInfo(SocketAddr::from(([127, 0, 0, 1], 9))));
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
     }
 
     #[tokio::test]

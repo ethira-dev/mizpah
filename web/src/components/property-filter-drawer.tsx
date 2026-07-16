@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/tooltip"
 import { fetchProperties } from "@/lib/api"
 import { buildCelEqualityFilter } from "@/lib/filter-from-property"
+import { levelBadgeClass } from "@/lib/log-format"
 import type { PropertyInfo } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
@@ -373,11 +374,10 @@ export function PropertyFilterDrawer({
                             key={value}
                             type="button"
                             className={cn(
-                              "max-w-full truncate rounded-md px-2 py-1",
-                              "border border-sidebar-border bg-sidebar-accent/50",
-                              "font-mono text-[11px] text-sidebar-foreground/80",
-                              "hover:border-sidebar-primary/40 hover:bg-sidebar-primary/10 hover:text-sidebar-foreground",
-                              "focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-none"
+                              "max-w-full truncate rounded-md px-2 py-1 text-[11px]",
+                              "hover:opacity-90",
+                              "focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-none",
+                              levelBadgeClass(value)
                             )}
                             title={value}
                             onClick={() =>

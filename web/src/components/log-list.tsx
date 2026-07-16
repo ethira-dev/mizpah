@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { LogDetailDialog } from "@/components/log-detail-dialog"
 import { Badge } from "@/components/ui/badge"
 import { levelOf, summarizeLog } from "@/lib/api"
-import { levelVariant } from "@/lib/log-format"
+import { levelBadgeClass } from "@/lib/log-format"
 import type { LogEntry } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
@@ -105,8 +105,11 @@ export function LogList({
                   </Badge>
                   {level ? (
                     <Badge
-                      variant={levelVariant(level)}
-                      className="shrink-0 rounded-md uppercase"
+                      variant="outline"
+                      className={cn(
+                        "shrink-0 rounded-md",
+                        levelBadgeClass(level)
+                      )}
                     >
                       {level}
                     </Badge>

@@ -151,3 +151,68 @@ export async function startInvestigate(
     throw new Error(body || `investigate: ${res.status}`)
   }
 }
+
+export type UpdateChannel = "homebrew" | "direct"
+
+export type UpdateStatus = {
+  currentVersion: string
+  latestVersion?: string
+  updateAvailable: boolean
+  channel: UpdateChannel
+  busy: boolean
+}
+
+export type UpdateEvent = {
+  step: string
+  progress: number
+  error?: string
+  restarting?: boolean
+}
+
+export async function fetchUpdateStatus(): Promise<UpdateStatus> {
+  const res = await fetch("/api/update")
+  if (!res.ok) throw new Error(`update status: ${res.status}`)
+  return res.json()
+}
+
+/** Stream POST /api/update SSE events via fetch (EventSource is GET-only). */
+export async function streamUpdate(
+  onEvent: (ev: UpdateEvent) => void,
+  signal?: AbortSignal
+): Promise<void> {
+  const res = await fetch("/api/update", { method: "POST", signal })
+  if (!res.ok) {
+    const body = await res.text().catch(() => "")
+    throw new Error(body || `update: ${res.status}`)
+  }
+  if (!res.body) {
+    throw new Error("update: empty response body")
+  }
+
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ""
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buffer += decoder.decode(value, { stream: true })
+
+    // SSE frames separated by blank line
+    let splitAt: number
+    while ((splitAt = buffer.indexOf("\n\n")) >= 0) {
+      const frame = buffer.slice(0, splitAt)
+      buffer = buffer.slice(splitAt + 2)
+      for (const line of frame.split("\n")) {
+        if (!line.startsWith("data:")) continue
+        const raw = line.slice(5).trim()
+        if (!raw) continue
+        try {
+          onEvent(JSON.parse(raw) as UpdateEvent)
+        } catch {
+          // ignore malformed chunks
+        }
+      }
+    }
+  }
+}

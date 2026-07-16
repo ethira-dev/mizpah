@@ -467,8 +467,22 @@ fn spawn_detached_hub(
     port: u16,
     project: Option<&Path>,
 ) -> io::Result<std::process::Child> {
+    spawn_detached_hub_with_options(exe, host, port, project, None)
+}
+
+/// Spawn a detached hub process. Optionally pass `--max-bytes` (used after self-update).
+pub fn spawn_detached_hub_with_options(
+    exe: &Path,
+    host: &str,
+    port: u16,
+    project: Option<&Path>,
+    max_bytes: Option<u64>,
+) -> io::Result<std::process::Child> {
     let mut cmd = Command::new(exe);
     cmd.args(["--host", host, "--port", &port.to_string(), "--no-open"]);
+    if let Some(max_bytes) = max_bytes {
+        cmd.arg("--max-bytes").arg(max_bytes.to_string());
+    }
     if let Some(project) = project {
         cmd.arg("--project").arg(project);
     }

@@ -30,27 +30,118 @@ export function joinJsonPath(parent: string, key: string | number): string {
   return parent ? `${parent}["${escaped}"]` : `["${escaped}"]`
 }
 
-export function levelVariant(
-  level: string | null
-): "default" | "secondary" | "destructive" | "outline" {
-  if (!level) return "outline"
-  if (level.includes("error") || level.includes("fatal") || level === "50") {
-    return "destructive"
-  }
-  if (level.includes("warn") || level === "40") return "secondary"
-  return "outline"
+export type LevelTone = "debug" | "info" | "warn" | "error" | "unknown"
+
+/** Strip separators so `DEBUG`, `debug`, `d-bug` normalize alike. */
+function levelToken(level: string): string {
+  return level.toLowerCase().trim().replace(/[^a-z0-9]+/g, "")
 }
 
-/** Left border accent class for the detail dialog header. */
-export function levelAccentClass(level: string | null): string {
-  if (!level) return "border-l-border"
-  if (level.includes("error") || level.includes("fatal") || level === "50") {
-    return "border-l-destructive"
+/**
+ * Map a raw level/severity string onto the UI tone spectrum.
+ * Accepts common spellings, abbreviations, syslog (0–7), and pino/bunyan (10–60).
+ */
+export function levelTone(level: string | null | undefined): LevelTone {
+  if (level == null || level === "") return "unknown"
+  const l = levelToken(level)
+  if (!l) return "unknown"
+
+  if (/^\d+$/.test(l)) {
+    const n = Number(l)
+    // syslog: 0 emerg … 3 err → error; 4 warn; 5 notice / 6 info; 7 debug
+    if (n <= 3) return "error"
+    if (n === 4) return "warn"
+    if (n === 5 || n === 6) return "info"
+    if (n === 7) return "debug"
+    // pino / bunyan style
+    if (n >= 50) return "error"
+    if (n >= 40) return "warn"
+    if (n >= 30) return "info"
+    if (n >= 10) return "debug"
+    return "unknown"
   }
-  if (level.includes("warn") || level === "40") {
-    return "border-l-muted-foreground/50"
+
+  // Single-letter (logcat / some CLIs): V/D/I/W/E/F/A
+  if (l.length === 1) {
+    if (l === "e" || l === "f" || l === "a") return "error"
+    if (l === "w") return "warn"
+    if (l === "i" || l === "n") return "info"
+    if (l === "d" || l === "t" || l === "v") return "debug"
   }
-  return "border-l-border"
+
+  if (
+    /^(err|error|errors|fatal|crit|critical|emerg|emergency|alert|panic|severe|fail|failure)$/.test(
+      l
+    ) ||
+    l.includes("error") ||
+    l.includes("fatal") ||
+    l.includes("crit") ||
+    l.includes("panic") ||
+    l.includes("emerg") ||
+    l.includes("severe")
+  ) {
+    return "error"
+  }
+
+  if (
+    /^(warn|warning|warnings|wrn|caution)$/.test(l) ||
+    l.includes("warn")
+  ) {
+    return "warn"
+  }
+
+  if (
+    /^(info|informational|information|inf|notice|note|log)$/.test(l) ||
+    l.includes("info") ||
+    l.includes("notice")
+  ) {
+    return "info"
+  }
+
+  if (
+    /^(debug|dbug|dbg|deb|verbose|verb|vrb|fine|finest|trace|trc)$/.test(l) ||
+    l.includes("debug") ||
+    l.includes("dbug") ||
+    l.includes("trace") ||
+    l.includes("verbose")
+  ) {
+    return "debug"
+  }
+
+  return "unknown"
+}
+
+/** Shared type + fill for level chips (mono, uppercase, error → cherry). */
+export function levelBadgeClass(level: string | null | undefined): string {
+  const type = "font-mono uppercase"
+  switch (levelTone(level)) {
+    case "error":
+      return `${type} border-transparent bg-level-error/12 text-level-error`
+    case "warn":
+      return `${type} border-transparent bg-level-warn/12 text-level-warn`
+    case "info":
+      return `${type} border-transparent bg-level-info/12 text-level-info`
+    case "debug":
+      return `${type} border-transparent bg-level-debug/12 text-level-debug`
+    default:
+      return `${type} border-border text-muted-foreground`
+  }
+}
+
+/** Left border accent for the detail dialog. */
+export function levelAccentClass(level: string | null | undefined): string {
+  switch (levelTone(level)) {
+    case "error":
+      return "border-l-4 border-l-level-error"
+    case "warn":
+      return "border-l-4 border-l-level-warn"
+    case "info":
+      return "border-l-4 border-l-level-info"
+    case "debug":
+      return "border-l-4 border-l-level-debug"
+    default:
+      return "border-l-4 border-l-border"
+  }
 }
 
 export function primitiveToFilterValue(value: unknown): {

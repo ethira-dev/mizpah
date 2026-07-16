@@ -188,12 +188,23 @@ mod tests {
         let state = AppState {
             store: Arc::clone(&store),
             project_dir: std::env::temp_dir(),
+            update: crate::update::UpdateManager::new(crate::update::RestartContext {
+                host: "127.0.0.1".into(),
+                port: 0,
+                project_dir: std::env::temp_dir(),
+                max_bytes: 1024 * 1024,
+            }),
         };
         let app = api::router(state);
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr: SocketAddr = listener.local_addr().unwrap();
         tokio::spawn(async move {
-            axum::serve(listener, app).await.unwrap();
+            axum::serve(
+                listener,
+                app.into_make_service_with_connect_info::<SocketAddr>(),
+            )
+            .await
+            .unwrap();
         });
         (format!("http://{addr}"), store)
     }

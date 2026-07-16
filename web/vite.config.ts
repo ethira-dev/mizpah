@@ -13,7 +13,19 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      "/api": "http://127.0.0.1:1738",
+      "/api": {
+        target: "http://127.0.0.1:1738",
+        // Avoid buffering SSE from POST /api/update during `vite` dev.
+        configure: (proxy) => {
+          proxy.on("proxyRes", (proxyRes) => {
+            const ct = proxyRes.headers["content-type"]
+            if (typeof ct === "string" && ct.includes("text/event-stream")) {
+              proxyRes.headers["cache-control"] = "no-cache"
+              proxyRes.headers["x-accel-buffering"] = "no"
+            }
+          })
+        },
+      },
       "/ws": { target: "ws://127.0.0.1:1738", ws: true },
     },
   },

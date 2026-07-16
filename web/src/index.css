@@ -31,6 +31,10 @@
     --color-chart-3: var(--chart-3);
     --color-chart-2: var(--chart-2);
     --color-chart-1: var(--chart-1);
+    --color-level-debug: var(--level-debug);
+    --color-level-info: var(--level-info);
+    --color-level-warn: var(--level-warn);
+    --color-level-error: var(--level-error);
     --color-ring: var(--ring);
     --color-input: var(--input);
     --color-border: var(--border);
@@ -82,6 +86,11 @@
     --chart-3: oklch(0.439 0 0);
     --chart-4: oklch(0.371 0 0);
     --chart-5: oklch(0.269 0 0);
+    /* Log levels: cool → amber → cherry */
+    --level-debug: oklch(0.52 0.04 250);
+    --level-info: oklch(0.5 0.1 220);
+    --level-warn: oklch(0.58 0.15 70);
+    --level-error: oklch(0.55 0.21 8);
     --radius: 0.625rem;
     --sidebar: oklch(0.985 0 0);
     --sidebar-foreground: oklch(0.145 0 0);
@@ -118,6 +127,10 @@
     --chart-3: oklch(0.78 0 0);
     --chart-4: oklch(0.65 0 0);
     --chart-5: oklch(0.556 0 0);
+    --level-debug: oklch(0.72 0.04 250);
+    --level-info: oklch(0.74 0.1 220);
+    --level-warn: oklch(0.78 0.14 75);
+    --level-error: oklch(0.76 0.16 8);
     --sidebar: oklch(0.205 0 0);
     --sidebar-foreground: oklch(0.985 0 0);
     --sidebar-primary: #A9FBC0;

@@ -12,6 +12,7 @@ mod shell_attach;
 mod shell_forward;
 mod stdin_lines;
 mod store;
+mod update;
 
 use api::AppState;
 use clap::{Parser, Subcommand};
@@ -129,6 +130,29 @@ enum Commands {
         #[arg(long)]
         tty_service: String,
     },
+    /// Wait for parent exit then start hub (internal; used after self-update)
+    #[command(name = "update-resume", hide = true)]
+    UpdateResume {
+        /// Parent hub PID to wait for
+        #[arg(long)]
+        wait_pid: u32,
+
+        /// Hub host
+        #[arg(long, default_value = "127.0.0.1")]
+        host: String,
+
+        /// Hub port
+        #[arg(short, long, default_value_t = 1738)]
+        port: u16,
+
+        /// Project directory for agent sessions
+        #[arg(long)]
+        project: PathBuf,
+
+        /// Max in-memory log bytes
+        #[arg(long, default_value_t = DEFAULT_MAX_BYTES)]
+        max_bytes: u64,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -240,6 +264,21 @@ async fn main() {
         Some(Commands::ShellForward { tty_service }) => {
             init_tracing_stderr();
             if let Err(err) = shell_forward::run_shell_forward(tty_service).await {
+                eprintln!("error: {err}");
+                std::process::exit(1);
+            }
+        }
+        Some(Commands::UpdateResume {
+            wait_pid,
+            host,
+            port,
+            project,
+            max_bytes,
+        }) => {
+            init_tracing_stderr();
+            if let Err(err) =
+                update::run_update_resume(wait_pid, host, port, project, max_bytes).await
+            {
                 eprintln!("error: {err}");
                 std::process::exit(1);
             }
@@ -364,9 +403,17 @@ async fn run_hub(
     }
 
     let store = Arc::new(Store::new(max_bytes));
+    let update_mgr = update::UpdateManager::new(update::RestartContext {
+        host: host.to_string(),
+        port,
+        project_dir: project_dir.clone(),
+        max_bytes,
+    });
+    update_mgr.spawn_background_checker();
     let state = AppState {
         store: Arc::clone(&store),
         project_dir,
+        update: update_mgr,
     };
     let app = api::router(state);
 
@@ -389,7 +436,11 @@ async fn run_hub(
         }
     });
 
-    axum::serve(listener, app).await?;
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .await?;
     Ok(())
 }
 
@@ -569,6 +620,32 @@ mod tests {
             Cli::try_parse_from(["mizpah", "__shell-forward", "--tty-service", "ttys001"]).unwrap();
         match fwd.command {
             Some(Commands::ShellForward { tty_service }) => assert_eq!(tty_service, "ttys001"),
+            other => panic!("unexpected: {other:?}"),
+        }
+
+        let resume = Cli::try_parse_from([
+            "mizpah",
+            "update-resume",
+            "--wait-pid",
+            "12345",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            "1738",
+            "--project",
+            "/tmp/proj",
+            "--max-bytes",
+            "1048576",
+        ])
+        .unwrap();
+        match resume.command {
+            Some(Commands::UpdateResume {
+                wait_pid: 12345,
+                port: 1738,
+                max_bytes: 1048576,
+                project,
+                ..
+            }) => assert_eq!(project, PathBuf::from("/tmp/proj")),
             other => panic!("unexpected: {other:?}"),
         }
     }

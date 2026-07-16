@@ -36,7 +36,7 @@ import {
   copyText,
   formatRelativeTime,
   levelAccentClass,
-  levelVariant,
+  levelBadgeClass,
 } from "@/lib/log-format"
 import type { LogEntry } from "@/lib/types"
 import { cn } from "@/lib/utils"
@@ -244,8 +244,11 @@ export function LogDetailDialog({
                       </Badge>
                       {level ? (
                         <Badge
-                          variant={levelVariant(level)}
-                          className="rounded-md uppercase"
+                          variant="outline"
+                          className={cn(
+                            "rounded-md",
+                            levelBadgeClass(level)
+                          )}
                         >
                           {level}
                         </Badge>
@@ -366,8 +369,11 @@ export function LogDetailDialog({
                               </span>
                               {nLevel ? (
                                 <Badge
-                                  variant={levelVariant(nLevel)}
-                                  className="h-4 rounded-sm px-1 text-[9px] uppercase"
+                                  variant="outline"
+                                  className={cn(
+                                    "h-4 rounded-sm px-1 text-[9px]",
+                                    levelBadgeClass(nLevel)
+                                  )}
                                 >
                                   {nLevel}
                                 </Badge>

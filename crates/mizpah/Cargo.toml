@@ -32,15 +32,20 @@ cel = { version = "0.14.0", features = ["json", "regex"] }
 chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4", features = ["derive", "env"] }
 directories = "6"
+flate2 = "1.1.9"
 futures-util = "0.3"
 libc = "0.2"
 open = "5"
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
 rmcp = { version = "2.2.0", features = ["server", "transport-io", "macros", "schemars"] }
 rust-embed = { version = "8", features = ["mime-guess"] }
 schemars = "1"
+self-replace = "1.5.0"
+semver = "1.0.28"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+tar = "0.4.46"
+tempfile = "3.27.0"
 thiserror = "2"
 tokio = { version = "1", features = [
   "rt-multi-thread",

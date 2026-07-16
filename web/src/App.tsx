@@ -1,4 +1,4 @@
-import { Pause, Play, Radio } from "lucide-react"
+import { ArrowUpCircle, Pause, Play, Radio } from "lucide-react"
 import { useCallback, useEffect, useMemo, useState } from "react"
 
 import { CelQueryEditor } from "@/components/cel-query-editor"
@@ -6,6 +6,7 @@ import { LogList } from "@/components/log-list"
 import { PropertyFilterDrawer } from "@/components/property-filter-drawer"
 import { ServicesDialog } from "@/components/services-dialog"
 import { TimeActivityStrip } from "@/components/time-activity-strip"
+import { UpdateDialog } from "@/components/update-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -15,7 +16,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { useMizpah } from "@/hooks/use-mizpah"
-import { formatBytes } from "@/lib/api"
+import { fetchUpdateStatus, formatBytes, type UpdateStatus } from "@/lib/api"
 import { readQueryFromSession, writeQueryToSession } from "@/lib/filter-storage"
 import { pushHistory } from "@/lib/query-library-storage"
 import {
@@ -31,12 +32,32 @@ export function App() {
   const [timeZoomIndex, setTimeZoomIndex] = useState(DEFAULT_TIME_ZOOM_INDEX)
   const [autoScroll, setAutoScroll] = useState(true)
   const [servicesOpen, setServicesOpen] = useState(false)
+  const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null)
+  const [updateOpen, setUpdateOpen] = useState(false)
 
   const timeZoom = useMemo(() => timeZoomAt(timeZoomIndex), [timeZoomIndex])
 
   useEffect(() => {
     writeQueryToSession(query)
   }, [query])
+
+  useEffect(() => {
+    let cancelled = false
+    const poll = async () => {
+      try {
+        const status = await fetchUpdateStatus()
+        if (!cancelled) setUpdateStatus(status)
+      } catch {
+        // hub may be restarting
+      }
+    }
+    void poll()
+    const id = window.setInterval(poll, 30_000)
+    return () => {
+      cancelled = true
+      window.clearInterval(id)
+    }
+  }, [])
 
   const onQueryChange = useCallback((q: string) => {
     setQuery(q)
@@ -215,6 +236,20 @@ export function App() {
               <span className="tabular-nums">{memLabel}</span>
             </TooltipContent>
           </Tooltip>
+          {updateStatus?.updateAvailable && updateStatus.latestVersion ? (
+            <button
+              type="button"
+              className={cn(
+                "ml-auto inline-flex items-center gap-1.5 rounded-sm text-primary",
+                "underline-offset-2 hover:underline",
+                "focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+              )}
+              onClick={() => setUpdateOpen(true)}
+            >
+              <ArrowUpCircle className="size-3.5" />
+              Update to v{updateStatus.latestVersion}
+            </button>
+          ) : null}
         </footer>
 
         <ServicesDialog
@@ -226,6 +261,15 @@ export function App() {
           onDisconnectService={onDisconnectService}
           onReconnectService={onReconnectService}
         />
+
+        {updateStatus?.latestVersion && updateOpen ? (
+          <UpdateDialog
+            key={updateStatus.latestVersion}
+            open={updateOpen}
+            onOpenChange={setUpdateOpen}
+            expectedLatest={updateStatus.latestVersion}
+          />
+        ) : null}
       </div>
     </TooltipProvider>
   )
