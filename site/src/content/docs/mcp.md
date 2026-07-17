@@ -4,7 +4,7 @@ description: Stdio MCP tools, install targets, limits, and UI investigate hooks.
 order: 6
 ---
 
-mizpah exposes the live hub as a stdio MCP server (`mzp mcp`). Agents get structured tools against `/api/*` instead of pasted transcripts. That is both a clearer workflow (ask for errors, get rows) and a cheaper one (default 20 hits, max 50).
+mizpah exposes the live hub as a stdio MCP server (`mzp mcp`). Agents get structured tools against `/api/*` instead of pasted transcripts. That is both a clearer workflow (ask for errors, get rows) and a cheaper one (default 20 hits, max 50; results in TOON instead of pretty JSON).
 
 ## Install
 
@@ -68,6 +68,43 @@ Also available as a Cursor plugin (repo-root `.cursor-plugin/` + `skills/mizpah/
 | `get_logs_around` | `id`, `before?` (default 5), `after?` (default 5), `service?`, `q?` | Window around an entry for stack/context |
 
 Server instructions tell the model to keep limits small and never dump the full buffer. If the hub is down, start a stream: `my-app 2>&1 | mzp --service <name>`.
+
+### Tool result format (TOON)
+
+MCP tools return **TOON** ([Token-Oriented Object Notation](https://toonformat.dev/)) instead of pretty-printed JSON. TOON keeps the same data model (objects, arrays, primitives) but uses indentation and tabular arrays so agents spend fewer tokens on structure.
+
+- Hub REST / WebSocket APIs stay JSON; only the MCP text payload is TOON.
+- Log tools omit `_mzp` (cwd/user/pid/exe) from each row — still filterable via CEL when you need it.
+- `list_properties` drops redundant `sampleValues` when `values` (with counts) is present.
+
+Pretty JSON (what tools used to return):
+
+```json
+{
+  "entries": [
+    {
+      "id": 42,
+      "receivedAt": "2026-07-17T00:00:00Z",
+      "service": "api",
+      "data": { "level": "error", "msg": "timeout" }
+    }
+  ],
+  "hasMore": false
+}
+```
+
+Same payload as TOON (shape illustrative):
+
+```text
+entries[1]:
+  - id: 42
+    receivedAt: "2026-07-17T00:00:00Z"
+    service: api
+    data:
+      level: error
+      msg: timeout
+hasMore: false
+```
 
 ### Example agent flow
 

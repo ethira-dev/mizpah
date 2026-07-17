@@ -38,13 +38,31 @@ services:
           </CodexExec>
           <CodexExec
             command='mcp__mizpah__search_logs q: msg.contains("timeout") limit: 4'
-            result="→ 4 hits"
+            result="→ 4 hits (TOON)"
             defaultOpen
           >
-            {`1837  api     error  timeout waiting for redis
-1760  worker  warn   job lease timeout after 30s
-1694  api     error  upstream timeout GET /billing
-1512  chrome  error  Fetch timeout https://cdn.example/app.js`}
+            {`entries[4]:
+  - id: 1837
+    service: api
+    data:
+      level: error
+      msg: "timeout waiting for redis"
+  - id: 1760
+    service: worker
+    data:
+      level: warn
+      msg: "job lease timeout after 30s"
+  - id: 1694
+    service: api
+    data:
+      level: error
+      msg: "upstream timeout GET /billing"
+  - id: 1512
+    service: chrome
+    data:
+      level: error
+      msg: "Fetch timeout https://cdn.example/app.js"
+hasMore: false`}
           </CodexExec>
           <CodexExec
             command='mcp__mizpah__list_services'

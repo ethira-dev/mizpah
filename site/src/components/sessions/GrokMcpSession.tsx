@@ -41,8 +41,14 @@ export function GrokMcpSession() {
           title="Run mcp__mizpah__list_properties"
           hooks={1}
         >
-          {`service, level, msg, ts, url, source
-chrome also: console.method, stack`}
+          {`properties[7]{path,types,count}:
+  service,[string],18420
+  level,[string],18420
+  msg,[string],18420
+  ts,[string],1200
+  url,[string],3188
+  console.method,[string],900
+  stack,[string],210`}
         </GrokTool>
 
         <GrokTool
@@ -54,10 +60,24 @@ chrome also: console.method, stack`}
 q: level == "error" && msg.contains("TypeError")
 limit: 3
 
-→ 3 matching logs
-  #2201  TypeError: Cannot read properties of undefined (reading 'id')
-  #2188  Uncaught TypeError: x.map is not a function
-  #2174  TypeError: Failed to fetch`}
+→ TOON
+entries[3]:
+  - id: 2201
+    service: chrome
+    data:
+      level: error
+      msg: "TypeError: Cannot read properties of undefined (reading 'id')"
+  - id: 2188
+    service: chrome
+    data:
+      level: error
+      msg: "Uncaught TypeError: x.map is not a function"
+  - id: 2174
+    service: chrome
+    data:
+      level: error
+      msg: "TypeError: Failed to fetch"
+hasMore: false`}
         </GrokTool>
 
         <GrokMessage time="1:12 AM">

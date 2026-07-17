@@ -35,6 +35,8 @@ Prefer **NDJSON** (one JSON object per line). Plain text becomes `{ "_raw": "…
 
 Tools: `list_services`, `get_stats`, `list_properties`, `search_logs`, `get_logs_around`.
 
+Results are **TOON** (not pretty JSON) for fewer tokens; log rows omit `_mzp`. See `references/cel-and-mcp.md`.
+
 1. `list_properties` (optional) → field paths / samples
 2. `search_logs` with CEL, `limit` ≤ 20 (max 50); paginate with `cursor` / `hasMore`
 3. `get_logs_around` for stack/context around an `id`

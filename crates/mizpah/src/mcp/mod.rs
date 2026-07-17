@@ -1,6 +1,7 @@
 //! MCP stdio server and client-config installers for Cursor / Claude / Codex.
 
 mod client;
+mod format;
 mod install;
 mod server;
 
