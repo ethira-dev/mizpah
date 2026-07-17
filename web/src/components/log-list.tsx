@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react"
 
 import { LogDetailDialog } from "@/components/log-detail-dialog"
 import { Badge } from "@/components/ui/badge"
-import { levelOf, summarizeLog } from "@/lib/api"
+import { levelOf, summarizeLog } from "@/lib/log-format"
 import { levelBadgeClass } from "@/lib/log-format"
 import type { LogEntry } from "@/lib/types"
 import { cn } from "@/lib/utils"

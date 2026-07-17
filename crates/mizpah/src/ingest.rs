@@ -18,13 +18,15 @@ pub async fn ingest_stdin_local(store: Arc<Store>, service: String) {
         let service = service.clone();
         let mzp = mzp.clone();
         async move {
-            if store.is_blocked(&service).await {
-                debug!(%service, "discarding stdin line; service disconnected");
-                return Ok::<(), Infallible>(());
-            }
-            store
+            match store
                 .push_line_with_meta(&service, &line, None, Some(&mzp))
-                .await;
+                .await
+            {
+                crate::store::PushLineResult::Blocked => {
+                    debug!(%service, "discarding stdin line; service disconnected");
+                }
+                crate::store::PushLineResult::Emitted(_) => {}
+            }
             Ok::<(), Infallible>(())
         }
     })

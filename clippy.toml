@@ -1,0 +1,2 @@
+# Shared Clippy config. CI runs with -D warnings plus curated pedantic lints.
+cognitive-complexity-threshold = 40

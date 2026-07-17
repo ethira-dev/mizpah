@@ -1,19 +1,17 @@
 //! Resilient shell stdout/stderr forwarder: drain stdin without backpressure.
 
+use crate::hub;
+use crate::ingest_forward::{
+    self, drain_on_client_error, post_batch, reset_backoff, sleep_backoff, BatchError, BATCH_FLUSH,
+    BATCH_MAX, QUEUE_CAPACITY,
+};
 use crate::mzp_meta::MzpMeta;
 use crate::shell_attach::{self, AttachState};
 use base64::Engine;
-use serde::Serialize;
 use std::time::Duration;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::sync::mpsc;
 use tracing::{debug, warn};
-
-const QUEUE_CAPACITY: usize = 4096;
-const BATCH_MAX: usize = 128;
-const BATCH_FLUSH: Duration = Duration::from_millis(50);
-const HTTP_TIMEOUT: Duration = Duration::from_secs(3);
-const MAX_BACKOFF: Duration = Duration::from_secs(5);
 
 /// Control frame: `\x1eMZP\x1e<cwd>\x1e<base64(cmd)>\n`
 const CTRL_PREFIX: &str = "\x1eMZP\x1e";
@@ -28,16 +26,6 @@ enum ForwardMsg {
 struct StreamMeta {
     cwd: String,
     cmd: Option<String>,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct BatchBody<'a> {
-    service: &'a str,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    cmd: Option<&'a str>,
-    mzp: &'a MzpMeta,
-    lines: &'a [String],
 }
 
 /// Parse a shell-attach control frame into `(cwd, cmd)`.
@@ -123,11 +111,10 @@ async fn drain_stdin(tx: mpsc::Sender<ForwardMsg>) {
 }
 
 async fn forward_worker(mut rx: mpsc::Receiver<ForwardMsg>, tty_service: String) {
-    let client = match reqwest::Client::builder().timeout(HTTP_TIMEOUT).build() {
+    let client = match ingest_forward::http_client() {
         Ok(c) => c,
         Err(err) => {
-            warn!(error = %err, "shell forward: http client failed");
-            while rx.recv().await.is_some() {}
+            drain_on_client_error("shell forward", &err, &mut rx).await;
             return;
         }
     };
@@ -232,10 +219,7 @@ async fn flush_batch(
     }
 
     let service = resolve_service(&state, &meta.cwd);
-    let url = format!(
-        "{}/api/ingest/batch",
-        shell_attach::hub_url(&state.host, state.port)
-    );
+    let url = format!("{}/api/ingest/batch", hub::hub_url(&state.host, state.port));
 
     if *dropped_since_ok > 0 {
         let n = *dropped_since_ok;
@@ -250,18 +234,17 @@ async fn flush_batch(
     match post_batch(client, &url, &service, cmd, &mzp, buf).await {
         Ok(()) => {
             *dropped_since_ok = 0;
-            *backoff = Duration::from_millis(100);
+            reset_backoff(backoff);
         }
         Err(BatchError::Disconnected) => {
             warn!(%service, "shell forward: service disconnected; dropping batch");
             *dropped_since_ok = 0;
-            *backoff = Duration::from_millis(100);
+            reset_backoff(backoff);
         }
         Err(BatchError::Other(err)) => {
             warn!(error = %err, %service, "shell forward: batch ingest failed");
             *dropped_since_ok = dropped_since_ok.saturating_add(n);
-            tokio::time::sleep(*backoff).await;
-            *backoff = (*backoff * 2).min(MAX_BACKOFF);
+            sleep_backoff(backoff).await;
         }
     }
     buf.clear();
@@ -280,44 +263,6 @@ fn resolve_service(state: &AttachState, fallback_service: &str) -> String {
     } else {
         t.to_string()
     }
-}
-
-#[derive(Debug)]
-enum BatchError {
-    Disconnected,
-    Other(String),
-}
-
-async fn post_batch(
-    client: &reqwest::Client,
-    url: &str,
-    service: &str,
-    cmd: Option<&str>,
-    mzp: &MzpMeta,
-    lines: &[String],
-) -> Result<(), BatchError> {
-    if lines.is_empty() {
-        return Ok(());
-    }
-    let body = BatchBody {
-        service,
-        cmd,
-        mzp,
-        lines,
-    };
-    let resp = client
-        .post(url)
-        .json(&body)
-        .send()
-        .await
-        .map_err(|e| BatchError::Other(e.to_string()))?;
-    if resp.status() == reqwest::StatusCode::CONFLICT {
-        return Err(BatchError::Disconnected);
-    }
-    if !resp.status().is_success() {
-        return Err(BatchError::Other(format!("status {}", resp.status())));
-    }
-    Ok(())
 }
 
 #[cfg(test)]

@@ -147,12 +147,8 @@ fn discover_clients() -> Vec<(ClientKind, Option<PathBuf>)> {
     ]
 }
 
-fn home_dir() -> Option<PathBuf> {
-    directories::UserDirs::new().map(|u| u.home_dir().to_path_buf())
-}
-
 fn cursor_mcp_path() -> Option<PathBuf> {
-    let home = home_dir()?;
+    let home = crate::util::home_dir()?;
     let dir = home.join(".cursor");
     if !dir.is_dir() {
         return None;
@@ -161,7 +157,7 @@ fn cursor_mcp_path() -> Option<PathBuf> {
 }
 
 fn claude_desktop_config_path() -> Option<PathBuf> {
-    let home = home_dir()?;
+    let home = crate::util::home_dir()?;
     let dir = if cfg!(target_os = "macos") {
         home.join("Library/Application Support/Claude")
     } else if cfg!(target_os = "windows") {
@@ -178,7 +174,7 @@ fn claude_desktop_config_path() -> Option<PathBuf> {
 }
 
 fn claude_code_config_path() -> Option<PathBuf> {
-    let home = home_dir()?;
+    let home = crate::util::home_dir()?;
     let json = home.join(".claude.json");
     let dir = home.join(".claude");
     if json.is_file() || dir.is_dir() {
@@ -189,7 +185,7 @@ fn claude_code_config_path() -> Option<PathBuf> {
 }
 
 fn codex_config_path() -> Option<PathBuf> {
-    let home = home_dir()?;
+    let home = crate::util::home_dir()?;
     let dir = home.join(".codex");
     if !dir.is_dir() {
         return None;
@@ -286,8 +282,9 @@ pub fn merge_toml_mcp_servers(existing: &str, command: &str) -> Result<(String, 
         .get("args")
         .and_then(|i| i.as_value())
         .and_then(|v| v.as_array())
-        .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>() == vec!["mcp"])
-        .unwrap_or(false);
+        .is_some_and(|arr| {
+            arr.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>() == vec!["mcp"]
+        });
     if !args_match {
         let desired_args = toml_edit::Array::from_iter(["mcp"]);
         server.insert("args", Item::Value(TomlValue::Array(desired_args)));
@@ -365,16 +362,7 @@ fn read_or_empty(path: &Path) -> Result<String, String> {
 }
 
 fn atomic_write(path: &Path, contents: &str) -> Result<(), String> {
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).map_err(|e| format!("mkdir failed: {e}"))?;
-    }
-    let tmp = path.with_extension(format!(
-        "{}.tmp",
-        path.extension().and_then(|e| e.to_str()).unwrap_or("mcp")
-    ));
-    fs::write(&tmp, contents).map_err(|e| format!("write failed: {e}"))?;
-    fs::rename(&tmp, path).map_err(|e| format!("rename failed: {e}"))?;
-    Ok(())
+    crate::util::atomic_write(path, contents).map_err(|e| e.to_string())
 }
 
 /// Best-effort upsert used on hub start (never fails the hub).

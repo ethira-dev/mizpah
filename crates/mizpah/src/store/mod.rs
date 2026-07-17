@@ -2,11 +2,11 @@ use crate::pretty_ingest::{
     is_pretty_block_start, parse_pretty_block, strip_ansi, strip_service_prefix, PrettyBuffer,
 };
 use crate::properties::{
-    annotate_property_counts, discover_paths_into, filter_properties_by_query, paths_to_info,
-    push_service_property, PathMeta,
+    decrement_counts_for_entry, discover_paths_into, paths_to_info, push_service_property,
+    rebuild_properties_by_service, rebuild_properties_from_entries, PathMeta,
 };
-use chrono::{DateTime, Duration as ChronoDuration, Utc};
-use serde_json::{Map, Value};
+use chrono::Utc;
+use serde_json::Value;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::atomic::{AtomicU64, Ordering};
 use tokio::sync::{broadcast, RwLock};
@@ -15,8 +15,42 @@ use tokio::sync::{broadcast, RwLock};
 pub use crate::models::{ActivityBucket, LogEntry, PropertyInfo, ServiceInfo, Stats, WsEvent};
 pub use crate::mzp_meta::MzpMeta;
 
+mod activity;
+mod ingest;
+mod query;
+
+pub use ingest::parse_line;
+
+use ingest::{
+    estimate_bytes, inject_cmd, inject_mzp, raw_payloads_from_lines, try_parse_json_object,
+};
+
 pub const DEFAULT_MAX_BYTES: u64 = 1_073_741_824; // 1 GiB
 const BROADCAST_CAPACITY: usize = 1024;
+
+/// Result of pushing a line into the store.
+#[derive(Debug)]
+pub enum PushLineResult {
+    /// Zero or more entries emitted (empty while buffering a pretty block).
+    Emitted(Vec<LogEntry>),
+    /// Service is disconnected; callers should surface HTTP 409.
+    Blocked,
+}
+
+impl PushLineResult {
+    #[cfg(test)]
+    pub(crate) fn into_entries(self) -> Vec<LogEntry> {
+        match self {
+            Self::Emitted(v) => v,
+            Self::Blocked => Vec::new(),
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn is_blocked(&self) -> bool {
+        matches!(self, Self::Blocked)
+    }
+}
 
 struct Inner {
     entries: VecDeque<LogEntry>,
@@ -70,23 +104,28 @@ impl Store {
     /// one entry (normal / completed block), or many (failed convert flush).
     #[cfg(test)]
     pub async fn push_line(&self, service: &str, line: &str) -> Vec<LogEntry> {
-        self.push_line_with_meta(service, line, None, None).await
+        self.push_line_with_meta(service, line, None, None)
+            .await
+            .into_entries()
     }
 
     /// Ingest a line and optionally inject `cmd` / `_mzp` into each emitted payload.
-    /// Returns an empty vec when the service is blocked (callers should treat HTTP ingest as 409).
     pub async fn push_line_with_meta(
         &self,
         service: &str,
         line: &str,
         cmd: Option<&str>,
         mzp: Option<&MzpMeta>,
-    ) -> Vec<LogEntry> {
-        if self.is_blocked(service).await {
-            return Vec::new();
-        }
+    ) -> PushLineResult {
+        // Single lock check + commit path: blocked status is re-checked inside commit.
         let cleaned = strip_service_prefix(&strip_ansi(line), service);
-        let payloads = self.resolve_payloads(service, &cleaned).await;
+        let payloads = {
+            let mut inner = self.inner.write().await;
+            if inner.blocked.contains(service) {
+                return PushLineResult::Blocked;
+            }
+            Self::resolve_payloads_locked(&mut inner, service, &cleaned)
+        };
         let mut emitted = Vec::with_capacity(payloads.len());
         for mut data in payloads {
             if let Some(cmd) = cmd {
@@ -95,11 +134,16 @@ impl Store {
             if let Some(mzp) = mzp {
                 inject_mzp(&mut data, mzp);
             }
-            emitted.push(self.commit_entry(service, data).await);
+            match self.commit_entry(service, data).await {
+                Some(entry) => emitted.push(entry),
+                None => return PushLineResult::Blocked,
+            }
         }
-        emitted
+        PushLineResult::Emitted(emitted)
     }
 
+    /// Whether ingest for `service` is currently blocked (disconnected).
+    #[allow(dead_code)] // Store API for callers/tests; used in unit tests below.
     pub async fn is_blocked(&self, service: &str) -> bool {
         let inner = self.inner.read().await;
         inner.blocked.contains(service)
@@ -135,12 +179,9 @@ impl Store {
             inner.entries = kept;
             inner.approx_bytes = approx_bytes;
 
-            // Rebuild global property discovery from remaining entries.
-            let mut properties = HashMap::new();
-            for entry in &inner.entries {
-                discover_paths_into(&entry.data, "", &mut properties);
-            }
-            inner.properties = properties;
+            // Rebuild global + per-service property discovery from remaining entries.
+            inner.properties = rebuild_properties_from_entries(&inner.entries);
+            inner.properties_by_service = rebuild_properties_by_service(&inner.entries);
 
             let mut props = paths_to_info(&inner.properties);
             push_service_property(&mut props, &inner.services, None);
@@ -182,14 +223,15 @@ impl Store {
     }
 
     /// Decide which JSON payloads a cleaned line should become (may buffer).
-    async fn resolve_payloads(&self, service: &str, cleaned: &str) -> Vec<Value> {
-        let mut inner = self.inner.write().await;
-
+    fn resolve_payloads_locked(inner: &mut Inner, service: &str, cleaned: &str) -> Vec<Value> {
         // Mid pretty-block for this service
         if inner.pretty_buffers.contains_key(service) {
             // Complete single-line JSON interrupts an incomplete pretty dump
             if try_parse_json_object(cleaned).is_some() {
-                let buf = inner.pretty_buffers.remove(service).unwrap();
+                let buf = inner
+                    .pretty_buffers
+                    .remove(service)
+                    .expect("pretty buffer present");
                 let mut out = raw_payloads_from_lines(buf.into_lines());
                 if let Some(obj) = try_parse_json_object(cleaned) {
                     out.push(obj);
@@ -197,16 +239,25 @@ impl Store {
                 return out;
             }
 
-            let buf = inner.pretty_buffers.get_mut(service).unwrap();
+            let buf = inner
+                .pretty_buffers
+                .get_mut(service)
+                .expect("pretty buffer present");
             buf.push(cleaned.to_string());
 
             if buf.is_oversized() {
-                let buf = inner.pretty_buffers.remove(service).unwrap();
+                let buf = inner
+                    .pretty_buffers
+                    .remove(service)
+                    .expect("pretty buffer present");
                 return raw_payloads_from_lines(buf.into_lines());
             }
 
             if buf.is_complete() {
-                let buf = inner.pretty_buffers.remove(service).unwrap();
+                let buf = inner
+                    .pretty_buffers
+                    .remove(service)
+                    .expect("pretty buffer present");
                 if let Some(obj) = parse_pretty_block(&buf.joined()) {
                     return vec![obj];
                 }
@@ -241,7 +292,8 @@ impl Store {
         vec![parse_line(cleaned)]
     }
 
-    async fn commit_entry(&self, service: &str, data: Value) -> LogEntry {
+    /// Commit one entry. Returns `None` if the service became blocked.
+    async fn commit_entry(&self, service: &str, data: Value) -> Option<LogEntry> {
         let approx_bytes = estimate_bytes(service, &data);
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
         let entry = LogEntry {
@@ -254,15 +306,19 @@ impl Store {
 
         let (evicted, services_changed, properties) = {
             let mut inner = self.inner.write().await;
+            if inner.blocked.contains(service) {
+                return None;
+            }
             let service_was_new = !inner.services.contains_key(service);
             *inner.services.entry(service.to_string()).or_insert(0) += 1;
 
-            discover_paths_into(&entry.data, "", &mut inner.properties);
+            let mut schema_changed =
+                discover_paths_into(&entry.data, "", &mut inner.properties, true);
             let service_props = inner
                 .properties_by_service
                 .entry(service.to_string())
                 .or_default();
-            discover_paths_into(&entry.data, "", service_props);
+            schema_changed |= discover_paths_into(&entry.data, "", service_props, true);
 
             inner.approx_bytes += entry.approx_bytes;
             inner.entries.push_back(entry.clone());
@@ -274,14 +330,23 @@ impl Store {
                     if let Some(count) = inner.services.get_mut(&old.service) {
                         *count = count.saturating_sub(1);
                     }
+                    decrement_counts_for_entry(&old.data, &mut inner.properties);
+                    if let Some(svc_map) = inner.properties_by_service.get_mut(&old.service) {
+                        decrement_counts_for_entry(&old.data, svc_map);
+                    }
                     evicted_ids.push(old.id);
                 } else {
                     break;
                 }
             }
 
-            let mut props = paths_to_info(&inner.properties);
-            push_service_property(&mut props, &inner.services, None);
+            let props = if schema_changed || service_was_new {
+                let mut props = paths_to_info(&inner.properties);
+                push_service_property(&mut props, &inner.services, None);
+                Some(props)
+            } else {
+                None
+            };
             (evicted_ids, service_was_new, props)
         };
 
@@ -293,264 +358,24 @@ impl Store {
         if services_changed {
             self.publish_services().await;
         }
-        self.publish(WsEvent::Properties { paths: properties });
+        if let Some(properties) = properties {
+            self.publish(WsEvent::Properties { paths: properties });
+        }
         self.publish(WsEvent::Log {
             entry: entry.clone(),
         });
 
-        entry
+        Some(entry)
     }
-
-    pub async fn service_names(&self) -> Vec<String> {
-        let inner = self.inner.read().await;
-        let mut names: Vec<String> = inner.services.keys().cloned().collect();
-        names.sort();
-        names
-    }
-
-    pub async fn stats(&self) -> Stats {
-        let inner = self.inner.read().await;
-        let mut services: Vec<ServiceInfo> = inner
-            .services
-            .iter()
-            .map(|(name, count)| ServiceInfo {
-                name: name.clone(),
-                count: *count,
-            })
-            .collect();
-        services.sort_by(|a, b| a.name.cmp(&b.name));
-        Stats {
-            count: inner.entries.len() as u64,
-            approx_bytes: inner.approx_bytes,
-            max_bytes: inner.max_bytes,
-            services,
-        }
-    }
-
-    /// Search and list discovered fields with occurrence counts over the full buffer.
-    ///
-    /// - `q` matches property paths or sample values (case-insensitive substring).
-    /// - When only values match, non-matching samples are dropped from the result.
-    /// - Always includes a synthetic `service` field when services are present.
-    pub async fn search_properties(
-        &self,
-        service: Option<&str>,
-        q: Option<&str>,
-    ) -> Vec<PropertyInfo> {
-        let inner = self.inner.read().await;
-        let mut infos = match service {
-            Some(svc) if !svc.is_empty() && svc != "*" => {
-                if let Some(map) = inner.properties_by_service.get(svc) {
-                    paths_to_info(map)
-                } else {
-                    Vec::new()
-                }
-            }
-            _ => paths_to_info(&inner.properties),
-        };
-        push_service_property(&mut infos, &inner.services, service);
-
-        let needle = q
-            .map(str::trim)
-            .filter(|s| !s.is_empty())
-            .map(|s| s.to_ascii_lowercase());
-
-        if let Some(ref needle) = needle {
-            infos = filter_properties_by_query(infos, needle);
-        }
-
-        // Sort sample values alphabetically before counting so UI order is stable.
-        for info in &mut infos {
-            info.sample_values.sort_by_key(|a| a.to_ascii_lowercase());
-        }
-
-        annotate_property_counts(&inner.entries, service, &mut infos);
-        infos
-    }
-
-    pub async fn get_entry(&self, id: u64) -> Option<LogEntry> {
-        let inner = self.inner.read().await;
-        inner.entries.iter().find(|e| e.id == id).cloned()
-    }
-
-    pub async fn query_logs(
-        &self,
-        service: Option<&str>,
-        cursor: Option<u64>,
-        limit: usize,
-        query: &crate::filter::CompiledQuery,
-        from: Option<DateTime<Utc>>,
-        to: Option<DateTime<Utc>>,
-    ) -> (Vec<LogEntry>, bool) {
-        let inner = self.inner.read().await;
-        let limit = limit.clamp(1, 500);
-        let mut matched = Vec::new();
-        let mut has_more = false;
-
-        // Newest first
-        for entry in inner.entries.iter().rev() {
-            if let Some(c) = cursor {
-                if entry.id >= c {
-                    continue;
-                }
-            }
-            if let Some(svc) = service {
-                if !svc.is_empty() && svc != "*" && entry.service != svc {
-                    continue;
-                }
-            }
-            if !in_time_range(entry.received_at, from, to) {
-                continue;
-            }
-            if !crate::filter::matches_entry(&entry.service, &entry.data, query) {
-                continue;
-            }
-            if matched.len() >= limit {
-                has_more = true;
-                break;
-            }
-            matched.push(entry.clone());
-        }
-
-        (matched, has_more)
-    }
-
-    /// Bucket entry counts over a trailing window (oldest → newest).
-    pub async fn activity_histogram(
-        &self,
-        window: ChronoDuration,
-        bucket: ChronoDuration,
-    ) -> Vec<ActivityBucket> {
-        let window = if window <= ChronoDuration::zero() {
-            ChronoDuration::hours(24)
-        } else {
-            window
-        };
-        let bucket = if bucket <= ChronoDuration::zero() {
-            ChronoDuration::minutes(25)
-        } else {
-            bucket
-        };
-
-        let now = Utc::now();
-        let bucket_ms = bucket.num_milliseconds().max(1);
-        let window_ms = window.num_milliseconds().max(1);
-        let n_buckets = ((window_ms + bucket_ms - 1) / bucket_ms) as usize;
-        let n_buckets = n_buckets.max(1);
-
-        // Align to a fixed UTC grid so bucket boundaries stay stable across polls.
-        let now_ms = now.timestamp_millis();
-        let current_bucket_end = ((now_ms / bucket_ms) + 1) * bucket_ms;
-        let window_start_ms = current_bucket_end - bucket_ms * n_buckets as i64;
-        let window_start =
-            DateTime::from_timestamp_millis(window_start_ms).unwrap_or_else(|| now - window);
-
-        let mut counts = vec![0u64; n_buckets];
-        {
-            let inner = self.inner.read().await;
-            for entry in &inner.entries {
-                let ts_ms = entry.received_at.timestamp_millis();
-                if ts_ms < window_start_ms {
-                    continue;
-                }
-                let offset = ts_ms - window_start_ms;
-                let idx = (offset / bucket_ms) as usize;
-                if idx < n_buckets {
-                    counts[idx] += 1;
-                }
-            }
-        }
-
-        counts
-            .into_iter()
-            .enumerate()
-            .map(|(i, count)| {
-                let start = window_start + ChronoDuration::milliseconds(bucket_ms * i as i64);
-                let end = start + ChronoDuration::milliseconds(bucket_ms);
-                ActivityBucket { start, end, count }
-            })
-            .collect()
-    }
-}
-
-fn in_time_range(
-    ts: DateTime<Utc>,
-    from: Option<DateTime<Utc>>,
-    to: Option<DateTime<Utc>>,
-) -> bool {
-    if let Some(from) = from {
-        if ts < from {
-            return false;
-        }
-    }
-    if let Some(to) = to {
-        if ts >= to {
-            return false;
-        }
-    }
-    true
-}
-
-pub fn parse_line(line: &str) -> Value {
-    let trimmed = line.trim();
-    if trimmed.is_empty() {
-        return Value::Object(Map::from_iter([(
-            "_raw".to_string(),
-            Value::String(String::new()),
-        )]));
-    }
-    match serde_json::from_str::<Value>(trimmed) {
-        Ok(Value::Object(obj)) => Value::Object(obj),
-        Ok(other) => Value::Object(Map::from_iter([("_value".to_string(), other)])),
-        Err(_) => Value::Object(Map::from_iter([(
-            "_raw".to_string(),
-            Value::String(trimmed.to_string()),
-        )])),
-    }
-}
-
-/// Inject or overwrite top-level `cmd` on a log payload object.
-fn inject_cmd(data: &mut Value, cmd: &str) {
-    if let Value::Object(map) = data {
-        map.insert("cmd".to_string(), Value::String(cmd.to_string()));
-    }
-}
-
-/// Inject or overwrite top-level `_mzp` receiver metadata on a log payload object.
-fn inject_mzp(data: &mut Value, mzp: &MzpMeta) {
-    if let Value::Object(map) = data {
-        if let Ok(value) = serde_json::to_value(mzp) {
-            map.insert("_mzp".to_string(), value);
-        }
-    }
-}
-
-fn try_parse_json_object(line: &str) -> Option<Value> {
-    let trimmed = line.trim();
-    match serde_json::from_str::<Value>(trimmed) {
-        Ok(Value::Object(obj)) => Some(Value::Object(obj)),
-        _ => None,
-    }
-}
-
-fn raw_payloads_from_lines(lines: Vec<String>) -> Vec<Value> {
-    lines
-        .into_iter()
-        .map(|line| Value::Object(Map::from_iter([("_raw".to_string(), Value::String(line))])))
-        .collect()
-}
-
-fn estimate_bytes(service: &str, data: &Value) -> u64 {
-    let json_len = data.to_string().len() as u64;
-    let overhead = 64 + service.len() as u64;
-    json_len + overhead
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::filter::CompiledQuery;
+    use chrono::Duration as ChronoDuration;
     use serde_json::json;
+    use std::sync::Arc;
 
     #[tokio::test]
     async fn reassembles_pretty_multiline_object() {
@@ -587,14 +412,16 @@ mod tests {
                 Some("npm test"),
                 None,
             )
-            .await;
+            .await
+            .into_entries();
         assert_eq!(json_entries.len(), 1);
         assert_eq!(json_entries[0].data["cmd"], json!("npm test"));
         assert_eq!(json_entries[0].data["msg"], json!("hi"));
 
         let raw_entries = store
             .push_line_with_meta("/Users/me/app", "plain text", Some("cargo run"), None)
-            .await;
+            .await
+            .into_entries();
         assert_eq!(raw_entries.len(), 1);
         assert_eq!(raw_entries[0].data["_raw"], json!("plain text"));
         assert_eq!(raw_entries[0].data["cmd"], json!("cargo run"));
@@ -616,14 +443,16 @@ mod tests {
                 None,
                 Some(&mzp),
             )
-            .await;
+            .await
+            .into_entries();
         assert_eq!(json_entries.len(), 1);
         assert_eq!(json_entries[0].data["msg"], json!("hi"));
         assert_eq!(json_entries[0].data["_mzp"], json!(mzp));
 
         let raw_entries = store
             .push_line_with_meta("/Users/me/app", "plain text", None, Some(&mzp))
-            .await;
+            .await
+            .into_entries();
         assert_eq!(raw_entries.len(), 1);
         assert_eq!(raw_entries[0].data["_raw"], json!("plain text"));
         assert_eq!(raw_entries[0].data["_mzp"], json!(mzp));
@@ -828,6 +657,93 @@ mod tests {
             )
             .await;
         assert_eq!(one.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn properties_ws_only_on_schema_change() {
+        let store = Store::new(1_000_000);
+        let mut rx = store.subscribe();
+        store
+            .push_line("api", r#"{"level":"info","msg":"a"}"#)
+            .await;
+        let mut saw_props = false;
+        while let Ok(ev) = rx.try_recv() {
+            if matches!(ev, WsEvent::Properties { .. }) {
+                saw_props = true;
+            }
+        }
+        assert!(saw_props, "first ingest should publish properties");
+
+        // Same paths/types/samples — only the log event should fire.
+        store
+            .push_line("api", r#"{"level":"info","msg":"a"}"#)
+            .await;
+        let mut saw_props_again = false;
+        let mut saw_log = false;
+        while let Ok(ev) = rx.try_recv() {
+            match ev {
+                WsEvent::Properties { .. } => saw_props_again = true,
+                WsEvent::Log { .. } => saw_log = true,
+                _ => {}
+            }
+        }
+        assert!(saw_log);
+        assert!(
+            !saw_props_again,
+            "same schema should not rebroadcast properties"
+        );
+
+        store
+            .push_line("api", r#"{"level":"info","msg":"c","extra":1}"#)
+            .await;
+        let mut saw_new_props = false;
+        while let Ok(ev) = rx.try_recv() {
+            if matches!(ev, WsEvent::Properties { .. }) {
+                saw_new_props = true;
+            }
+        }
+        assert!(saw_new_props, "new field should publish properties");
+    }
+
+    #[tokio::test]
+    async fn concurrent_ingest_and_query() {
+        let store = Arc::new(Store::new(1_000_000));
+        let mut handles = Vec::new();
+        for i in 0..8 {
+            let store = Arc::clone(&store);
+            handles.push(tokio::spawn(async move {
+                for j in 0..20 {
+                    store
+                        .push_line("api", &format!(r#"{{"worker":{i},"n":{j}}}"#))
+                        .await;
+                }
+            }));
+        }
+        let store_q = Arc::clone(&store);
+        handles.push(tokio::spawn(async move {
+            for _ in 0..10 {
+                let _ = store_q
+                    .query_logs(None, None, 5, &CompiledQuery::MatchAll, None, None)
+                    .await;
+                let _ = store_q.search_properties(None, None).await;
+            }
+        }));
+        for h in handles {
+            h.await.expect("task");
+        }
+        let stats = store.stats().await;
+        assert_eq!(stats.count, 160);
+    }
+
+    #[tokio::test]
+    async fn blocked_push_returns_blocked_variant() {
+        let store = Store::new(1_000_000);
+        store.push_line("api", r#"{"msg":"hi"}"#).await;
+        store.disconnect_service("api").await;
+        assert!(store
+            .push_line_with_meta("api", r#"{"msg":"nope"}"#, None, None)
+            .await
+            .is_blocked());
     }
 
     #[tokio::test]

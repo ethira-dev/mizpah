@@ -1,0 +1,9 @@
+{
+  "id": 42,
+  "receivedAt": "2026-07-17T00:00:00Z",
+  "service": "api",
+  "data": {
+    "level": "error",
+    "msg": "timeout"
+  }
+}

@@ -16,7 +16,9 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { useMizpah } from "@/hooks/use-mizpah"
-import { fetchUpdateStatus, formatBytes, type UpdateStatus } from "@/lib/api"
+import { fetchUpdateStatus } from "@/lib/api"
+import { formatBytes } from "@/lib/log-format"
+import type { UpdateStatus } from "@/lib/types"
 import { readQueryFromSession, writeQueryToSession } from "@/lib/filter-storage"
 import { pushHistory } from "@/lib/query-library-storage"
 import {
@@ -157,6 +159,7 @@ export function App() {
 
         <div className="flex min-h-0 flex-1">
           <PropertyFilterDrawer
+            properties={properties}
             propertiesRevision={propertiesRevision}
             propertyCount={properties.length}
             services={services}

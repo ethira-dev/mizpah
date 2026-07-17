@@ -1,3 +1,32 @@
+export function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`
+  if (n < 1024 * 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(1)} MB`
+  return `${(n / (1024 * 1024 * 1024)).toFixed(2)} GB`
+}
+
+export function summarizeLog(data: Record<string, unknown>): string {
+  for (const key of ["msg", "message", "error", "event", "_raw"]) {
+    const v = data[key]
+    if (typeof v === "string" && v.trim()) return v
+  }
+  try {
+    const s = JSON.stringify(data)
+    return s.length > 160 ? `${s.slice(0, 160)}…` : s
+  } catch {
+    return "(unserializable)"
+  }
+}
+
+export function levelOf(data: Record<string, unknown>): string | null {
+  for (const key of ["level", "severity", "lvl"]) {
+    const v = data[key]
+    if (typeof v === "string") return v.toLowerCase()
+    if (typeof v === "number") return String(v)
+  }
+  return null
+}
+
 /** Relative time like "12s ago" / "3m ago". */
 export function formatRelativeTime(iso: string, now = Date.now()): string {
   const t = new Date(iso).getTime()

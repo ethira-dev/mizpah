@@ -1,0 +1,38 @@
+[
+  {
+    "type": "log",
+    "entry": {
+      "id": 1,
+      "receivedAt": "2026-07-17T00:00:00Z",
+      "service": "api",
+      "data": { "msg": "hi" }
+    }
+  },
+  {
+    "type": "evicted",
+    "ids": [1, 2, 3]
+  },
+  {
+    "type": "services",
+    "names": ["api", "web"],
+    "blocked": ["old"]
+  },
+  {
+    "type": "properties",
+    "paths": [
+      {
+        "path": "level",
+        "types": ["string"],
+        "sampleValues": ["error"],
+        "count": 3
+      }
+    ]
+  },
+  {
+    "type": "pong"
+  },
+  {
+    "type": "lagged",
+    "skipped": 7
+  }
+]

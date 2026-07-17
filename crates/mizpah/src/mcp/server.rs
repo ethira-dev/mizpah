@@ -1,6 +1,6 @@
 //! Stdio MCP server exposing hub query tools.
 
-use crate::mcp::client::{HubClient, HubError, DEFAULT_LIMIT};
+use crate::mcp::client::{HubClient, HubClientError, DEFAULT_LIMIT};
 use rmcp::{
     handler::server::{router::tool::ToolRouter, wrapper::Parameters},
     model::{
@@ -62,7 +62,7 @@ pub struct GetLogsAroundArgs {
     pub q: Option<String>,
 }
 
-fn hub_err(err: HubError) -> McpError {
+fn hub_err(err: HubClientError) -> McpError {
     McpError::internal_error(err.to_string(), None)
 }
 
@@ -169,5 +169,18 @@ impl ServerHandler for MizpahMcp {
                  `my-app | mizpah` or `my-app | mizpah --service <name>`."
                     .to_string(),
             )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn mcp_server_constructs_with_tool_router() {
+        let mcp = MizpahMcp::new("http://127.0.0.1:1738");
+        let info = mcp.get_info();
+        assert!(!info.instructions.unwrap_or_default().is_empty());
+        let _ = mcp.tool_router;
     }
 }

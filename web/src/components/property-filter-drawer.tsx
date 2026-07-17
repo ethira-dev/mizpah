@@ -29,6 +29,8 @@ const OPEN_STORAGE_KEY = "mizpah.propertyDrawer.open.v2"
 const LEVEL_PATHS = ["level", "severity", "severity.name", "severity.level"]
 
 type PropertyFilterDrawerProps = {
+  /** Live hub property list (autocomplete / drawer seed). */
+  properties: PropertyInfo[]
   /** Bumps when the hub rediscovers properties so the open drawer can refresh. */
   propertiesRevision: number
   /** Known property count from the live hub (for collapsed-rail indicator). */
@@ -97,6 +99,7 @@ function findLevelProperty(items: PropertyInfo[]): PropertyInfo | undefined {
 }
 
 export function PropertyFilterDrawer({
+  properties,
   propertiesRevision,
   propertyCount = 0,
   services,
@@ -149,13 +152,19 @@ export function PropertyFilterDrawer({
     let cancelled = false
     const id = window.setTimeout(() => {
       if (cancelled) return
+      // Seed from hub state, then enrich via REST (values/counts).
+      const q = debouncedSearch.toLowerCase()
+      const seeded = q
+        ? properties.filter((p) => p.path.toLowerCase().includes(q))
+        : properties
+      setItems(seeded)
       setLoading(true)
       void fetchProperties({ q: debouncedSearch || undefined })
         .then((props) => {
           if (!cancelled) setItems(props)
         })
         .catch(() => {
-          if (!cancelled) setItems([])
+          /* keep seeded hub list */
         })
         .finally(() => {
           if (!cancelled) setLoading(false)
@@ -166,7 +175,7 @@ export function PropertyFilterDrawer({
       cancelled = true
       window.clearTimeout(id)
     }
-  }, [open, debouncedSearch, propertiesRevision])
+  }, [open, debouncedSearch, propertiesRevision, properties])
 
   const searching = debouncedSearch.length > 0
   const displayCount = items.length > 0 ? items.length : propertyCount

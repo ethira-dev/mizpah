@@ -77,4 +77,47 @@ pub enum WsEvent {
     /// Heartbeat reply to a client `ping`.
     #[serde(rename = "pong")]
     Pong,
+    /// Broadcast subscriber fell behind; client should resync via REST.
+    #[serde(rename = "lagged")]
+    Lagged {
+        /// Number of broadcast messages dropped for this subscriber.
+        skipped: u64,
+    },
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn lagged_event_serializes_for_clients() {
+        let ev = WsEvent::Lagged { skipped: 42 };
+        let v = serde_json::to_value(&ev).unwrap();
+        assert_eq!(v, json!({"type": "lagged", "skipped": 42}));
+    }
+
+    #[test]
+    fn fixture_log_entry_roundtrip() {
+        let raw = include_str!("../tests/fixtures/log_entry.json");
+        let entry: LogEntry = serde_json::from_str(raw).expect("log_entry fixture");
+        assert_eq!(entry.id, 42);
+        assert_eq!(entry.service, "api");
+        let again = serde_json::to_value(&entry).unwrap();
+        assert_eq!(again["receivedAt"], "2026-07-17T00:00:00Z");
+        assert_eq!(again["data"]["msg"], "timeout");
+    }
+
+    #[test]
+    fn fixture_ws_events_deserialize() {
+        let raw = include_str!("../tests/fixtures/ws_events.json");
+        let events: Vec<WsEvent> = serde_json::from_str(raw).expect("ws_events fixture");
+        assert_eq!(events.len(), 6);
+        assert!(matches!(events[0], WsEvent::Log { .. }));
+        assert!(matches!(events[1], WsEvent::Evicted { .. }));
+        assert!(matches!(events[2], WsEvent::Services { .. }));
+        assert!(matches!(events[3], WsEvent::Properties { .. }));
+        assert!(matches!(events[4], WsEvent::Pong));
+        assert!(matches!(events[5], WsEvent::Lagged { skipped: 7 }));
+    }
 }

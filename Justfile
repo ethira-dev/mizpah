@@ -62,10 +62,20 @@ site-build:
 lint-web:
     cd web && npm run lint && npm run typecheck
 
-# Rust format + clippy
+# Rust format + clippy (matches CI curated pedantic denies)
 lint-rust:
     cargo fmt --check
-    cargo clippy -p mizpah -- -D warnings
+    cargo clippy -p mizpah --all-targets -- \
+      -D warnings \
+      -D clippy::manual_assert \
+      -D clippy::uninlined_format_args \
+      -D clippy::map_unwrap_or \
+      -D clippy::redundant_clone
 
-# Full local gate (same as PR CI, minus npm ci)
+# Supply-chain / unused deps (requires cargo-deny + cargo-machete installed)
+lint-deps:
+    cargo deny check
+    cargo machete
+
+# Full local gate (same as PR CI core, minus npm ci / deny / miri)
 check: lint-rust test lint-web

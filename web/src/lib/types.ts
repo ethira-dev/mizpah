@@ -50,3 +50,28 @@ export type WsEvent =
   | { type: "services"; names: string[]; blocked?: string[] }
   | { type: "properties"; paths: PropertyInfo[] }
   | { type: "pong" }
+  | { type: "lagged"; skipped: number }
+
+export type ServicesList = {
+  services: string[]
+  blocked: string[]
+}
+
+export type InvestigateTarget = "claude" | "cursor"
+
+export type UpdateChannel = "homebrew" | "direct"
+
+export type UpdateStatus = {
+  installedVersion: string
+  latestVersion?: string
+  updateAvailable: boolean
+  channel: UpdateChannel
+  busy: boolean
+}
+
+export type UpdateEvent = {
+  step: string
+  progress: number
+  error?: string
+  restarting?: boolean
+}

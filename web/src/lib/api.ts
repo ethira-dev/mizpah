@@ -1,4 +1,21 @@
-import type { ActivityBucket, LogEntry, PropertyInfo, Stats } from "./types"
+import type {
+  ActivityBucket,
+  InvestigateTarget,
+  LogEntry,
+  PropertyInfo,
+  ServicesList,
+  Stats,
+  UpdateEvent,
+  UpdateStatus,
+} from "./types"
+
+export type {
+  InvestigateTarget,
+  ServicesList,
+  UpdateChannel,
+  UpdateEvent,
+  UpdateStatus,
+} from "./types"
 
 export async function fetchLogs(opts: {
   service?: string
@@ -41,11 +58,6 @@ export async function fetchActivity(opts?: {
   if (!res.ok) throw new Error(`activity: ${res.status}`)
   const data = (await res.json()) as { buckets: ActivityBucket[] }
   return data.buckets
-}
-
-export type ServicesList = {
-  services: string[]
-  blocked: string[]
 }
 
 export async function fetchServices(): Promise<ServicesList> {
@@ -106,37 +118,6 @@ export async function fetchStats(): Promise<Stats> {
   return res.json()
 }
 
-export function formatBytes(n: number): string {
-  if (n < 1024) return `${n} B`
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`
-  if (n < 1024 * 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(1)} MB`
-  return `${(n / (1024 * 1024 * 1024)).toFixed(2)} GB`
-}
-
-export function summarizeLog(data: Record<string, unknown>): string {
-  for (const key of ["msg", "message", "error", "event", "_raw"]) {
-    const v = data[key]
-    if (typeof v === "string" && v.trim()) return v
-  }
-  try {
-    const s = JSON.stringify(data)
-    return s.length > 160 ? `${s.slice(0, 160)}…` : s
-  } catch {
-    return "(unserializable)"
-  }
-}
-
-export function levelOf(data: Record<string, unknown>): string | null {
-  for (const key of ["level", "severity", "lvl"]) {
-    const v = data[key]
-    if (typeof v === "string") return v.toLowerCase()
-    if (typeof v === "number") return String(v)
-  }
-  return null
-}
-
-export type InvestigateTarget = "claude" | "cursor"
-
 export async function startInvestigate(
   target: InvestigateTarget,
   id: number
@@ -150,23 +131,6 @@ export async function startInvestigate(
     const body = await res.text().catch(() => "")
     throw new Error(body || `investigate: ${res.status}`)
   }
-}
-
-export type UpdateChannel = "homebrew" | "direct"
-
-export type UpdateStatus = {
-  installedVersion: string
-  latestVersion?: string
-  updateAvailable: boolean
-  channel: UpdateChannel
-  busy: boolean
-}
-
-export type UpdateEvent = {
-  step: string
-  progress: number
-  error?: string
-  restarting?: boolean
 }
 
 export async function fetchUpdateStatus(): Promise<UpdateStatus> {

@@ -21,12 +21,20 @@ cargo build --release
 | `just build` | UI + debug binary |
 | `just test` | Rust unit tests |
 | `just web-dev` | Vite (proxies API/WS to `:1738`) |
-| `just lint-rust` | `cargo fmt --check` + clippy |
+| `just lint-rust` | `cargo fmt --check` + clippy (incl. curated pedantic) |
+| `just lint-deps` | `cargo deny check` + `cargo machete` |
 | `just lint-web` | eslint + tsc |
-| `just check` | lint-rust + test + lint-web (matches PR CI) |
+| `just check` | lint-rust + test + lint-web (matches PR CI core) |
 | `just site-dev` / `site-build` | Docs site (`site/`, base `/mizpah/`) |
 
-CI: `.github/workflows/ci.yml`. Pages: `.github/workflows/pages.yml` → [ethira-dev.github.io/mizpah](https://ethira-dev.github.io/mizpah/).
+CI: `.github/workflows/ci.yml` (fmt, clippy, test, cargo-deny, machete, miri, audit). Pages: `.github/workflows/pages.yml` → [ethira-dev.github.io/mizpah](https://ethira-dev.github.io/mizpah/).
+
+## Hub trust model
+
+The hub exposes unauthenticated ingest, query, investigate, and update APIs. Binding defaults to `127.0.0.1`.
+
+- Loopback binds (`127.0.0.1`, `::1`, `localhost`) are always allowed.
+- Non-loopback binds require `--allow-remote` and print a warning. Prefer an SSH tunnel or an authenticating reverse proxy if you expose Mizpah beyond the machine.
 
 ## Architecture
 
@@ -43,7 +51,18 @@ mzp mcp            ──► stdio MCP ──► HubClient ──► GET /api/lo
 mzp open           ──► browser → http://127.0.0.1:1738
 ```
 
-Crates live under `crates/mizpah`. Web UI under `web/`. Marketing/docs under `site/`.
+Rust modules under `crates/mizpah/src/`:
+
+| Area | Modules |
+|------|---------|
+| Hub lifecycle | `hub/` (probe, spawn, start/stop, PID file), defaults |
+| Shared helpers | `util/` (config dir, atomic write, PATH/`which`, shell quote), `ingest_forward` |
+| Store / API | `store/{ingest,query,activity}`, `api/{routes,ws,static_files}`, `models`, `error` |
+| Attach | `shell_attach/`, `browser_attach/`, `agent_hooks/`, `shell_forward` |
+| Agents / MCP | `mcp/`, `investigate`, `filter`, `properties` |
+| CLI | `cli` (clap + dispatch), `main` (pipe mode + `run_hub`) |
+
+Web UI under `web/` (`hooks/use-mizpah` + `mizpah-connection`, `lib/{api,types,log-format}`). Marketing/docs under `site/`. Wire-shape fixtures: `crates/mizpah/tests/fixtures/` (Rust) and `web/src/lib/api-contract.ts` (TS).
 
 ## License
 

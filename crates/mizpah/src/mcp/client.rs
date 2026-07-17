@@ -9,7 +9,7 @@ pub const DEFAULT_LIMIT: usize = 20;
 pub const MAX_LIMIT: usize = 50;
 
 #[derive(Debug, Error)]
-pub enum HubError {
+pub enum HubClientError {
     #[error("Mizpah hub is not reachable at {url}. Start a hub first, e.g. `my-app | mizpah`")]
     Unreachable { url: String, source: reqwest::Error },
     #[error("hub request failed: {0}")]
@@ -62,36 +62,36 @@ impl HubClient {
         &self,
         path: &str,
         query: &[(&str, String)],
-    ) -> Result<T, HubError> {
+    ) -> Result<T, HubClientError> {
         let url = format!("{}{path}", self.base_url);
         let response = self.http.get(&url).query(query).send().await.map_err(|e| {
             if e.is_connect() || e.is_timeout() {
-                HubError::Unreachable {
+                HubClientError::Unreachable {
                     url: self.base_url.clone(),
                     source: e,
                 }
             } else {
-                HubError::Request(e)
+                HubClientError::Request(e)
             }
         })?;
 
         let status = response.status();
         if !status.is_success() {
             let body = response.text().await.unwrap_or_default();
-            return Err(HubError::Http {
+            return Err(HubClientError::Http {
                 status: status.as_u16(),
                 body,
             });
         }
 
-        response.json().await.map_err(HubError::Request)
+        response.json().await.map_err(HubClientError::Request)
     }
 
-    pub async fn list_services(&self) -> Result<ServicesResponse, HubError> {
+    pub async fn list_services(&self) -> Result<ServicesResponse, HubClientError> {
         self.get_json("/api/services", &[]).await
     }
 
-    pub async fn get_stats(&self) -> Result<Value, HubError> {
+    pub async fn get_stats(&self) -> Result<Value, HubClientError> {
         self.get_json("/api/stats", &[]).await
     }
 
@@ -99,7 +99,7 @@ impl HubClient {
         &self,
         service: Option<&str>,
         q: Option<&str>,
-    ) -> Result<PropertiesResponse, HubError> {
+    ) -> Result<PropertiesResponse, HubClientError> {
         let mut query = Vec::new();
         if let Some(svc) = service.filter(|s| !s.is_empty()) {
             query.push(("service", svc.to_string()));
@@ -116,7 +116,7 @@ impl HubClient {
         q: Option<&str>,
         limit: Option<usize>,
         cursor: Option<u64>,
-    ) -> Result<LogsResponse, HubError> {
+    ) -> Result<LogsResponse, HubClientError> {
         let mut query = Vec::new();
         if let Some(svc) = service.filter(|s| !s.is_empty()) {
             query.push(("service", svc.to_string()));
@@ -139,7 +139,7 @@ impl HubClient {
         after: usize,
         service: Option<&str>,
         q: Option<&str>,
-    ) -> Result<LogsResponse, HubError> {
+    ) -> Result<LogsResponse, HubClientError> {
         let before = before.min(MAX_LIMIT);
         let after = after.min(MAX_LIMIT);
         let limit = (before + after + 1).clamp(1, MAX_LIMIT);
@@ -155,8 +155,7 @@ impl HubClient {
             entry
                 .get("id")
                 .and_then(|v| v.as_u64())
-                .map(|eid| eid >= min_id && eid <= max_id)
-                .unwrap_or(false)
+                .is_some_and(|eid| eid >= min_id && eid <= max_id)
         });
         response
             .entries

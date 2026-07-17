@@ -71,40 +71,18 @@ pub fn find_cli(target: InvestigateTarget) -> Result<PathBuf, String> {
 }
 
 fn find_on_path(names: &[&str]) -> Option<PathBuf> {
-    let path = std::env::var_os("PATH")?;
-    for dir in std::env::split_paths(&path) {
-        for name in names {
-            let candidate = dir.join(name);
-            if is_executable(&candidate) {
-                return Some(candidate);
-            }
-            #[cfg(windows)]
-            {
-                let with_exe = dir.join(format!("{name}.exe"));
-                if is_executable(&with_exe) {
-                    return Some(with_exe);
-                }
+    for name in names {
+        if let Some(p) = crate::util::which(name) {
+            return Some(p);
+        }
+        #[cfg(windows)]
+        {
+            if let Some(p) = crate::util::which(&format!("{name}.exe")) {
+                return Some(p);
             }
         }
     }
     None
-}
-
-fn is_executable(path: &Path) -> bool {
-    if !path.is_file() {
-        return false;
-    }
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        path.metadata()
-            .map(|m| m.permissions().mode() & 0o111 != 0)
-            .unwrap_or(false)
-    }
-    #[cfg(not(unix))]
-    {
-        true
-    }
 }
 
 /// Write prompt + launcher script, then open a new terminal running the agent.
@@ -127,8 +105,7 @@ pub fn launch_session(
     let prompt = build_prompt(entry);
     let stamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_millis())
-        .unwrap_or(0);
+        .map_or(0, |d| d.as_millis());
     let tmp = std::env::temp_dir();
     let prompt_path = tmp.join(format!("mizpah-investigate-{stamp}.txt"));
 
@@ -201,8 +178,7 @@ fn write_launcher(
 }
 
 fn sh_single_quote(s: &str) -> String {
-    // Wrap in single quotes; escape embedded ' as '\''
-    format!("'{}'", s.replace('\'', "'\\''"))
+    crate::util::shell_single_quote(s)
 }
 
 #[cfg(windows)]

@@ -1,3 +1,4 @@
+use crate::error::FilterError;
 use cel::{Context, Program, Value as CelValue};
 use serde_json::Value;
 use std::sync::Arc;
@@ -10,14 +11,14 @@ pub enum CompiledQuery {
 }
 
 /// Compile a CEL filter expression. Empty / whitespace → match all.
-pub fn compile_query(q: &str) -> Result<CompiledQuery, String> {
+pub fn compile_query(q: &str) -> Result<CompiledQuery, FilterError> {
     let trimmed = q.trim();
     if trimmed.is_empty() {
         return Ok(CompiledQuery::MatchAll);
     }
     Program::compile(trimmed)
         .map(|p| CompiledQuery::Cel(Arc::new(p)))
-        .map_err(|e| format!("invalid CEL query: {e}"))
+        .map_err(|e| FilterError::Compile(e.to_string()))
 }
 
 /// Evaluate a compiled query against a log entry.
@@ -44,7 +45,7 @@ pub fn matches_entry(service: &str, data: &Value, query: &CompiledQuery) -> bool
     }
 }
 
-fn build_context(service: &str, data: &Value) -> Result<Context<'static>, String> {
+fn build_context(service: &str, data: &Value) -> Result<Context<'static>, FilterError> {
     let mut ctx = Context::default();
 
     if let Value::Object(map) = data {
@@ -53,16 +54,25 @@ fn build_context(service: &str, data: &Value) -> Result<Context<'static>, String
                 continue;
             }
             ctx.add_variable(key.as_str(), value)
-                .map_err(|e| format!("bind {key}: {e}"))?;
+                .map_err(|e| FilterError::Bind {
+                    key: key.clone(),
+                    message: e.to_string(),
+                })?;
         }
     }
 
     ctx.add_variable("service", service)
-        .map_err(|e| format!("bind service: {e}"))?;
+        .map_err(|e| FilterError::Bind {
+            key: "service".into(),
+            message: e.to_string(),
+        })?;
 
     if let Some(level) = level_of(data) {
         ctx.add_variable("level", level)
-            .map_err(|e| format!("bind level: {e}"))?;
+            .map_err(|e| FilterError::Bind {
+                key: "level".into(),
+                message: e.to_string(),
+            })?;
     }
 
     Ok(ctx)

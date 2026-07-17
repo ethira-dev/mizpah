@@ -26,19 +26,16 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import {
-  levelOf,
-  startInvestigate,
-  summarizeLog,
-  type InvestigateTarget,
-} from "@/lib/api"
+import { startInvestigate } from "@/lib/api"
 import {
   copyText,
   formatRelativeTime,
   levelAccentClass,
   levelBadgeClass,
+  levelOf,
+  summarizeLog,
 } from "@/lib/log-format"
-import type { LogEntry } from "@/lib/types"
+import type { InvestigateTarget, LogEntry } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
 const CONTEXT_RADIUS = 8
