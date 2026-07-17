@@ -68,9 +68,9 @@ fn hub_err(err: HubClientError) -> McpError {
 }
 
 fn toon_result(value: impl Serialize) -> Result<CallToolResult, McpError> {
-    Ok(CallToolResult::success(vec![ContentBlock::text(format_value(
-        &value,
-    ))]))
+    Ok(CallToolResult::success(vec![ContentBlock::text(
+        format_value(&value),
+    )]))
 }
 
 #[tool_router]
@@ -132,9 +132,9 @@ impl MizpahMcp {
             )
             .await
             .map_err(hub_err)?;
-        Ok(CallToolResult::success(vec![ContentBlock::text(format_logs(
-            resp,
-        ))]))
+        Ok(CallToolResult::success(vec![ContentBlock::text(
+            format_logs(resp),
+        )]))
     }
 
     #[tool(
@@ -155,9 +155,9 @@ impl MizpahMcp {
             )
             .await
             .map_err(hub_err)?;
-        Ok(CallToolResult::success(vec![ContentBlock::text(format_logs(
-            resp,
-        ))]))
+        Ok(CallToolResult::success(vec![ContentBlock::text(
+            format_logs(resp),
+        )]))
     }
 }
 

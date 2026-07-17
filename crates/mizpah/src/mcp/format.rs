@@ -162,9 +162,15 @@ mod tests {
     #[test]
     fn toon_encode_logs_succeeds_with_markers() {
         let text = format_logs(sample_logs());
-        assert!(text.contains("entries["), "expected tabular entries marker, got:\n{text}");
+        assert!(
+            text.contains("entries["),
+            "expected tabular entries marker, got:\n{text}"
+        );
         assert!(text.contains("hasMore:"), "expected hasMore, got:\n{text}");
-        assert!(!text.contains("_mzp"), "expected _mzp stripped, got:\n{text}");
+        assert!(
+            !text.contains("_mzp"),
+            "expected _mzp stripped, got:\n{text}"
+        );
     }
 
     #[test]
@@ -243,7 +249,10 @@ mod tests {
             has_more: false,
         };
         let text = format_logs(resp);
-        assert!(text.contains("timeout") || text.contains("error"), "got:\n{text}");
+        assert!(
+            text.contains("timeout") || text.contains("error"),
+            "got:\n{text}"
+        );
         assert!(!text.contains("_mzp"), "got:\n{text}");
         assert!(text.contains("hasMore:"), "got:\n{text}");
     }
