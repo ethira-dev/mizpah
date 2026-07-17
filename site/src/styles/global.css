@@ -1,6 +1,9 @@
 @import "tailwindcss";
 @import "@fontsource/ibm-plex-mono/400.css";
 @import "@fontsource/ibm-plex-mono/500.css";
+@import "@fontsource/space-grotesk/400.css";
+@import "@fontsource/space-grotesk/500.css";
+@import "@fontsource/space-grotesk/600.css";
 
 @font-face {
   font-family: "Geist Pixel";
@@ -13,6 +16,8 @@
 @theme inline {
   --font-sans: "Geist Pixel", sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+  /* Ethira brand: wordmark + navigation (https://www.ethira.dev/brand) */
+  --font-brand: "Space Grotesk", ui-sans-serif, sans-serif;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-primary: var(--primary);
