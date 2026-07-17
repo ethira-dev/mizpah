@@ -168,10 +168,16 @@ impl HubClient {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(not(miri))]
     use crate::api::{self, AppState};
+    #[cfg(not(miri))]
     use crate::store::Store;
+    #[cfg(not(miri))]
     use std::net::SocketAddr;
+    #[cfg(not(miri))]
     use std::sync::Arc;
+    #[cfg(not(miri))]
     use tokio::net::TcpListener;
 
     #[test]
@@ -182,6 +188,8 @@ mod tests {
         assert_eq!(HubClient::clamp_limit(Some(10)), 10);
     }
 
+    // Real TCP / reqwest sockets are unsupported under Miri.
+    #[cfg(not(miri))]
     async fn spawn_test_hub() -> (String, Arc<Store>) {
         let store = Arc::new(Store::new(1024 * 1024));
         let state = AppState {
@@ -208,6 +216,7 @@ mod tests {
         (format!("http://{addr}"), store)
     }
 
+    #[cfg(not(miri))]
     #[tokio::test]
     async fn search_logs_against_hub() {
         let (url, store) = spawn_test_hub().await;
@@ -227,6 +236,7 @@ mod tests {
         assert_eq!(resp.entries[0]["data"]["msg"].as_str(), Some("boom"));
     }
 
+    #[cfg(not(miri))]
     #[tokio::test]
     async fn hub_unreachable_is_clear_error() {
         let client = HubClient::new("http://127.0.0.1:1");
@@ -238,6 +248,7 @@ mod tests {
         );
     }
 
+    #[cfg(not(miri))]
     #[tokio::test]
     async fn get_logs_around_window() {
         let (url, store) = spawn_test_hub().await;

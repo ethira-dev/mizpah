@@ -243,6 +243,8 @@ mod tests {
         assert_eq!(resp.status(), StatusCode::NOT_FOUND);
     }
 
+    // Update checks open real HTTPS sockets (unsupported under Miri).
+    #[cfg(not(miri))]
     #[tokio::test]
     async fn get_update_returns_status() {
         let app = test_app();
@@ -267,6 +269,7 @@ mod tests {
         assert!(parsed["channel"].is_string());
     }
 
+    #[cfg(not(miri))]
     #[tokio::test]
     async fn post_update_rejects_non_loopback() {
         let app = test_app();
@@ -284,6 +287,7 @@ mod tests {
         assert_eq!(resp.status(), StatusCode::FORBIDDEN);
     }
 
+    #[cfg(not(miri))]
     #[tokio::test]
     async fn post_update_no_update_is_400() {
         use axum::extract::ConnectInfo;
