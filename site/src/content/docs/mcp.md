@@ -21,13 +21,39 @@ Override hub URL with `MIZPAH_URL` (default `http://127.0.0.1:1738`).
 
 ## Agent skill
 
-Workflow skill aimed at **token and cost savings**: pipe into Mizpah, prefer JSON logs, query MCP with small limits — for Cursor and other agents that support [Agent Skills](https://agentskills.io):
+Workflow skill aimed at **token and cost savings**: pipe into Mizpah, prefer JSON logs, query MCP with small limits — for Cursor and other agents that support [Agent Skills](https://agentskills.io).
+
+### Install the skill
 
 ```bash
+# 1. Install mizpah (if you have not already)
+brew install ethira-dev/mizpah/mizpah
+
+# 2. Start a hub with a stream
+my-app 2>&1 | mzp --service api
+
+# 3. Install the agent skill (Cursor, Claude Code, Codex, …)
 npx skills add ethira-dev/mizpah
+
+# 4. Register MCP tools so search_logs / get_logs_around are available
+mzp mcp install
+# restart the agent client
 ```
 
-Also available as a Cursor plugin (repo-root `.cursor-plugin/` + `skills/mizpah/`). Install from the Cursor Marketplace / Customize when listed, or symlink locally — see the repo [PLUGIN.md](https://github.com/ethira-dev/mizpah/blob/main/PLUGIN.md). `mzp mcp install` remains the path for Claude Desktop, Codex, and other MCP clients.
+List skills in the package without installing:
+
+```bash
+npx skills add ethira-dev/mizpah --list
+```
+
+Install globally (all projects) or for one agent only:
+
+```bash
+npx skills add ethira-dev/mizpah -g
+npx skills add ethira-dev/mizpah -a cursor -a claude-code
+```
+
+Also available as a Cursor plugin (repo-root `.cursor-plugin/` + `skills/mizpah/`). Install from the Cursor Marketplace / Customize when listed, or symlink locally — see the repo [PLUGIN.md](https://github.com/ethira-dev/mizpah/blob/main/PLUGIN.md).
 
 ## Tools
 

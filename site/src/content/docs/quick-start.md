@@ -33,6 +33,16 @@ mzp mcp install            # register MCP in Cursor / Claude / Codex
 
 `mizpah` is an alias for `mzp`.
 
+## Agent skill (token savings)
+
+Teach the agent to pipe into Mizpah, prefer JSON logs, and query MCP with small limits instead of pasting stdout:
+
+```bash
+npx skills add ethira-dev/mizpah
+```
+
+Works with Cursor, Claude Code, Codex, and other [Agent Skills](https://agentskills.io) clients. Pair with `mzp mcp install` so tools are available. Full detail: [MCP & agents](../mcp/#agent-skill).
+
 ## Next
 
 - [Install](../install/)

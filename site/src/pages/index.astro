@@ -73,7 +73,8 @@ const withBase = (path: string) =>
           style="animation-delay: 0.45s"
         ><code
             ><span class="text-muted-foreground">$</span> brew install ethira-dev/mizpah/mizpah
-<span class="text-muted-foreground">$</span> my-app 2&gt;&amp;1 | mzp --service api</code
+<span class="text-muted-foreground">$</span> my-app 2&gt;&amp;1 | mzp --service api
+<span class="text-muted-foreground">$</span> npx skills add ethira-dev/mizpah</code
           ></pre>
 
         <div
@@ -218,18 +219,25 @@ const withBase = (path: string) =>
         Get going in 30 seconds
       </h2>
       <p class="mt-3 max-w-xl text-muted-foreground">
-        Homebrew, then pipe. Or attach a source.
+        Homebrew, pipe a service, then install the agent skill so Cursor and
+        friends query the hub instead of pasting dumps.
       </p>
       <div
         class="mt-10 overflow-x-auto rounded-xl border border-border bg-card p-5 sm:p-6"
       >
         <pre
           class="font-mono text-sm leading-relaxed text-foreground/90"><code
-            ><span class="text-muted-foreground"># install</span>
+            ><span class="text-muted-foreground"># install mizpah</span>
 brew install ethira-dev/mizpah/mizpah
 
 <span class="text-muted-foreground"># pipe a service</span>
 api-server 2&gt;&amp;1 | mzp --service api
+
+<span class="text-muted-foreground"># agent skill (token-saving workflow)</span>
+npx skills add ethira-dev/mizpah
+
+<span class="text-muted-foreground"># MCP tools (Cursor / Claude / Codex)</span>
+mzp mcp install
 
 <span class="text-muted-foreground"># or attach</span>
 mzp attach              <span class="text-muted-foreground"># shell</span>

@@ -13,6 +13,22 @@ mzp --help
 
 After install, start a hub once (or run `mzp mcp install`) so Cursor / Claude Desktop / Claude Code / Codex pick up the MCP server. Restart those clients afterward.
 
+## Agent skill
+
+Install the Mizpah skill so agents follow the token-saving workflow (pipe → JSON logs → small MCP queries):
+
+```bash
+npx skills add ethira-dev/mizpah
+```
+
+Optional: also register MCP tools for Cursor / Claude / Codex:
+
+```bash
+mzp mcp install
+```
+
+See [MCP & agents](../mcp/#agent-skill) for the full tutorial.
+
 ## From source
 
 Requirements: [Rust](https://rustup.rs/) (stable) and Node.js 20+.
