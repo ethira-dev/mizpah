@@ -17,7 +17,7 @@ export function ClaudeMcpSession() {
           "Keep limits small: search_logs default 20, max 50",
         ]}
         whatsNew={[
-          "mizpah MCP: search_logs, get_logs_around, list_properties",
+          "mizpah MCP: search_logs / get_logs_around return TOON",
           'CEL filters: level == "error", msg.contains("timeout")',
         ]}
       />
@@ -35,26 +35,55 @@ export function ClaudeMcpSession() {
         <ClaudeToolCall
           tool="search_logs"
           arg='service: "api", q: level == "error", limit: 5'
-          result="3 matching logs"
+          result="3 matching logs (TOON)"
           defaultOpen
         >
-          {`[
-  { "id": 1842, "level": "error", "msg": "POST /api/ingest failed: connection refused" },
-  { "id": 1837, "level": "error", "msg": "timeout waiting for redis at 127.0.0.1:6379" },
-  { "id": 1829, "level": "error", "msg": "Unhandled exception in JobsController" }
-]`}
+          {`entries[3]:
+  - id: 1842
+    service: api
+    data:
+      level: error
+      msg: "POST /api/ingest failed: connection refused"
+  - id: 1837
+    service: api
+    data:
+      level: error
+      msg: "timeout waiting for redis at 127.0.0.1:6379"
+  - id: 1829
+    service: api
+    data:
+      level: error
+      msg: "Unhandled exception in JobsController"
+hasMore: false`}
         </ClaudeToolCall>
 
         <ClaudeToolCall
           tool="get_logs_around"
           arg="id: 1837, before: 2, after: 2"
-          result="5 logs around #1837"
+          result="5 logs around #1837 (TOON)"
         >
-          {`1826  info   redis pool warm
-1835  warn   redis latency p99=210ms
-1837  error  timeout waiting for redis at 127.0.0.1:6379
-1838  info   retry scheduled in 250ms
-1840  info   request completed 503`}
+          {`entries[5]:
+  - id: 1826
+    data:
+      level: info
+      msg: "redis pool warm"
+  - id: 1835
+    data:
+      level: warn
+      msg: "redis latency p99=210ms"
+  - id: 1837
+    data:
+      level: error
+      msg: "timeout waiting for redis at 127.0.0.1:6379"
+  - id: 1838
+    data:
+      level: info
+      msg: "retry scheduled in 250ms"
+  - id: 1840
+    data:
+      level: info
+      msg: "request completed 503"
+hasMore: false`}
         </ClaudeToolCall>
 
         <ClaudeMessage>

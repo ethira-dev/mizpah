@@ -8,7 +8,7 @@ mizpah is a local in-memory JSON log hub. The first process that can bind `127.0
 
 **UX:** virtualized live stream, CEL search with field autocomplete, click-through JSON detail.
 
-**Cost:** agents should query that buffer over MCP (`search_logs`, default limit 20) instead of pasting stdout or re-running tests and lint for every question.
+**Cost:** agents should query that buffer over MCP (`search_logs`, default limit 20, TOON results) instead of pasting stdout or re-running tests and lint for every question.
 
 ## Pipe a service
 

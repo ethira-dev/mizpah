@@ -14,11 +14,23 @@ const dumpLines = [
   { dim: true, text: "… 4,812 more lines pasted into chat …" },
 ]
 
-const filterRows = [
-  { id: "a1f3", level: "error", msg: "timeout calling redis" },
-  { id: "b8c2", level: "error", msg: "redis: connection refused" },
-  { id: "c0e9", level: "warn", msg: "retry exhausted after 3 attempts" },
-]
+const filterToon = `entries[3]:
+  - id: a1f3
+    service: api
+    data:
+      level: error
+      msg: "timeout calling redis"
+  - id: b8c2
+    service: api
+    data:
+      level: error
+      msg: "redis: connection refused"
+  - id: c0e9
+    service: api
+    data:
+      level: warn
+      msg: "retry exhausted after 3 attempts"
+hasMore: false`
 
 const prettyLines = [
   { dim: true, text: "$ npm test" },
@@ -42,10 +54,18 @@ const prettyLines = [
   { dim: true, text: "… scrolling pretty-printed stdout …" },
 ]
 
-const jsonFilterRows = [
-  { id: "e91a", level: "error", msg: "redis › reconnects on timeout" },
-  { id: "f2b0", level: "error", msg: "Expected true, Received false" },
-]
+const jsonFilterToon = `entries[2]:
+  - id: e91a
+    service: tests
+    data:
+      level: error
+      msg: "redis › reconnects on timeout"
+  - id: f2b0
+    service: tests
+    data:
+      level: error
+      msg: "Expected true, Received false"
+hasMore: false`
 ---
 
 <div class="token-compare-stack">
@@ -113,28 +133,10 @@ const jsonFilterRows = [
               >level == "error" · service=api · limit=5</code
             >
           </div>
-          <ul class="token-compare__hits">
-            {
-              filterRows.map((row) => (
-                <li class="token-compare__hit">
-                  <span
-                    class:list={[
-                      "token-compare__level",
-                      row.level === "error" && "token-compare__level--error",
-                      row.level === "warn" && "token-compare__level--warn",
-                    ]}
-                  >
-                    {row.level}
-                  </span>
-                  <span class="token-compare__msg">{row.msg}</span>
-                  <span class="token-compare__id">{row.id}</span>
-                </li>
-              ))
-            }
-          </ul>
+          <pre class="token-compare__toon" aria-label="TOON tool result">{filterToon}</pre>
           <div class="token-compare__meter token-compare__meter--good">
             <span>~400 tokens in context</span>
-            <span>only what matters</span>
+            <span>TOON · only what matters</span>
           </div>
         </div>
       </div>
@@ -223,27 +225,10 @@ const jsonFilterRows = [
               >level == "error" · service=tests · limit=5</code
             >
           </div>
-          <ul class="token-compare__hits">
-            {
-              jsonFilterRows.map((row) => (
-                <li class="token-compare__hit">
-                  <span
-                    class:list={[
-                      "token-compare__level",
-                      "token-compare__level--error",
-                    ]}
-                  >
-                    {row.level}
-                  </span>
-                  <span class="token-compare__msg">{row.msg}</span>
-                  <span class="token-compare__id">{row.id}</span>
-                </li>
-              ))
-            }
-          </ul>
+          <pre class="token-compare__toon" aria-label="TOON tool result">{jsonFilterToon}</pre>
           <div class="token-compare__meter token-compare__meter--good">
             <span>structured fields</span>
-            <span>CEL over JSON</span>
+            <span>CEL → TOON</span>
           </div>
         </div>
       </div>
@@ -416,52 +401,19 @@ const jsonFilterRows = [
     font-size: 0.68rem;
   }
 
-  .token-compare__hits {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 0.4rem;
+  .token-compare__toon {
     flex: 1;
-  }
-
-  .token-compare__hit {
-    display: grid;
-    grid-template-columns: auto 1fr auto;
-    gap: 0.5rem;
-    align-items: baseline;
-    padding: 0.45rem 0.55rem;
-    border-radius: 0.4rem;
+    margin: 0;
+    padding: 0.55rem 0.65rem;
+    overflow: auto;
+    border-radius: 0.5rem;
     border: 1px solid oklch(1 0 0 / 8%);
-    background: oklch(0.18 0.01 160);
-  }
-
-  .token-compare__level {
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    font-size: 0.62rem;
-    color: oklch(0.7 0.02 160);
-  }
-
-  .token-compare__level--error {
-    color: oklch(0.72 0.16 25);
-  }
-
-  .token-compare__level--warn {
-    color: oklch(0.82 0.12 85);
-  }
-
-  .token-compare__msg {
-    color: oklch(0.92 0.01 160);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .token-compare__id {
-    color: oklch(0.5 0.01 160);
-    font-size: 0.62rem;
+    background: oklch(0.12 0 0);
+    color: oklch(0.88 0.02 160);
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    line-height: 1.4;
+    white-space: pre;
   }
 
   .token-compare__meter {
@@ -519,16 +471,8 @@ const jsonFilterRows = [
       animation: token-dump-scroll 14s linear infinite;
     }
 
-    .token-compare__panel--save .token-compare__hit {
+    .token-compare__panel--save .token-compare__toon {
       animation: token-hit-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
-    }
-
-    .token-compare__panel--save .token-compare__hit:nth-child(2) {
-      animation-delay: 0.12s;
-    }
-
-    .token-compare__panel--save .token-compare__hit:nth-child(3) {
-      animation-delay: 0.24s;
     }
   }
 

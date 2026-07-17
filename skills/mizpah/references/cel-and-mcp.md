@@ -10,6 +10,8 @@
 | `search_logs` | `q?` (CEL), `service?`, `limit?`, `cursor?` | Newest-first; default limit **20**, max **50** |
 | `get_logs_around` | `id`, `before?` (5), `after?` (5), `service?`, `q?` | Window around an entry |
 
+Tool results are **TOON** (Token-Oriented Object Notation), not pretty JSON — same fields, fewer tokens. Log rows omit `_mzp`. Hub REST stays JSON. Details: https://ethira-dev.github.io/mizpah/docs/mcp/#tool-result-format-toon
+
 Hub URL: `MIZPAH_URL` or `http://127.0.0.1:3149`. Register clients with `mzp mcp install`.
 
 ## CEL examples

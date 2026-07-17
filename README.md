@@ -73,7 +73,7 @@ mzp mcp install            # Cursor / Claude / Codex
 mzp hub stop               # also: start | restart
 ```
 
-MCP tools (keep `search_logs` limits small: default 20, max 50): `list_services`, `get_stats`, `list_properties`, `search_logs`, `get_logs_around`.
+MCP tools (keep `search_logs` limits small: default 20, max 50; results in TOON): `list_services`, `get_stats`, `list_properties`, `search_logs`, `get_logs_around`.
 
 ## Agent skill
 

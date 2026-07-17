@@ -1,6 +1,7 @@
 //! Stdio MCP server exposing hub query tools.
 
 use crate::mcp::client::{HubClient, HubClientError, DEFAULT_LIMIT};
+use crate::mcp::format::{format_logs, format_properties, format_value};
 use rmcp::{
     handler::server::{router::tool::ToolRouter, wrapper::Parameters},
     model::{
@@ -9,7 +10,7 @@ use rmcp::{
     },
     schemars, tool, tool_handler, tool_router, ErrorData as McpError, ServerHandler,
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 #[derive(Clone)]
 pub struct MizpahMcp {
@@ -66,10 +67,10 @@ fn hub_err(err: HubClientError) -> McpError {
     McpError::internal_error(err.to_string(), None)
 }
 
-fn json_result(value: impl serde::Serialize) -> Result<CallToolResult, McpError> {
-    let text = serde_json::to_string_pretty(&value)
-        .map_err(|e| McpError::internal_error(e.to_string(), None))?;
-    Ok(CallToolResult::success(vec![ContentBlock::text(text)]))
+fn toon_result(value: impl Serialize) -> Result<CallToolResult, McpError> {
+    Ok(CallToolResult::success(vec![ContentBlock::text(
+        format_value(&value),
+    )]))
 }
 
 #[tool_router]
@@ -86,7 +87,7 @@ impl MizpahMcp {
     )]
     async fn list_services(&self) -> Result<CallToolResult, McpError> {
         let resp = self.hub.list_services().await.map_err(hub_err)?;
-        json_result(resp)
+        toon_result(resp)
     }
 
     #[tool(
@@ -94,11 +95,11 @@ impl MizpahMcp {
     )]
     async fn get_stats(&self) -> Result<CallToolResult, McpError> {
         let resp = self.hub.get_stats().await.map_err(hub_err)?;
-        json_result(resp)
+        toon_result(resp)
     }
 
     #[tool(
-        description = "List discovered JSON property paths (and sample values with occurrence counts) to help write CEL filters. Optionally scope to a service and/or search with q (matches path or sample value)."
+        description = "List discovered JSON property paths (and sample values with occurrence counts) to help write CEL filters. Optionally scope to a service and/or search with q (matches path or sample value). Results are TOON (token-efficient)."
     )]
     async fn list_properties(
         &self,
@@ -109,11 +110,13 @@ impl MizpahMcp {
             .list_properties(args.service.as_deref(), args.q.as_deref())
             .await
             .map_err(hub_err)?;
-        json_result(resp)
+        Ok(CallToolResult::success(vec![ContentBlock::text(
+            format_properties(resp),
+        )]))
     }
 
     #[tool(
-        description = "Search in-memory logs with an optional CEL filter. Prefer specific CEL (level, service, contains) and keep limit small (default 20, max 50). Returns newest-first entries plus hasMore for pagination via cursor."
+        description = "Search in-memory logs with an optional CEL filter. Prefer specific CEL (level, service, contains) and keep limit small (default 20, max 50). Returns newest-first entries plus hasMore for pagination via cursor. Results are TOON (token-efficient); `_mzp` is omitted."
     )]
     async fn search_logs(
         &self,
@@ -129,11 +132,13 @@ impl MizpahMcp {
             )
             .await
             .map_err(hub_err)?;
-        json_result(resp)
+        Ok(CallToolResult::success(vec![ContentBlock::text(
+            format_logs(resp),
+        )]))
     }
 
     #[tool(
-        description = "Fetch a small window of logs around a given entry id (for stack/context expansion). Defaults to 5 before and 5 after."
+        description = "Fetch a small window of logs around a given entry id (for stack/context expansion). Defaults to 5 before and 5 after. Results are TOON (token-efficient); `_mzp` is omitted."
     )]
     async fn get_logs_around(
         &self,
@@ -150,7 +155,9 @@ impl MizpahMcp {
             )
             .await
             .map_err(hub_err)?;
-        json_result(resp)
+        Ok(CallToolResult::success(vec![ContentBlock::text(
+            format_logs(resp),
+        )]))
     }
 }
 
@@ -164,6 +171,8 @@ impl ServerHandler for MizpahMcp {
                 "Mizpah exposes the live in-memory JSON log hub. \
                  Prefer CEL filters via search_logs (e.g. level == \"error\", msg.contains(\"timeout\")). \
                  Keep limits small (default 20, max 50) — never dump the full buffer. \
+                 Tool results are TOON (Token-Oriented Object Notation), not pretty JSON — denser for context. \
+                 MCP log rows omit `_mzp` receiver metadata. \
                  Use list_properties to discover fields, get_logs_around to expand context around an id. \
                  If tools fail because the hub is unreachable, tell the user to start a stream: \
                  `my-app | mizpah` or `my-app | mizpah --service <name>`."
@@ -183,7 +192,12 @@ mod tests {
         crate::util::ensure_rustls_crypto_provider();
         let mcp = MizpahMcp::new("http://127.0.0.1:3149");
         let info = mcp.get_info();
-        assert!(!info.instructions.unwrap_or_default().is_empty());
+        let instructions = info.instructions.unwrap_or_default();
+        assert!(!instructions.is_empty());
+        assert!(
+            instructions.contains("TOON"),
+            "server instructions should mention TOON results"
+        );
         let _ = mcp.tool_router;
     }
 }
