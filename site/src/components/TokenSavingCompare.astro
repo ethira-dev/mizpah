@@ -1,0 +1,555 @@
+---
+const dumpLines = [
+  { dim: true, text: "2026-07-17T10:01:02Z INFO  boot complete" },
+  { dim: true, text: "2026-07-17T10:01:02Z DEBUG pool size=32" },
+  { dim: true, text: "2026-07-17T10:01:03Z INFO  GET /health 200 1ms" },
+  { dim: true, text: "2026-07-17T10:01:04Z INFO  GET /ready 200 2ms" },
+  { dim: true, text: "2026-07-17T10:01:05Z DEBUG cache hit key=sess:…" },
+  { dim: true, text: "2026-07-17T10:01:06Z INFO  GET /api/items 200" },
+  { dim: true, text: "2026-07-17T10:01:07Z DEBUG sql SELECT * FROM…" },
+  { dim: false, text: "2026-07-17T10:01:08Z ERROR timeout calling redis" },
+  { dim: true, text: "2026-07-17T10:01:08Z WARN  retry attempt 1/3" },
+  { dim: true, text: "2026-07-17T10:01:09Z INFO  GET /api/items 200" },
+  { dim: true, text: "2026-07-17T10:01:10Z DEBUG metrics flush ok" },
+  { dim: true, text: "… 4,812 more lines pasted into chat …" },
+]
+
+const filterRows = [
+  { id: "a1f3", level: "error", msg: "timeout calling redis" },
+  { id: "b8c2", level: "error", msg: "redis: connection refused" },
+  { id: "c0e9", level: "warn", msg: "retry exhausted after 3 attempts" },
+]
+
+const prettyLines = [
+  { dim: true, text: "$ npm test" },
+  { dim: true, text: "" },
+  { dim: true, text: " PASS  src/health.test.ts" },
+  { dim: true, text: " PASS  src/items.test.ts" },
+  { dim: false, text: " FAIL  src/redis.test.ts" },
+  { dim: false, text: "  ● redis › reconnects on timeout" },
+  { dim: false, text: "" },
+  { dim: false, text: "    expect(received).toBe(true)" },
+  { dim: true, text: "" },
+  { dim: true, text: "    Expected: true" },
+  { dim: true, text: "    Received: false" },
+  { dim: true, text: "" },
+  { dim: true, text: "      42 |   await client.ping()" },
+  { dim: true, text: "      43 |   expect(client.ok).toBe(true)" },
+  { dim: true, text: "         |                     ^" },
+  { dim: true, text: "      at Object.<anonymous> (src/redis.test.ts:43:21)" },
+  { dim: true, text: "" },
+  { dim: true, text: "Test Suites: 1 failed, 11 passed, 12 total" },
+  { dim: true, text: "… scrolling pretty-printed stdout …" },
+]
+
+const jsonFilterRows = [
+  { id: "e91a", level: "error", msg: "redis › reconnects on timeout" },
+  { id: "f2b0", level: "error", msg: "Expected true, Received false" },
+]
+---
+
+<div class="token-compare-stack">
+  <div class="token-compare">
+    <article class="token-compare__panel token-compare__panel--waste">
+      <div class="mac-window">
+        <div class="mac-window__titlebar">
+          <div class="mac-window__traffic" aria-hidden="true">
+            <span class="mac-window__dot mac-window__dot--close"></span>
+            <span class="mac-window__dot mac-window__dot--min"></span>
+            <span class="mac-window__dot mac-window__dot--max"></span>
+          </div>
+          <span class="mac-window__title">agent · paste dump</span>
+          <span class="mac-window__titlebar-spacer"></span>
+        </div>
+        <div class="token-compare__body">
+          <p class="token-compare__bubble token-compare__bubble--user">
+            Why are requests failing? Here are the logs:
+          </p>
+          <div class="token-compare__dump" aria-hidden="true">
+            {
+              dumpLines.map((line) => (
+                <div
+                  class:list={[
+                    "token-compare__dump-line",
+                    line.dim && "token-compare__dump-line--dim",
+                  ]}
+                >
+                  {line.text}
+                </div>
+              ))
+            }
+          </div>
+          <div class="token-compare__meter token-compare__meter--bad">
+            <span>~48k tokens in context</span>
+            <span>noise + one error</span>
+          </div>
+        </div>
+      </div>
+      <h3 class="token-compare__label">Without Mizpah</h3>
+      <p class="token-compare__caption">
+        The agent reads the whole dump. Most of the context is noise; the bill
+        isn’t.
+      </p>
+    </article>
+
+    <article class="token-compare__panel token-compare__panel--save">
+      <div class="mac-window">
+        <div class="mac-window__titlebar">
+          <div class="mac-window__traffic" aria-hidden="true">
+            <span class="mac-window__dot mac-window__dot--close"></span>
+            <span class="mac-window__dot mac-window__dot--min"></span>
+            <span class="mac-window__dot mac-window__dot--max"></span>
+          </div>
+          <span class="mac-window__title">agent · mizpah skill</span>
+          <span class="mac-window__titlebar-spacer"></span>
+        </div>
+        <div class="token-compare__body">
+          <p class="token-compare__bubble token-compare__bubble--user">
+            Why are requests failing?
+          </p>
+          <div class="token-compare__tool">
+            <div class="token-compare__tool-name">mcp__mizpah__search_logs</div>
+            <code class="token-compare__cel"
+              >level == "error" · service=api · limit=5</code
+            >
+          </div>
+          <ul class="token-compare__hits">
+            {
+              filterRows.map((row) => (
+                <li class="token-compare__hit">
+                  <span
+                    class:list={[
+                      "token-compare__level",
+                      row.level === "error" && "token-compare__level--error",
+                      row.level === "warn" && "token-compare__level--warn",
+                    ]}
+                  >
+                    {row.level}
+                  </span>
+                  <span class="token-compare__msg">{row.msg}</span>
+                  <span class="token-compare__id">{row.id}</span>
+                </li>
+              ))
+            }
+          </ul>
+          <div class="token-compare__meter token-compare__meter--good">
+            <span>~400 tokens in context</span>
+            <span>only what matters</span>
+          </div>
+        </div>
+      </div>
+      <h3 class="token-compare__label token-compare__label--good">
+        With the Mizpah skill
+      </h3>
+      <p class="token-compare__caption">
+        The skill teaches the agent to query CEL filters over MCP — small
+        slices, not pasted transcripts.
+      </p>
+    </article>
+  </div>
+
+  <div class="token-compare">
+    <article class="token-compare__panel token-compare__panel--waste">
+      <div class="mac-window">
+        <div class="mac-window__titlebar">
+          <div class="mac-window__traffic" aria-hidden="true">
+            <span class="mac-window__dot mac-window__dot--close"></span>
+            <span class="mac-window__dot mac-window__dot--min"></span>
+            <span class="mac-window__dot mac-window__dot--max"></span>
+          </div>
+          <span class="mac-window__title">agent · pretty-print scan</span>
+          <span class="mac-window__titlebar-spacer"></span>
+        </div>
+        <div class="token-compare__body">
+          <p class="token-compare__bubble token-compare__bubble--user">
+            Which tests failed?
+          </p>
+          <div class="token-compare__cmd token-compare__cmd--plain">
+            <span class="token-compare__prompt">$</span> npm test
+          </div>
+          <div
+            class="token-compare__dump token-compare__dump--pretty"
+            aria-hidden="true"
+          >
+            {
+              prettyLines.map((line) => (
+                <div
+                  class:list={[
+                    "token-compare__dump-line",
+                    line.dim && "token-compare__dump-line--dim",
+                    !line.dim && "token-compare__dump-line--emph",
+                  ]}
+                >
+                  {line.text || "\u00a0"}
+                </div>
+              ))
+            }
+          </div>
+          <div class="token-compare__meter token-compare__meter--bad">
+            <span>agent skims pretty stdout</span>
+            <span>_raw · hard to filter</span>
+          </div>
+        </div>
+      </div>
+      <h3 class="token-compare__label">Pretty-print in the terminal</h3>
+      <p class="token-compare__caption">
+        The agent runs the command, then reads a multi-line human dump. Failures
+        are buried in chrome the model has to re-parse every time.
+      </p>
+    </article>
+
+    <article class="token-compare__panel token-compare__panel--save">
+      <div class="mac-window">
+        <div class="mac-window__titlebar">
+          <div class="mac-window__traffic" aria-hidden="true">
+            <span class="mac-window__dot mac-window__dot--close"></span>
+            <span class="mac-window__dot mac-window__dot--min"></span>
+            <span class="mac-window__dot mac-window__dot--max"></span>
+          </div>
+          <span class="mac-window__title">agent · JSON → mizpah</span>
+          <span class="mac-window__titlebar-spacer"></span>
+        </div>
+        <div class="token-compare__body">
+          <p class="token-compare__bubble token-compare__bubble--user">
+            Which tests failed?
+          </p>
+          <div class="token-compare__cmd token-compare__cmd--json">
+            <span class="token-compare__prompt">$</span>
+            npm test -- --json 2&gt;&amp;1 | mzp --service tests
+          </div>
+          <div class="token-compare__tool">
+            <div class="token-compare__tool-name">mcp__mizpah__search_logs</div>
+            <code class="token-compare__cel"
+              >level == "error" · service=tests · limit=5</code
+            >
+          </div>
+          <ul class="token-compare__hits">
+            {
+              jsonFilterRows.map((row) => (
+                <li class="token-compare__hit">
+                  <span
+                    class:list={[
+                      "token-compare__level",
+                      "token-compare__level--error",
+                    ]}
+                  >
+                    {row.level}
+                  </span>
+                  <span class="token-compare__msg">{row.msg}</span>
+                  <span class="token-compare__id">{row.id}</span>
+                </li>
+              ))
+            }
+          </ul>
+          <div class="token-compare__meter token-compare__meter--good">
+            <span>structured fields</span>
+            <span>CEL over JSON</span>
+          </div>
+        </div>
+      </div>
+      <h3 class="token-compare__label token-compare__label--good">
+        JSON flag + Mizpah filter
+      </h3>
+      <p class="token-compare__caption">
+        When the tool can emit JSON, the skill prefers that, pipes into
+        <code class="token-compare__inline-code">mzp</code>, then filters — so
+        the agent gets fields, not a pretty-printed wall of text.
+      </p>
+    </article>
+  </div>
+</div>
+
+<style>
+  .token-compare-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 2.5rem;
+  }
+
+  .token-compare {
+    display: grid;
+    gap: 1.25rem 1.5rem;
+  }
+
+  @media (min-width: 900px) {
+    /* Shared window row → both mac-windows get the same height */
+    .token-compare {
+      grid-template-columns: 1fr 1fr;
+      grid-template-rows: minmax(22rem, auto) auto auto;
+      column-gap: 1.75rem;
+      row-gap: 0.85rem;
+      align-items: stretch;
+    }
+
+    .token-compare__panel {
+      display: contents;
+    }
+
+    .token-compare__panel--waste .mac-window {
+      grid-column: 1;
+      grid-row: 1;
+    }
+
+    .token-compare__panel--save .mac-window {
+      grid-column: 2;
+      grid-row: 1;
+    }
+
+    .token-compare__panel--waste .token-compare__label {
+      grid-column: 1;
+      grid-row: 2;
+    }
+
+    .token-compare__panel--save .token-compare__label {
+      grid-column: 2;
+      grid-row: 2;
+    }
+
+    .token-compare__panel--waste .token-compare__caption {
+      grid-column: 1;
+      grid-row: 3;
+    }
+
+    .token-compare__panel--save .token-compare__caption {
+      grid-column: 2;
+      grid-row: 3;
+    }
+  }
+
+  .token-compare__panel .mac-window {
+    display: flex;
+    flex-direction: column;
+    min-height: 22rem;
+    height: 100%;
+  }
+
+  .token-compare__body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    flex: 1 1 auto;
+    min-height: 0;
+    padding: 0.9rem 1rem 1rem;
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    line-height: 1.45;
+  }
+
+  .token-compare__bubble {
+    align-self: flex-start;
+    max-width: 95%;
+    margin: 0;
+    padding: 0.55rem 0.7rem;
+    border-radius: 0.65rem;
+    background: oklch(0.22 0.01 160);
+    color: oklch(0.9 0.01 160);
+  }
+
+  .token-compare__cmd {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    align-items: baseline;
+    padding: 0.5rem 0.65rem;
+    border-radius: 0.45rem;
+    border: 1px solid oklch(1 0 0 / 10%);
+    background: oklch(0.16 0.005 160);
+    color: oklch(0.88 0.01 160);
+    word-break: break-word;
+  }
+
+  .token-compare__cmd--json {
+    border-color: color-mix(in oklch, var(--primary) 30%, transparent);
+    background: color-mix(in oklch, var(--primary) 6%, transparent);
+  }
+
+  .token-compare__prompt {
+    color: oklch(0.55 0.01 160);
+  }
+
+  .token-compare__dump {
+    flex: 1;
+    overflow: hidden;
+    border-radius: 0.5rem;
+    border: 1px solid oklch(1 0 0 / 8%);
+    background: oklch(0.12 0 0);
+    padding: 0.55rem 0.65rem;
+    mask-image: linear-gradient(to bottom, #000 55%, transparent 100%);
+  }
+
+  .token-compare__dump--pretty {
+    mask-image: linear-gradient(to bottom, #000 65%, transparent 100%);
+  }
+
+  .token-compare__dump-line {
+    white-space: pre;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: oklch(0.78 0.02 160);
+  }
+
+  .token-compare__dump-line--dim {
+    color: oklch(0.45 0.01 160);
+  }
+
+  .token-compare__dump-line--emph {
+    color: oklch(0.78 0.14 25);
+  }
+
+  .token-compare__tool {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    padding: 0.55rem 0.7rem;
+    border-radius: 0.5rem;
+    border: 1px solid color-mix(in oklch, var(--primary) 35%, transparent);
+    background: color-mix(in oklch, var(--primary) 8%, transparent);
+  }
+
+  .token-compare__tool-name {
+    color: var(--primary);
+    font-weight: 500;
+  }
+
+  .token-compare__cel {
+    color: oklch(0.85 0.02 160);
+    font-size: 0.68rem;
+  }
+
+  .token-compare__hits {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    flex: 1;
+  }
+
+  .token-compare__hit {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 0.5rem;
+    align-items: baseline;
+    padding: 0.45rem 0.55rem;
+    border-radius: 0.4rem;
+    border: 1px solid oklch(1 0 0 / 8%);
+    background: oklch(0.18 0.01 160);
+  }
+
+  .token-compare__level {
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-size: 0.62rem;
+    color: oklch(0.7 0.02 160);
+  }
+
+  .token-compare__level--error {
+    color: oklch(0.72 0.16 25);
+  }
+
+  .token-compare__level--warn {
+    color: oklch(0.82 0.12 85);
+  }
+
+  .token-compare__msg {
+    color: oklch(0.92 0.01 160);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .token-compare__id {
+    color: oklch(0.5 0.01 160);
+    font-size: 0.62rem;
+  }
+
+  .token-compare__meter {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 0.35rem 0.75rem;
+    margin-top: auto;
+    padding-top: 0.65rem;
+    border-top: 1px solid oklch(1 0 0 / 8%);
+    font-size: 0.68rem;
+  }
+
+  .token-compare__meter--bad {
+    color: oklch(0.72 0.12 25);
+  }
+
+  .token-compare__meter--good {
+    color: var(--primary);
+  }
+
+  .token-compare__label {
+    margin: 0;
+    font-size: 1.05rem;
+    letter-spacing: -0.02em;
+    color: var(--foreground);
+  }
+
+  @media (max-width: 899px) {
+    .token-compare__label {
+      margin-top: 0.85rem;
+    }
+  }
+
+  .token-compare__label--good {
+    color: var(--primary);
+  }
+
+  .token-compare__caption {
+    margin: 0;
+    max-width: 36rem;
+    font-size: 0.875rem;
+    line-height: 1.6;
+    color: var(--muted-foreground);
+  }
+
+  .token-compare__inline-code {
+    font-family: var(--font-mono);
+    font-size: 0.8em;
+    color: oklch(0.85 0.02 160);
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .token-compare__panel--waste .token-compare__dump {
+      animation: token-dump-scroll 14s linear infinite;
+    }
+
+    .token-compare__panel--save .token-compare__hit {
+      animation: token-hit-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+    }
+
+    .token-compare__panel--save .token-compare__hit:nth-child(2) {
+      animation-delay: 0.12s;
+    }
+
+    .token-compare__panel--save .token-compare__hit:nth-child(3) {
+      animation-delay: 0.24s;
+    }
+  }
+
+  @keyframes token-dump-scroll {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-6px);
+    }
+  }
+
+  @keyframes token-hit-in {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+</style>

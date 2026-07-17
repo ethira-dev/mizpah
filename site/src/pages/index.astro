@@ -3,6 +3,7 @@ import BaseLayout from "../layouts/BaseLayout.astro"
 import AgentSessions from "../components/AgentSessions.astro"
 import FlowDiagram from "../components/FlowDiagram.astro"
 import HubDemo from "../components/HubDemo.astro"
+import TokenSavingCompare from "../components/TokenSavingCompare.astro"
 import { GITHUB_URL } from "../lib/nav"
 
 const base = import.meta.env.BASE_URL
@@ -137,18 +138,50 @@ const withBase = (path: string) =>
     <section class="border-y border-border bg-card/30">
       <div class="mx-auto max-w-6xl px-4 py-20 sm:px-6 sm:py-28">
         <h2
-          id="flow-heading"
+          id="teach-your-agent"
           class="text-3xl tracking-tight text-foreground sm:text-4xl"
         >
-          How it fits together
+          Teach your agent to save tokens
         </h2>
         <p class="mt-3 max-w-2xl text-muted-foreground">
-          Sources ingest into one hub. You watch it in the web UI; agents read
-          the same buffer over MCP without another full command run.
+          The Mizpah skill trains the agent to stop stuffing chat with log
+          dumps and pretty-printed stdout. Prefer a JSON flag when the tool
+          supports it, pipe into the hub, then filter with CEL so only the rows
+          that matter enter context.
         </p>
         <div class="mt-10">
-          <FlowDiagram />
+          <TokenSavingCompare />
         </div>
+        <pre
+          class="mt-10 max-w-xl overflow-x-auto rounded-lg border border-border bg-card/80 px-4 py-3 font-mono text-[13px] leading-relaxed text-foreground/90"
+        ><code
+            ><span class="text-muted-foreground">$</span> npx skills add ethira-dev/mizpah
+<span class="text-muted-foreground">$</span> mzp mcp install</code
+          ></pre>
+        <p class="mt-4 max-w-2xl text-sm text-muted-foreground">
+          Full walkthrough in
+          <a
+            href={withBase("/docs/mcp/#agent-skill")}
+            class="text-primary underline-offset-4 hover:underline"
+            >MCP &amp; agents</a
+          >.
+        </p>
+      </div>
+    </section>
+
+    <section class="mx-auto max-w-6xl px-4 py-20 sm:px-6 sm:py-28">
+      <h2
+        id="flow-heading"
+        class="text-3xl tracking-tight text-foreground sm:text-4xl"
+      >
+        How it fits together
+      </h2>
+      <p class="mt-3 max-w-2xl text-muted-foreground">
+        Sources ingest into one hub. You watch it in the web UI; agents read
+        the same buffer over MCP without another full command run.
+      </p>
+      <div class="mt-10">
+        <FlowDiagram />
       </div>
     </section>
 

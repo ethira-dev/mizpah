@@ -23,6 +23,8 @@ Override hub URL with `MIZPAH_URL` (default `http://127.0.0.1:1738`).
 
 Workflow skill aimed at **token and cost savings**: pipe into Mizpah, prefer JSON logs, query MCP with small limits — for Cursor and other agents that support [Agent Skills](https://agentskills.io).
 
+**Without the skill**, agents often paste entire log dumps into chat (tens of thousands of tokens of noise). **With the skill**, they call `search_logs` with CEL (for example `level == "error"`) and keep only the rows that matter — same diagnosis, thinner context. See the side-by-side on the [home page](../../#teach-your-agent) (Teach your agent to save tokens).
+
 ### Install the skill
 
 ```bash
