@@ -225,6 +225,7 @@ fn preflight_writable(dir: &Path) -> Result<(), String> {
 }
 
 async fn download_with_progress(url: &str, dest: &Path, tx: &ProgressTx) -> Result<(), String> {
+    crate::util::ensure_rustls_crypto_provider();
     let client = reqwest::Client::builder()
         .timeout(DOWNLOAD_TIMEOUT)
         .user_agent(format!("mizpah/{}", env!("CARGO_PKG_VERSION")))

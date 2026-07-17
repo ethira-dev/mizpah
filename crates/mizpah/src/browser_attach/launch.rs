@@ -34,6 +34,7 @@ pub(crate) async fn resolve_cdp_ws_url_for_reconnect(
 }
 
 pub(crate) async fn fetch_browser_ws_url(cdp_port: u16) -> Result<String, String> {
+    crate::util::ensure_rustls_crypto_provider();
     let version_url = format!("http://127.0.0.1:{cdp_port}/json/version");
     let client = reqwest::Client::builder()
         .timeout(HTTP_TIMEOUT)

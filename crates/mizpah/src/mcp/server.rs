@@ -176,8 +176,11 @@ impl ServerHandler for MizpahMcp {
 mod tests {
     use super::*;
 
+    // HubClient builds a reqwest Client (TLS crypto FFI — unsupported under Miri).
+    #[cfg(not(miri))]
     #[test]
     fn mcp_server_constructs_with_tool_router() {
+        crate::util::ensure_rustls_crypto_provider();
         let mcp = MizpahMcp::new("http://127.0.0.1:1738");
         let info = mcp.get_info();
         assert!(!info.instructions.unwrap_or_default().is_empty());

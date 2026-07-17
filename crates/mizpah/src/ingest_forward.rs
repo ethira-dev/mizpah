@@ -28,6 +28,7 @@ struct BatchBody<'a> {
 }
 
 pub fn http_client() -> Result<reqwest::Client, String> {
+    crate::util::ensure_rustls_crypto_provider();
     reqwest::Client::builder()
         .timeout(HTTP_TIMEOUT)
         .build()

@@ -18,6 +18,7 @@ pub fn hub_url(host: &str, port: u16) -> String {
 }
 
 pub async fn probe_hub(host: &str, port: u16) -> bool {
+    crate::util::ensure_rustls_crypto_provider();
     let url = format!("{}/api/stats", hub_url(host, port));
     let Ok(client) = reqwest::Client::builder()
         .timeout(Duration::from_secs(2))

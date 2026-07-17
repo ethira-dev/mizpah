@@ -15,6 +15,7 @@ pub async fn attach_and_forward(
     base_url: &str,
     service: &str,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    crate::util::ensure_rustls_crypto_provider();
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(30))
         .build()?;

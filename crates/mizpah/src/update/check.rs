@@ -215,6 +215,7 @@ fn which(name: &str) -> Option<PathBuf> {
 }
 
 pub async fn fetch_latest_release() -> Result<ReleaseInfo, String> {
+    crate::util::ensure_rustls_crypto_provider();
     let client = reqwest::Client::builder()
         .timeout(CHECK_TIMEOUT)
         .user_agent(format!("mizpah/{}", env!("CARGO_PKG_VERSION")))

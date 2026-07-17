@@ -50,6 +50,7 @@ async fn forward_once(source: HookSource) -> Result<(), String> {
         mzp = mzp.with_cwd(cwd);
     }
 
+    crate::util::ensure_rustls_crypto_provider();
     let url = format!("{}/api/ingest", hub::hub_url(&src.host, src.port));
     let client = reqwest::Client::builder()
         .timeout(FORWARD_HTTP_TIMEOUT)

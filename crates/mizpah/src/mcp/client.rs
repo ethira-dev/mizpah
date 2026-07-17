@@ -47,6 +47,7 @@ pub struct PropertiesResponse {
 
 impl HubClient {
     pub fn new(base_url: impl Into<String>) -> Self {
+        crate::util::ensure_rustls_crypto_provider();
         let base = base_url.into().trim_end_matches('/').to_string();
         Self {
             http: Client::new(),

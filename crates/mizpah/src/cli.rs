@@ -285,6 +285,7 @@ pub enum BrowserAction {
 }
 
 pub async fn run() {
+    crate::util::ensure_rustls_crypto_provider();
     let cli = Cli::parse();
 
     match cli.command {
