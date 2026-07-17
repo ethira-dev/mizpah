@@ -75,6 +75,16 @@ mzp hub stop               # also: start | restart
 
 MCP tools (keep `search_logs` limits small: default 20, max 50): `list_services`, `get_stats`, `list_properties`, `search_logs`, `get_logs_around`.
 
+## Agent skill
+
+Installable Agent Skill (pipe → JSON logs → MCP queries) for Cursor and other agents:
+
+```bash
+npx skills add ethira-dev/mizpah
+```
+
+Cursor plugin layout lives at the repo root (`.cursor-plugin/`, `skills/mizpah/`, `mcp.json`). See [PLUGIN.md](PLUGIN.md). Marketplace: submit / install from Customize once listed. Cross-client MCP remains `mzp mcp install`.
+
 ## Development
 
 ```bash

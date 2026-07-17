@@ -19,6 +19,16 @@ First hub start also attempts registration. Homebrew / release installs: run `mz
 
 Override hub URL with `MIZPAH_URL` (default `http://127.0.0.1:1738`).
 
+## Agent skill
+
+Workflow skill (pipe into Mizpah, prefer JSON logs, query MCP with small limits) for Cursor and other agents that support [Agent Skills](https://agentskills.io):
+
+```bash
+npx skills add ethira-dev/mizpah
+```
+
+Also available as a Cursor plugin (repo-root `.cursor-plugin/` + `skills/mizpah/`). Install from the Cursor Marketplace / Customize when listed, or symlink locally — see the repo [PLUGIN.md](https://github.com/ethira-dev/mizpah/blob/main/PLUGIN.md). `mzp mcp install` remains the path for Claude Desktop, Codex, and other MCP clients.
+
 ## Tools
 
 | Tool | Parameters | Notes |

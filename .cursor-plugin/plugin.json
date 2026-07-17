@@ -1,0 +1,22 @@
+{
+  "name": "mizpah",
+  "displayName": "Mizpah",
+  "version": "1.0.0",
+  "description": "Pipe processes into Mizpah and query the live JSON log hub over MCP to debug with less context.",
+  "author": {
+    "name": "Ethira",
+    "email": "hello@ethira.dev"
+  },
+  "homepage": "https://ethira-dev.github.io/mizpah/",
+  "repository": "https://github.com/ethira-dev/mizpah",
+  "license": "MIT",
+  "keywords": [
+    "logs",
+    "mcp",
+    "debugging",
+    "cel",
+    "json",
+    "observability"
+  ],
+  "logo": "assets/logo.svg"
+}
