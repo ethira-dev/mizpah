@@ -1139,7 +1139,7 @@ dependencies = [
 
 [[package]]
 name = "mizpah"
-version = "0.11.0"
+version = "0.12.0"
 dependencies = [
  "axum",
  "base64",

@@ -67,7 +67,14 @@ jobs:
         with:
           components: miri
       - name: Miri tests (skip unsupported FFI)
-        run: cargo +nightly miri test -p mizpah -- --skip process_ --skip signal_ --skip setsid --skip hub_pid
+        # Skip FFI / process helpers and update checks that open real sockets (setsockopt).
+        run: >
+          cargo +nightly miri test -p mizpah --
+          --skip process_
+          --skip signal_
+          --skip setsid
+          --skip hub_pid
+          --skip update
         env:
           MIRIFLAGS: -Zmiri-disable-isolation
 
