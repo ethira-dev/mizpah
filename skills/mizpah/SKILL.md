@@ -1,10 +1,10 @@
 ---
 name: mizpah
 description: >-
-  Run commands through Mizpah and query the live JSON log hub over MCP to save
-  tokens. Use when debugging with logs, piping process output, attaching shell
-  or browser sources, writing CEL filters, or when the user mentions mizpah, mzp,
-  or avoiding pasted stdout / re-runs for log questions.
+  Cut agent token and cost when debugging logs: pipe commands into Mizpah and
+  query the live JSON hub over MCP instead of pasting stdout or re-running
+  tests. Use when the user mentions token savings, cost, context size, mizpah,
+  mzp, CEL filters, or attaching shell/browser/agent log sources.
 ---
 
 # Mizpah

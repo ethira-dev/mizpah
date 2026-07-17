@@ -21,7 +21,7 @@ Override hub URL with `MIZPAH_URL` (default `http://127.0.0.1:1738`).
 
 ## Agent skill
 
-Workflow skill (pipe into Mizpah, prefer JSON logs, query MCP with small limits) for Cursor and other agents that support [Agent Skills](https://agentskills.io):
+Workflow skill aimed at **token and cost savings**: pipe into Mizpah, prefer JSON logs, query MCP with small limits — for Cursor and other agents that support [Agent Skills](https://agentskills.io):
 
 ```bash
 npx skills add ethira-dev/mizpah

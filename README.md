@@ -77,7 +77,7 @@ MCP tools (keep `search_logs` limits small: default 20, max 50): `list_services`
 
 ## Agent skill
 
-Installable Agent Skill (pipe → JSON logs → MCP queries) for Cursor and other agents:
+Installable Agent Skill for Cursor and other agents — optimized for **token / cost savings** (pipe → JSON logs → small MCP queries, not pasted dumps):
 
 ```bash
 npx skills add ethira-dev/mizpah

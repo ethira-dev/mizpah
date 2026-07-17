@@ -2,7 +2,7 @@
   "name": "mizpah",
   "displayName": "Mizpah",
   "version": "1.0.0",
-  "description": "Pipe processes into Mizpah and query the live JSON log hub over MCP to debug with less context.",
+  "description": "Cut agent token cost when debugging logs: pipe output into Mizpah, then search small CEL slices over MCP instead of pasting stdout or re-running tests. Same answers, thinner context.",
   "author": {
     "name": "Ethira",
     "email": "hello@ethira.dev"
@@ -11,6 +11,9 @@
   "repository": "https://github.com/ethira-dev/mizpah",
   "license": "MIT",
   "keywords": [
+    "token-saving",
+    "cost-saving",
+    "context",
     "logs",
     "mcp",
     "debugging",

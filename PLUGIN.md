@@ -1,6 +1,6 @@
 # Mizpah Cursor plugin
 
-Agent skill + MCP entry for the [Mizpah](https://ethira-dev.github.io/mizpah/) local JSON log hub.
+Cut agent **token cost** when debugging: pipe logs into [Mizpah](https://ethira-dev.github.io/mizpah/), then query small CEL slices over MCP instead of pasting dumps or re-running tests. Ships an Agent Skill plus MCP entry for the local JSON log hub.
 
 ## Install
 
