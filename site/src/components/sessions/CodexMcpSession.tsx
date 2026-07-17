@@ -27,14 +27,15 @@ export function CodexMcpSession() {
         </CodexMessage>
 
         <div className="space-y-1">
-          <CodexExec command="mcp__mizpah__get_stats" result="→ ok" defaultOpen>
-            {`buffer: 128 MiB / 1 GiB
-entries: 18420
-services:
-  api      9120
-  worker   4102
-  chrome   3188
-  cursor   2010`}
+          <CodexExec command="mcp__mizpah__get_stats" result="→ ok (TOON)" defaultOpen>
+            {`count: 18420
+approxBytes: 134217728
+maxBytes: 1073741824
+services[4]{name,count}:
+  api,9120
+  worker,4102
+  chrome,3188
+  cursor,2010`}
           </CodexExec>
           <CodexExec
             command='mcp__mizpah__search_logs q: msg.contains("timeout") limit: 4'
