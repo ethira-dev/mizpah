@@ -276,7 +276,7 @@ mod tests {
             enabled: true,
             service: Some("api".into()),
             host: "127.0.0.1".into(),
-            port: 1738,
+            port: 3149,
         };
         assert_eq!(resolve_service(&state, "/Users/me/app"), "api");
     }

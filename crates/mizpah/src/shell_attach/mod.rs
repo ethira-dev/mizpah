@@ -96,9 +96,9 @@ mod tests {
 
     #[test]
     fn resolve_open_target_flags_override_defaults() {
-        let (h, p) = resolve_open_target(Some("127.0.0.1".into()), Some(1738)).unwrap();
+        let (h, p) = resolve_open_target(Some("127.0.0.1".into()), Some(3149)).unwrap();
         assert_eq!(h, "127.0.0.1");
-        assert_eq!(p, 1738);
+        assert_eq!(p, 3149);
 
         let (h, p) = resolve_open_target(Some("10.0.0.1".into()), Some(9999)).unwrap();
         assert_eq!(h, "10.0.0.1");

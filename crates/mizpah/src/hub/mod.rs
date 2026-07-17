@@ -10,4 +10,4 @@ pub use lifecycle::{
 pub use pid::write_hub_pid;
 
 pub const DEFAULT_HOST: &str = "127.0.0.1";
-pub const DEFAULT_PORT: u16 = 1738;
+pub const DEFAULT_PORT: u16 = 3149;

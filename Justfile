@@ -8,7 +8,7 @@ default:
 web-install:
     cd web && npm install
 
-# Dev UI (proxies API/WS to hub on :1738)
+# Dev UI (proxies API/WS to hub on :3149)
 web-dev:
     cd web && npm run dev
 
@@ -35,7 +35,7 @@ reinstall: install
     #!/usr/bin/env bash
     set -euo pipefail
     bin="{{env_var_or_default('CARGO_HOME', home_directory() / '.cargo')}}/bin/mzp"
-    if curl -sf --max-time 1 "http://127.0.0.1:1738/api/stats" >/dev/null; then
+    if curl -sf --max-time 1 "http://127.0.0.1:3149/api/stats" >/dev/null; then
         "$bin" hub restart
     else
         echo "mizpah hub not running; skip restart"

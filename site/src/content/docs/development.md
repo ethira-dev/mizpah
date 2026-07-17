@@ -20,7 +20,7 @@ cargo build --release
 | `just ui` | Rebuild SPA into `crates/mizpah/static` |
 | `just build` | UI + debug binary |
 | `just test` | Rust unit tests |
-| `just web-dev` | Vite (proxies API/WS to `:1738`) |
+| `just web-dev` | Vite (proxies API/WS to `:3149`) |
 | `just lint-rust` | `cargo fmt --check` + clippy (incl. curated pedantic) |
 | `just lint-deps` | `cargo deny check` + `cargo machete` |
 | `just lint-web` | eslint + tsc |
@@ -39,7 +39,7 @@ The hub exposes unauthenticated ingest, query, investigate, and update APIs. Bin
 ## Architecture
 
 ```
-stdin ──► try bind :1738
+stdin ──► try bind :3149
             ├─ success → hub (Axum + ring buffer + UI + hub-{port}.pid)
             └─ AddrInUse → attach (POST /api/ingest)
 
@@ -48,7 +48,7 @@ mzp attach browser ──► CDP ──► console/network ──► POST /api/i
 mzp attach cursor  ──► ~/.cursor/hooks.json ──► __hook-forward ──► POST /api/ingest
 mzp attach claude  ──► ~/.claude/settings.json ──► __hook-forward ──► POST /api/ingest
 mzp mcp            ──► stdio MCP ──► HubClient ──► GET /api/logs|properties|stats|…
-mzp open           ──► browser → http://127.0.0.1:1738
+mzp open           ──► browser → http://127.0.0.1:3149
 ```
 
 Rust modules under `crates/mizpah/src/`:

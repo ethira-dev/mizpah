@@ -17,7 +17,7 @@ mzp mcp uninstall   # remove those entries
 
 First hub start also attempts registration. Homebrew / release installs: run `mzp mcp install` once after install if tools do not appear.
 
-Override hub URL with `MIZPAH_URL` (default `http://127.0.0.1:1738`).
+Override hub URL with `MIZPAH_URL` (default `http://127.0.0.1:3149`).
 
 ## Agent skill
 

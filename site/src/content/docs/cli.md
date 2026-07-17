@@ -12,7 +12,7 @@ order: 7
 |------|-------------|
 | `--service` / `-s` | Service name for this stdin stream (default: absolute cwd) |
 | `--host` | Bind/connect host (default `127.0.0.1`) |
-| `--port` / `-p` | Bind/connect port (default `1738`) |
+| `--port` / `-p` | Bind/connect port (default `3149`) |
 | `--max-bytes` | Ring buffer cap in bytes (default `1073741824`, hub only) |
 | `--no-open` | Do not open a browser when starting as hub |
 | `--project` / `MIZPAH_PROJECT` | Project directory for Check with Claude/Cursor (default: hub cwd) |
@@ -29,7 +29,7 @@ order: 7
 | `mzp hub stop` | Stop the hub for this port (via PID file) |
 | `mzp hub restart` | Stop then start (clears the in-memory buffer) |
 | `mzp open` | Open the web UI (hub must already be reachable) |
-| `mzp mcp` | Stdio MCP server (hub at `:1738`, or `MIZPAH_URL`) |
+| `mzp mcp` | Stdio MCP server (hub at `:3149`, or `MIZPAH_URL`) |
 | `mzp mcp install` | Merge MCP config into Cursor / Claude / Codex |
 | `mzp mcp uninstall` | Remove those MCP entries |
 

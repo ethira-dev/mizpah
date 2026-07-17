@@ -59,9 +59,9 @@ function entry(
 }
 
 export const DEMO_LOGS: DemoLog[] = [
-  entry(1801, "shell", "ttys008", "mizpah hub started at http://127.0.0.1:1738", {
+  entry(1801, "shell", "ttys008", "mizpah hub started at http://127.0.0.1:3149", {
     event: "hub_start",
-    url: "http://127.0.0.1:1738",
+    url: "http://127.0.0.1:3149",
   }),
   entry(
     1802,

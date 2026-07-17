@@ -1,6 +1,6 @@
 # mizpah
 
-Local JSON log hub: pipe any process into **`mzp`**, get a searchable UI on `:1738`, and let agents query the same in-memory buffer over MCP.
+Local JSON log hub: pipe any process into **`mzp`**, get a searchable UI on `:3149`, and let agents query the same in-memory buffer over MCP.
 
 **UX:** filterable live stream, property autocomplete, row detail with JSON tree. Better than `tail -f` when you need to find something.
 
@@ -15,7 +15,7 @@ Local JSON log hub: pipe any process into **`mzp`**, get a searchable UI on `:17
 ```bash
 brew install ethira-dev/mizpah/mizpah
 my-app 2>&1 | mzp --service api
-# UI: http://127.0.0.1:1738
+# UI: http://127.0.0.1:3149
 ```
 
 ## Install
@@ -44,7 +44,7 @@ If `mzp` is missing after a Cargo install: `export PATH="$HOME/.cargo/bin:$PATH"
 ## How it works
 
 ```
-stdin ──► try bind :1738
+stdin ──► try bind :3149
             ├─ success → hub (Axum, ring buffer, SPA, hub-{port}.pid)
             └─ AddrInUse → attach (POST /api/ingest)
 
@@ -52,7 +52,7 @@ attach shell|browser|cursor|claude ──► ingest → same buffer
 MCP (stdio) ──► GET /api/logs|properties|stats|… against the hub
 ```
 
-- Default bind: `127.0.0.1:1738`. Ring buffer default: 1 GiB (`--max-bytes`).
+- Default bind: `127.0.0.1:3149`. Ring buffer default: 1 GiB (`--max-bytes`).
 - Prefer NDJSON. Pretty Nest / `util.inspect` blocks are reassembled when possible; other non-JSON becomes `{ "_raw": "…" }`.
 - Every entry gets `_mzp` (`cwd`, `user`, `pid`, `exe`).
 
@@ -89,7 +89,7 @@ Cursor plugin layout lives at the repo root (`.cursor-plugin/`, `skills/mizpah/`
 
 ```bash
 just check      # fmt/clippy + tests + web lint (matches CI)
-just web-dev    # Vite → proxies API/WS to :1738
+just web-dev    # Vite → proxies API/WS to :3149
 just site-dev   # docs site at /mizpah/
 just ui         # rebuild SPA into crates/mizpah/static
 just release

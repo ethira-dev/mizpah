@@ -51,7 +51,7 @@ Smoke test:
 
 ```bash
 echo '{"msg":"hi","level":"info"}' | mzp --no-open
-curl -sS "http://127.0.0.1:1738/api/stats"
+curl -sS "http://127.0.0.1:3149/api/stats"
 ```
 
 ### PATH notes

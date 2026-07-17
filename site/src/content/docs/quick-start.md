@@ -4,7 +4,7 @@ description: Bind a hub, stream NDJSON, filter in the UI, and optionally wire MC
 order: 1
 ---
 
-mizpah is a local in-memory JSON log hub. The first process that can bind `127.0.0.1:1738` becomes the hub (Axum API, WebSocket fan-out, SPA, ring buffer). Later processes attach by POSTing to `/api/ingest`.
+mizpah is a local in-memory JSON log hub. The first process that can bind `127.0.0.1:3149` becomes the hub (Axum API, WebSocket fan-out, SPA, ring buffer). Later processes attach by POSTing to `/api/ingest`.
 
 **UX:** virtualized live stream, CEL search with field autocomplete, click-through JSON detail.
 
@@ -14,7 +14,7 @@ mizpah is a local in-memory JSON log hub. The first process that can bind `127.0
 
 ```bash
 api-server 2>&1 | mzp --service api
-# opens http://127.0.0.1:1738
+# opens http://127.0.0.1:3149
 worker | mzp --service worker   # joins the same hub
 ```
 

@@ -58,7 +58,7 @@ mod tests {
             project_dir: std::env::temp_dir(),
             update: update::UpdateManager::new(update::RestartContext {
                 host: "127.0.0.1".into(),
-                port: 1738,
+                port: 3149,
                 project_dir: std::env::temp_dir(),
                 max_bytes: 1_000_000,
             }),

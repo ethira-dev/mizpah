@@ -14,7 +14,7 @@ export default defineConfig({
   server: {
     proxy: {
       "/api": {
-        target: "http://127.0.0.1:1738",
+        target: "http://127.0.0.1:3149",
         // Avoid buffering SSE from POST /api/update during `vite` dev.
         configure: (proxy) => {
           proxy.on("proxyRes", (proxyRes) => {
@@ -26,7 +26,7 @@ export default defineConfig({
           })
         },
       },
-      "/ws": { target: "ws://127.0.0.1:1738", ws: true },
+      "/ws": { target: "ws://127.0.0.1:3149", ws: true },
     },
   },
   build: {

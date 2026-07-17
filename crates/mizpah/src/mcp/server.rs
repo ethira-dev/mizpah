@@ -181,7 +181,7 @@ mod tests {
     #[test]
     fn mcp_server_constructs_with_tool_router() {
         crate::util::ensure_rustls_crypto_provider();
-        let mcp = MizpahMcp::new("http://127.0.0.1:1738");
+        let mcp = MizpahMcp::new("http://127.0.0.1:3149");
         let info = mcp.get_info();
         assert!(!info.instructions.unwrap_or_default().is_empty());
         let _ = mcp.tool_router;

@@ -37,12 +37,12 @@ source == "browser" && kind == "network" && status >= 400
 ## REST
 
 ```bash
-curl -sS -G "http://127.0.0.1:1738/api/logs" \
+curl -sS -G "http://127.0.0.1:3149/api/logs" \
   --data-urlencode 'q=level == "error"' \
   --data-urlencode 'service=api' \
   --data-urlencode 'limit=20'
 
-curl -sS -G "http://127.0.0.1:1738/api/properties" \
+curl -sS -G "http://127.0.0.1:3149/api/properties" \
   --data-urlencode 'q=redis'
 ```
 

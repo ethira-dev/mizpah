@@ -10,7 +10,7 @@ The hub is process-local and in-memory. You get a fast UI for browsing streams; 
 
 | Role | When | Behavior |
 |------|------|----------|
-| Hub | First process that binds `--host`/`--port` (default `127.0.0.1:1738`) | Serves SPA, REST, `/ws`, ring buffer, writes `hub-{port}.pid` |
+| Hub | First process that binds `--host`/`--port` (default `127.0.0.1:3149`) | Serves SPA, REST, `/ws`, ring buffer, writes `hub-{port}.pid` |
 | Attach | Port already taken | Forwards lines with `POST /api/ingest` (or batch) to the existing hub |
 
 ```bash

@@ -20,7 +20,7 @@ pub struct HubArgs {
     pub host: String,
 
     /// Port to bind (hub) or connect to (attach)
-    #[arg(short, long, default_value_t = 1738)]
+    #[arg(short, long, default_value_t = hub::DEFAULT_PORT)]
     pub port: u16,
 }
 
@@ -31,7 +31,7 @@ pub struct HubGlobalArgs {
     pub host: String,
 
     /// Hub port
-    #[arg(short, long, default_value_t = 1738, global = true)]
+    #[arg(short, long, default_value_t = hub::DEFAULT_PORT, global = true)]
     pub port: u16,
 }
 
@@ -165,7 +165,7 @@ pub enum Commands {
         #[arg(long)]
         host: Option<String>,
 
-        /// Hub port (defaults to attach state, then 1738)
+        /// Hub port (defaults to attach state, then 3149)
         #[arg(short, long)]
         port: Option<u16>,
     },
@@ -511,7 +511,7 @@ mod tests {
             "--host",
             "127.0.0.1",
             "-p",
-            "1738",
+            "3149",
         ])
         .unwrap();
         match attach.command {
@@ -521,7 +521,7 @@ mod tests {
                         args:
                             BrowserAttachArgs {
                                 service: Some(s),
-                                hub: HubArgs { port: 1738, .. },
+                                hub: HubArgs { port: 3149, .. },
                                 cdp_port: 9223,
                                 launch: true,
                                 all_network: true,
@@ -542,13 +542,13 @@ mod tests {
             "--host",
             "127.0.0.1",
             "-p",
-            "1738",
+            "3149",
         ])
         .unwrap();
         match start.command {
             Some(Commands::Hub {
                 action: HubAction::Start,
-                hub: HubGlobalArgs { port: 1738, .. },
+                hub: HubGlobalArgs { port: 3149, .. },
                 project: None,
                 ..
             }) => {}
@@ -587,14 +587,14 @@ mod tests {
             "--host",
             "127.0.0.1",
             "-p",
-            "1738",
+            "3149",
         ])
         .unwrap();
         match attach.command {
             Some(Commands::Attach {
                 target: None,
                 service: Some(s),
-                hub: HubArgs { port: 1738, .. },
+                hub: HubArgs { port: 3149, .. },
                 ..
             }) => assert_eq!(s, "dev"),
             other => panic!("unexpected: {other:?}"),
@@ -659,12 +659,12 @@ mod tests {
             other => panic!("unexpected: {other:?}"),
         }
 
-        let cursor = Cli::try_parse_from(["mizpah", "attach", "cursor", "-p", "1738"]).unwrap();
+        let cursor = Cli::try_parse_from(["mizpah", "attach", "cursor", "-p", "3149"]).unwrap();
         assert!(matches!(
             cursor.command,
             Some(Commands::Attach {
                 target: Some(AttachTarget::Cursor {
-                    hub: HubArgs { port: 1738, .. },
+                    hub: HubArgs { port: 3149, .. },
                     ..
                 }),
                 ..
@@ -730,7 +730,7 @@ mod tests {
             "--host",
             "127.0.0.1",
             "--port",
-            "1738",
+            "3149",
             "--project",
             "/tmp/proj",
             "--max-bytes",
@@ -740,7 +740,7 @@ mod tests {
         match resume.command {
             Some(Commands::UpdateResume {
                 wait_pid: 12345,
-                hub: HubArgs { port: 1738, .. },
+                hub: HubArgs { port: 3149, .. },
                 max_bytes: 1048576,
                 project,
                 ..

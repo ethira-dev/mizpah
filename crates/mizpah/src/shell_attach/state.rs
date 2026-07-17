@@ -123,7 +123,7 @@ mod tests {
             enabled: true,
             service: Some("api".into()),
             host: "127.0.0.1".into(),
-            port: 1738,
+            port: 3149,
         };
         let json = serde_json::to_string(&s).unwrap();
         let back: AttachState = serde_json::from_str(&json).unwrap();
@@ -151,7 +151,7 @@ mod tests {
             enabled: true,
             service: Some("dev".into()),
             host: "127.0.0.1".into(),
-            port: 1738,
+            port: 3149,
         };
         save_state_to(&path, &s).unwrap();
         let loaded = load_state_from(&path).unwrap();

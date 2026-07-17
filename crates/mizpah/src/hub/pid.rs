@@ -85,7 +85,7 @@ mod tests {
         // SAFETY: test-only env override for config dir isolation.
         std::env::set_var("MIZPAH_CONFIG_DIR", &dir);
 
-        let port = 1738u16;
+        let port = 3149u16;
         assert!(read_hub_pid(port).unwrap().is_none());
 
         write_hub_pid(port).unwrap();
