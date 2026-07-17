@@ -77,23 +77,7 @@ MCP tools return **TOON** ([Token-Oriented Object Notation](https://toonformat.d
 - Log tools omit `_mzp` (cwd/user/pid/exe) from each row — still filterable via CEL when you need it.
 - `list_properties` drops redundant `sampleValues` when `values` (with counts) is present.
 
-Pretty JSON (what tools used to return):
-
-```json
-{
-  "entries": [
-    {
-      "id": 42,
-      "receivedAt": "2026-07-17T00:00:00Z",
-      "service": "api",
-      "data": { "level": "error", "msg": "timeout" }
-    }
-  ],
-  "hasMore": false
-}
-```
-
-Same payload as TOON (shape illustrative):
+Example `search_logs` result:
 
 ```text
 entries[1]:
