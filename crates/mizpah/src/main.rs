@@ -195,6 +195,11 @@ async fn run_hub(
     }
 
     let store = Arc::new(Store::new(max_bytes));
+    match store.restore_update_spill().await {
+        Ok(0) => {}
+        Ok(n) => info!(restored = n, "restored log buffer from update spill"),
+        Err(err) => tracing::warn!(error = %err, "failed to restore update spill"),
+    }
     let update_mgr = update::UpdateManager::new(update::RestartContext {
         host: host.to_string(),
         port,

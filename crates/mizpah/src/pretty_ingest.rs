@@ -82,8 +82,12 @@ pub fn strip_ansi(input: &str) -> String {
             }
             continue;
         }
-        out.push(bytes[i] as char);
-        i += 1;
+        // Copy contiguous UTF-8 spans intact (byte-as-char would Latin-1-decode).
+        let start = i;
+        while i < bytes.len() && bytes[i] != 0x1b {
+            i += 1;
+        }
+        out.push_str(&input[start..i]);
     }
     out
 }
@@ -377,6 +381,13 @@ mod tests {
     fn strip_ansi_csi() {
         let raw = "\x1b[32m{\x1b[0m";
         assert_eq!(strip_ansi(raw).trim(), "{");
+    }
+
+    #[test]
+    fn strip_ansi_preserves_utf8() {
+        assert_eq!(strip_ansi("failed — ok"), "failed — ok");
+        assert_eq!(strip_ansi("\x1b[31m—\x1b[0m"), "—");
+        assert_eq!(strip_ansi("café 日本語 🎉"), "café 日本語 🎉");
     }
 
     #[test]

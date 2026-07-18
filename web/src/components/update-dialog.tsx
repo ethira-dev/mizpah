@@ -159,8 +159,8 @@ export function UpdateDialog({
           </DialogTitle>
           <DialogDescription>
             {phase === "confirm"
-              ? `Install v${expectedLatest}? The log buffer will clear when the hub restarts.`
-              : `Installing v${expectedLatest}. The log buffer will clear when the hub restarts.`}
+              ? `Install v${expectedLatest}? Your log buffer is saved across the restart.`
+              : `Installing v${expectedLatest}. Your log buffer is saved across the restart.`}
           </DialogDescription>
         </DialogHeader>
 

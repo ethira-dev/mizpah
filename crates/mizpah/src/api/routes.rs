@@ -361,8 +361,9 @@ pub(crate) async fn post_update(
     });
 
     let manager = Arc::clone(&state.update);
+    let store = Arc::clone(&state.store);
     tokio::spawn(async move {
-        update::apply_update(manager, latest, tx).await;
+        update::apply_update(manager, store, latest, tx).await;
     });
 
     let stream = stream::unfold((rx, false), |(mut rx, done)| async move {

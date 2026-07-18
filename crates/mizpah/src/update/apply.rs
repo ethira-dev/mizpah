@@ -7,6 +7,7 @@ use super::check::{
 use super::{
     ProgressTx, UpdateChannel, UpdateEvent, UpdateManager, BREW_FORMULA, DOWNLOAD_TIMEOUT,
 };
+use crate::store::Store;
 use flate2::read::GzDecoder;
 use futures_util::StreamExt;
 use semver::Version;
@@ -19,7 +20,12 @@ use std::time::Duration;
 use tar::Archive;
 use tracing::warn;
 
-pub async fn apply_update(manager: Arc<UpdateManager>, latest: Version, tx: ProgressTx) {
+pub async fn apply_update(
+    manager: Arc<UpdateManager>,
+    store: Arc<Store>,
+    latest: Version,
+    tx: ProgressTx,
+) {
     let channel = {
         let g = manager.inner.lock().await;
         g.channel
@@ -32,6 +38,9 @@ pub async fn apply_update(manager: Arc<UpdateManager>, latest: Version, tx: Prog
 
     match result {
         Ok(()) => {
+            if let Err(err) = store.spill_for_update().await {
+                warn!(error = %err, "failed to spill log buffer before update restart");
+            }
             let _ = tx.send(UpdateEvent {
                 step: "Restarting Mizpah…".into(),
                 progress: 0.95,

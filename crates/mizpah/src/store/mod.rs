@@ -18,6 +18,7 @@ pub use crate::mzp_meta::MzpMeta;
 mod activity;
 mod ingest;
 mod query;
+mod spill;
 
 pub use ingest::parse_line;
 
