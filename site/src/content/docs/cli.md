@@ -14,6 +14,7 @@ order: 7
 | `--host` | Bind/connect host (default `127.0.0.1`) |
 | `--port` / `-p` | Bind/connect port (default `3149`) |
 | `--max-bytes` | Ring buffer cap in bytes (default `1073741824`, hub only) |
+| `--ttl-hours` | Drop logs older than this many hours (default `24`, hub only; `0` disables) |
 | `--no-open` | Do not open a browser when starting as hub |
 | `--project` / `MIZPAH_PROJECT` | Project directory for Check with Claude/Cursor (default: hub cwd) |
 

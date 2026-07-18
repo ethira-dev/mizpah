@@ -21,6 +21,8 @@ pub fn spawn_update_resume(ctx: &RestartContext) -> Result<(), String> {
         &ctx.port.to_string(),
         "--max-bytes",
         &ctx.max_bytes.to_string(),
+        "--ttl-hours",
+        &ctx.ttl_hours.to_string(),
         "--project",
         &ctx.project_dir.to_string_lossy(),
     ]);
@@ -43,6 +45,7 @@ pub async fn run_update_resume(
     port: u16,
     project: PathBuf,
     max_bytes: u64,
+    ttl_hours: u64,
 ) -> Result<(), String> {
     let deadline = tokio::time::Instant::now() + Duration::from_secs(15);
     while tokio::time::Instant::now() < deadline {
@@ -67,6 +70,7 @@ pub async fn run_update_resume(
         port,
         Some(&project),
         Some(max_bytes),
+        Some(ttl_hours),
         false,
     )
     .map_err(|e| format!("failed to start hub after update: {e}"))?;

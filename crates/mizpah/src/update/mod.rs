@@ -62,6 +62,7 @@ pub struct RestartContext {
     pub port: u16,
     pub project_dir: PathBuf,
     pub max_bytes: u64,
+    pub ttl_hours: u64,
 }
 
 pub(crate) struct Inner {

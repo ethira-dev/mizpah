@@ -5,10 +5,11 @@ use crate::properties::{
     decrement_counts_for_entry, discover_paths_into, paths_to_info, push_service_property,
     rebuild_properties_by_service, rebuild_properties_from_entries, PathMeta,
 };
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use serde_json::Value;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::Duration;
 use tokio::sync::{broadcast, RwLock};
 
 // Re-export public DTOs so existing `crate::store::{...}` imports keep working.
@@ -27,6 +28,7 @@ use ingest::{
 };
 
 pub const DEFAULT_MAX_BYTES: u64 = 1_073_741_824; // 1 GiB
+pub const DEFAULT_TTL_HOURS: u64 = 24;
 const BROADCAST_CAPACITY: usize = 1024;
 
 /// Result of pushing a line into the store.
@@ -57,6 +59,8 @@ struct Inner {
     entries: VecDeque<LogEntry>,
     approx_bytes: u64,
     max_bytes: u64,
+    /// When set, entries older than this age are evicted (oldest-first).
+    ttl: Option<Duration>,
     services: HashMap<String, u64>,
     /// Services that must not accept further ingest until reconnected.
     blocked: HashSet<String>,
@@ -75,13 +79,25 @@ pub struct Store {
 }
 
 impl Store {
+    #[cfg(test)]
     pub fn new(max_bytes: u64) -> Self {
+        Self::with_ttl_hours(max_bytes, DEFAULT_TTL_HOURS)
+    }
+
+    /// Create a store. `ttl_hours == 0` disables age-based eviction (byte cap only).
+    pub fn with_ttl_hours(max_bytes: u64, ttl_hours: u64) -> Self {
         let (tx, _) = broadcast::channel(BROADCAST_CAPACITY);
+        let ttl = if ttl_hours == 0 {
+            None
+        } else {
+            Some(Duration::from_secs(ttl_hours.saturating_mul(3600)))
+        };
         Self {
             inner: RwLock::new(Inner {
                 entries: VecDeque::new(),
                 approx_bytes: 0,
                 max_bytes: max_bytes.max(1),
+                ttl,
                 services: HashMap::new(),
                 blocked: HashSet::new(),
                 properties: HashMap::new(),
@@ -91,6 +107,68 @@ impl Store {
             next_id: AtomicU64::new(1),
             tx,
         }
+    }
+
+    /// Drop entries older than the configured TTL. Returns evicted ids (also published).
+    pub async fn expire_ttl(&self) -> Vec<u64> {
+        let now = Utc::now();
+        let evicted = {
+            let mut inner = self.inner.write().await;
+            Self::evict_expired(&mut inner, now)
+        };
+        if !evicted.is_empty() {
+            self.publish(WsEvent::Evicted {
+                ids: evicted.clone(),
+            });
+        }
+        evicted
+    }
+
+    fn entry_exceeds_ttl(received_at: DateTime<Utc>, ttl: Duration, now: DateTime<Utc>) -> bool {
+        now.signed_duration_since(received_at)
+            .to_std()
+            .is_ok_and(|age| age > ttl)
+    }
+
+    fn evict_front(inner: &mut Inner) -> Option<u64> {
+        let old = inner.entries.pop_front()?;
+        inner.approx_bytes = inner.approx_bytes.saturating_sub(old.approx_bytes);
+        if let Some(count) = inner.services.get_mut(&old.service) {
+            *count = count.saturating_sub(1);
+        }
+        decrement_counts_for_entry(&old.data, &mut inner.properties);
+        if let Some(svc_map) = inner.properties_by_service.get_mut(&old.service) {
+            decrement_counts_for_entry(&old.data, svc_map);
+        }
+        Some(old.id)
+    }
+
+    fn evict_expired(inner: &mut Inner, now: DateTime<Utc>) -> Vec<u64> {
+        let Some(ttl) = inner.ttl else {
+            return Vec::new();
+        };
+        let mut evicted_ids = Vec::new();
+        while let Some(front) = inner.entries.front() {
+            if !Self::entry_exceeds_ttl(front.received_at, ttl, now) {
+                break;
+            }
+            match Self::evict_front(inner) {
+                Some(id) => evicted_ids.push(id),
+                None => break,
+            }
+        }
+        evicted_ids
+    }
+
+    fn evict_over_capacity(inner: &mut Inner) -> Vec<u64> {
+        let mut evicted_ids = Vec::new();
+        while inner.approx_bytes > inner.max_bytes {
+            match Self::evict_front(inner) {
+                Some(id) => evicted_ids.push(id),
+                None => break,
+            }
+        }
+        evicted_ids
     }
 
     pub fn subscribe(&self) -> broadcast::Receiver<WsEvent> {
@@ -324,22 +402,8 @@ impl Store {
             inner.approx_bytes += entry.approx_bytes;
             inner.entries.push_back(entry.clone());
 
-            let mut evicted_ids = Vec::new();
-            while inner.approx_bytes > inner.max_bytes {
-                if let Some(old) = inner.entries.pop_front() {
-                    inner.approx_bytes = inner.approx_bytes.saturating_sub(old.approx_bytes);
-                    if let Some(count) = inner.services.get_mut(&old.service) {
-                        *count = count.saturating_sub(1);
-                    }
-                    decrement_counts_for_entry(&old.data, &mut inner.properties);
-                    if let Some(svc_map) = inner.properties_by_service.get_mut(&old.service) {
-                        decrement_counts_for_entry(&old.data, svc_map);
-                    }
-                    evicted_ids.push(old.id);
-                } else {
-                    break;
-                }
-            }
+            let mut evicted_ids = Self::evict_expired(&mut inner, entry.received_at);
+            evicted_ids.extend(Self::evict_over_capacity(&mut inner));
 
             let props = if schema_changed || service_was_new {
                 let mut props = paths_to_info(&inner.properties);
@@ -781,6 +845,57 @@ mod tests {
             .push_line("api", r#"{"level":"info","msg":"back"}"#)
             .await;
         assert_eq!(entries.len(), 1);
+        assert_eq!(store.stats().await.count, 2);
+    }
+
+    #[tokio::test]
+    async fn ttl_evicts_old_entries_on_ingest() {
+        let store = Store::with_ttl_hours(1_000_000, 1);
+        store.push_line("api", r#"{"msg":"old"}"#).await;
+        store.push_line("api", r#"{"msg":"also-old"}"#).await;
+        {
+            let mut inner = store.inner.write().await;
+            let cutoff = Utc::now() - ChronoDuration::hours(2);
+            for entry in inner.entries.iter_mut() {
+                entry.received_at = cutoff;
+            }
+        }
+        let mut rx = store.subscribe();
+        store.push_line("api", r#"{"msg":"fresh"}"#).await;
+        assert_eq!(store.stats().await.count, 1);
+        let mut evicted = false;
+        while let Ok(ev) = rx.try_recv() {
+            if let WsEvent::Evicted { ids } = ev {
+                assert_eq!(ids.len(), 2);
+                evicted = true;
+            }
+        }
+        assert!(evicted, "TTL eviction should broadcast Evicted");
+    }
+
+    #[tokio::test]
+    async fn expire_ttl_drops_stale_without_ingest() {
+        let store = Store::with_ttl_hours(1_000_000, 1);
+        store.push_line("api", r#"{"msg":"stale"}"#).await;
+        {
+            let mut inner = store.inner.write().await;
+            inner.entries[0].received_at = Utc::now() - ChronoDuration::hours(2);
+        }
+        let ids = store.expire_ttl().await;
+        assert_eq!(ids.len(), 1);
+        assert_eq!(store.stats().await.count, 0);
+    }
+
+    #[tokio::test]
+    async fn ttl_zero_disables_age_eviction() {
+        let store = Store::with_ttl_hours(1_000_000, 0);
+        store.push_line("api", r#"{"msg":"ancient"}"#).await;
+        {
+            let mut inner = store.inner.write().await;
+            inner.entries[0].received_at = Utc::now() - ChronoDuration::hours(48);
+        }
+        assert!(store.expire_ttl().await.is_empty());
+        store.push_line("api", r#"{"msg":"new"}"#).await;
         assert_eq!(store.stats().await.count, 2);
     }
 }

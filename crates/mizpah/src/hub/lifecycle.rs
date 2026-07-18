@@ -210,16 +210,17 @@ fn spawn_detached_hub(
     project: Option<&Path>,
     allow_remote: bool,
 ) -> io::Result<std::process::Child> {
-    spawn_detached_hub_with_options(exe, host, port, project, None, allow_remote)
+    spawn_detached_hub_with_options(exe, host, port, project, None, None, allow_remote)
 }
 
-/// Spawn a detached hub process. Optionally pass `--max-bytes` (used after self-update).
+/// Spawn a detached hub process. Optionally pass `--max-bytes` / `--ttl-hours` (used after self-update).
 pub fn spawn_detached_hub_with_options(
     exe: &Path,
     host: &str,
     port: u16,
     project: Option<&Path>,
     max_bytes: Option<u64>,
+    ttl_hours: Option<u64>,
     allow_remote: bool,
 ) -> io::Result<std::process::Child> {
     let mut cmd = Command::new(exe);
@@ -229,6 +230,9 @@ pub fn spawn_detached_hub_with_options(
     }
     if let Some(max_bytes) = max_bytes {
         cmd.arg("--max-bytes").arg(max_bytes.to_string());
+    }
+    if let Some(ttl_hours) = ttl_hours {
+        cmd.arg("--ttl-hours").arg(ttl_hours.to_string());
     }
     if let Some(project) = project {
         cmd.arg("--project").arg(project);

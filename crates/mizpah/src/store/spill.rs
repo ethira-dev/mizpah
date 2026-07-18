@@ -5,6 +5,7 @@ use super::Store;
 use crate::models::LogEntry;
 use crate::properties::{rebuild_properties_by_service, rebuild_properties_from_entries};
 use crate::util;
+use chrono::Utc;
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
 use std::collections::{HashMap, VecDeque};
@@ -123,10 +124,7 @@ fn private_temp_path(final_path: &Path) -> PathBuf {
         .file_name()
         .and_then(|s| s.to_str())
         .unwrap_or("spill");
-    final_path.with_file_name(format!(
-        ".{name}.tmp.{}",
-        std::process::id()
-    ))
+    final_path.with_file_name(format!(".{name}.tmp.{}", std::process::id()))
 }
 
 fn write_private_bytes(path: &Path, bytes: &[u8]) -> Result<(), SpillError> {
@@ -248,7 +246,10 @@ impl Store {
         Ok(())
     }
 
-    pub(crate) async fn restore_update_spill_from_dir(&self, dir: &Path) -> Result<usize, SpillError> {
+    pub(crate) async fn restore_update_spill_from_dir(
+        &self,
+        dir: &Path,
+    ) -> Result<usize, SpillError> {
         let (body_path, key_path, hmac_path) = spill_paths(dir);
         if !body_path.exists() && !key_path.exists() && !hmac_path.exists() {
             return Ok(0);
@@ -342,20 +343,35 @@ impl Store {
         }
         entries.sort_by_key(|e| e.id);
 
-        let max_bytes = {
+        let (max_bytes, ttl) = {
             let inner = self.inner.read().await;
-            inner.max_bytes
+            (inner.max_bytes, inner.ttl)
         };
 
         let mut approx_bytes: u64 = entries.iter().map(|e| e.approx_bytes).sum();
         let mut start = 0usize;
+        if let Some(ttl) = ttl {
+            let now = Utc::now();
+            while start < entries.len() {
+                if !Store::entry_exceeds_ttl(entries[start].received_at, ttl, now) {
+                    break;
+                }
+                approx_bytes = approx_bytes.saturating_sub(entries[start].approx_bytes);
+                start += 1;
+            }
+        }
         while approx_bytes > max_bytes && start < entries.len() {
             approx_bytes = approx_bytes.saturating_sub(entries[start].approx_bytes);
             start += 1;
         }
         let kept: VecDeque<LogEntry> = entries.drain(start..).collect();
         let count = kept.len();
-        let next_id = kept.iter().map(|e| e.id).max().unwrap_or(0).saturating_add(1);
+        let next_id = kept
+            .iter()
+            .map(|e| e.id)
+            .max()
+            .unwrap_or(0)
+            .saturating_add(1);
 
         let mut services: HashMap<String, u64> = HashMap::new();
         for entry in &kept {

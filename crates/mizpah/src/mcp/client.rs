@@ -201,6 +201,7 @@ mod tests {
                 port: 0,
                 project_dir: std::env::temp_dir(),
                 max_bytes: 1024 * 1024,
+                ttl_hours: 0,
             }),
         };
         let app = api::router(state);

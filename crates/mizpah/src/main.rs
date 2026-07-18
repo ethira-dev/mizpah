@@ -132,6 +132,7 @@ pub(crate) async fn run_pipe_mode(cli: Cli) {
                 &cli.hub.host,
                 cli.hub.port,
                 cli.max_bytes,
+                cli.ttl_hours,
                 cli.no_open,
                 service,
                 project_dir,
@@ -178,11 +179,13 @@ fn print_startup_banner(url: &str) {
     );
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn run_hub(
     std_listener: TcpListener,
     host: &str,
     port: u16,
     max_bytes: u64,
+    ttl_hours: u64,
     no_open: bool,
     service: String,
     project_dir: PathBuf,
@@ -194,7 +197,7 @@ async fn run_hub(
         tracing::warn!(error = %err, port, "failed to write hub PID file");
     }
 
-    let store = Arc::new(Store::new(max_bytes));
+    let store = Arc::new(Store::with_ttl_hours(max_bytes, ttl_hours));
     match store.restore_update_spill().await {
         Ok(0) => {}
         Ok(n) => info!(restored = n, "restored log buffer from update spill"),
@@ -205,6 +208,7 @@ async fn run_hub(
         port,
         project_dir: project_dir.clone(),
         max_bytes,
+        ttl_hours,
     });
     update_mgr.spawn_background_checker();
     let state = AppState {
@@ -221,6 +225,18 @@ async fn run_hub(
     tokio::spawn(async move {
         ingest::ingest_stdin_local(ingest_store, service).await;
     });
+
+    if ttl_hours > 0 {
+        let ttl_store = Arc::clone(&store);
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(60));
+            interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+            loop {
+                interval.tick().await;
+                let _ = ttl_store.expire_ttl().await;
+            }
+        });
+    }
 
     // Serve immediately; MCP register + browser open must not delay readiness.
     let side_url = url.clone();

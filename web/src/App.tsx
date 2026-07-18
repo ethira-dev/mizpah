@@ -75,6 +75,9 @@ export function App() {
 
   const {
     entries,
+    hasMore,
+    loadingMore,
+    loadMore,
     services,
     blocked,
     properties,
@@ -176,6 +179,9 @@ export function App() {
                 autoScroll={autoScroll}
                 onAutoScrollChange={setAutoScroll}
                 onApplyFilter={onQueryChange}
+                hasMore={hasMore}
+                loadingMore={loadingMore}
+                onLoadMore={loadMore}
               />
             )}
           </main>

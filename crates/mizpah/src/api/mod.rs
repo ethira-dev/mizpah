@@ -61,6 +61,7 @@ mod tests {
                 port: 3149,
                 project_dir: std::env::temp_dir(),
                 max_bytes: 1_000_000,
+                ttl_hours: 0,
             }),
         }
     }

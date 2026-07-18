@@ -6,7 +6,7 @@ use crate::hub;
 use crate::mcp;
 use crate::shell_attach;
 use crate::shell_forward;
-use crate::store::DEFAULT_MAX_BYTES;
+use crate::store::{DEFAULT_MAX_BYTES, DEFAULT_TTL_HOURS};
 use crate::update;
 use crate::{ensure_bind_allowed, init_tracing_stderr, run_pipe_mode};
 use clap::{Args, Parser, Subcommand};
@@ -95,6 +95,10 @@ pub struct Cli {
     /// Max in-memory log bytes (hub only)
     #[arg(long, default_value_t = DEFAULT_MAX_BYTES)]
     pub max_bytes: u64,
+
+    /// Drop logs older than this many hours (hub only; 0 disables)
+    #[arg(long, default_value_t = DEFAULT_TTL_HOURS)]
+    pub ttl_hours: u64,
 
     /// Do not open the browser when starting as hub
     #[arg(long, default_value_t = false)]
@@ -206,6 +210,10 @@ pub enum Commands {
         /// Max in-memory log bytes
         #[arg(long, default_value_t = DEFAULT_MAX_BYTES)]
         max_bytes: u64,
+
+        /// Drop logs older than this many hours (0 disables)
+        #[arg(long, default_value_t = DEFAULT_TTL_HOURS)]
+        ttl_hours: u64,
     },
 }
 
@@ -424,10 +432,13 @@ pub async fn run() {
             hub,
             project,
             max_bytes,
+            ttl_hours,
         }) => {
             init_tracing_stderr();
-            if let Err(err) =
-                update::run_update_resume(wait_pid, hub.host, hub.port, project, max_bytes).await
+            if let Err(err) = update::run_update_resume(
+                wait_pid, hub.host, hub.port, project, max_bytes, ttl_hours,
+            )
+            .await
             {
                 eprintln!("error: {err}");
                 std::process::exit(1);
@@ -735,6 +746,8 @@ mod tests {
             "/tmp/proj",
             "--max-bytes",
             "1048576",
+            "--ttl-hours",
+            "12",
         ])
         .unwrap();
         match resume.command {
@@ -742,6 +755,7 @@ mod tests {
                 wait_pid: 12345,
                 hub: HubArgs { port: 3149, .. },
                 max_bytes: 1048576,
+                ttl_hours: 12,
                 project,
                 ..
             }) => assert_eq!(project, PathBuf::from("/tmp/proj")),

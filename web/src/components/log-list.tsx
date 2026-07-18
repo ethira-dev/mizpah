@@ -13,13 +13,21 @@ type LogListProps = {
   autoScroll: boolean
   onAutoScrollChange: (v: boolean) => void
   onApplyFilter: (cel: string) => void
+  hasMore?: boolean
+  loadingMore?: boolean
+  onLoadMore?: () => void
 }
+
+const LOAD_MORE_THRESHOLD_PX = 240
 
 export function LogList({
   entries,
   autoScroll,
   onAutoScrollChange,
   onApplyFilter,
+  hasMore = false,
+  loadingMore = false,
+  onLoadMore,
 }: LogListProps) {
   const parentRef = useRef<HTMLDivElement>(null)
   const [selectedId, setSelectedId] = useState<number | null>(null)
@@ -47,6 +55,17 @@ export function LogList({
     const atTop = el.scrollTop < 48
     if (atTop && !autoScroll) onAutoScrollChange(true)
     if (!atTop && autoScroll) onAutoScrollChange(false)
+
+    const distanceFromBottom =
+      el.scrollHeight - el.scrollTop - el.clientHeight
+    if (
+      hasMore &&
+      !loadingMore &&
+      onLoadMore &&
+      distanceFromBottom < LOAD_MORE_THRESHOLD_PX
+    ) {
+      onLoadMore()
+    }
   }
 
   if (entries.length === 0) {
@@ -122,6 +141,11 @@ export function LogList({
             )
           })}
         </div>
+        {loadingMore ? (
+          <div className="px-3 py-2 text-center text-muted-foreground">
+            Loading older logs…
+          </div>
+        ) : null}
       </div>
 
       <LogDetailDialog

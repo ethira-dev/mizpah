@@ -20,6 +20,7 @@ import type {
 } from "@/lib/types"
 
 const MAX_CLIENT_ENTRIES = 50_000
+const PAGE_SIZE = 100
 
 export function useMizpah(
   query: string,
@@ -27,6 +28,8 @@ export function useMizpah(
   timeZoom: TimeZoomLevel
 ) {
   const [entries, setEntries] = useState<LogEntry[]>([])
+  const [hasMore, setHasMore] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [services, setServices] = useState<string[]>([])
   const [blocked, setBlocked] = useState<string[]>([])
   const [properties, setProperties] = useState<PropertyInfo[]>([])
@@ -37,10 +40,31 @@ export function useMizpah(
   const [queryError, setQueryError] = useState<string | null>(null)
   const timeZoomRef = useRef(timeZoom)
   const reloadRef = useRef<() => Promise<void>>(async () => {})
+  const loadingMoreRef = useRef(false)
+  const entriesRef = useRef(entries)
+  const hasMoreRef = useRef(hasMore)
+  const queryRef = useRef(query)
+  const timeRangeRef = useRef(timeRange)
 
   useEffect(() => {
     timeZoomRef.current = timeZoom
   }, [timeZoom])
+
+  useEffect(() => {
+    entriesRef.current = entries
+  }, [entries])
+
+  useEffect(() => {
+    hasMoreRef.current = hasMore
+  }, [hasMore])
+
+  useEffect(() => {
+    queryRef.current = query
+  }, [query])
+
+  useEffect(() => {
+    timeRangeRef.current = timeRange
+  }, [timeRange])
 
   const reloadActivity = useCallback(async () => {
     const zoom = timeZoomRef.current
@@ -60,7 +84,7 @@ export function useMizpah(
     try {
       const [logsResult, svc, props, st, act] = await Promise.all([
         fetchLogs({
-          limit: 500,
+          limit: PAGE_SIZE,
           q: query,
           from: timeRange?.from,
           to: timeRange?.to,
@@ -86,6 +110,7 @@ export function useMizpah(
       setActivity(act)
       if (logsResult.ok) {
         setEntries(logsResult.logs.entries)
+        setHasMore(logsResult.logs.hasMore)
         setQueryError(null)
       } else {
         setQueryError(logsResult.message)
@@ -94,6 +119,38 @@ export function useMizpah(
       setLoading(false)
     }
   }, [query, timeRange, timeZoom])
+
+  const loadMore = useCallback(async () => {
+    if (loadingMoreRef.current || !hasMoreRef.current) return
+    const oldest = entriesRef.current[entriesRef.current.length - 1]
+    if (!oldest) return
+
+    loadingMoreRef.current = true
+    setLoadingMore(true)
+    try {
+      const range = timeRangeRef.current
+      const logs = await fetchLogs({
+        limit: PAGE_SIZE,
+        cursor: oldest.id,
+        q: queryRef.current,
+        from: range?.from,
+        to: range?.to,
+      })
+      const prev = entriesRef.current
+      const seen = new Set(prev.map((e) => e.id))
+      const appended = logs.entries.filter((e) => !seen.has(e.id))
+      const next = [...prev, ...appended]
+      const capped = next.length > MAX_CLIENT_ENTRIES
+      if (capped) next.length = MAX_CLIENT_ENTRIES
+      setEntries(next)
+      setHasMore(capped ? false : logs.hasMore)
+    } catch {
+      /* keep previous page; user can scroll again */
+    } finally {
+      loadingMoreRef.current = false
+      setLoadingMore(false)
+    }
+  }, [])
 
   useEffect(() => {
     reloadRef.current = reload
@@ -161,6 +218,9 @@ export function useMizpah(
 
   return {
     entries,
+    hasMore,
+    loadingMore,
+    loadMore,
     services,
     blocked,
     properties,

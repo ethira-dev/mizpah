@@ -19,7 +19,7 @@ api-server | mzp --service api --project /path/to/repo
 worker | mzp --service worker
 ```
 
-Useful flags: `--no-open`, `--max-bytes` (default `1073741824`), `--project` / `MIZPAH_PROJECT` (cwd for Check with Claude / Cursor).
+Useful flags: `--no-open`, `--max-bytes` (default `1073741824`), `--ttl-hours` (default `24`; `0` disables), `--project` / `MIZPAH_PROJECT` (cwd for Check with Claude / Cursor).
 
 ## HTTP surface (hub)
 
