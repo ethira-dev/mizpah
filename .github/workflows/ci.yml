@@ -69,17 +69,20 @@ jobs:
         with:
           components: miri
       - name: Miri tests (skip unsupported FFI)
-        # Skip FFI / process helpers. Socket/network tests use #[cfg(not(miri))].
-        # HOME avoids directories → getpwuid_r (unsupported under Miri).
-        # Use the toolchain installed above (no `+nightly`) so rustup does not
-        # auto-update to a newer nightly that lacks the miri component.
-        run: >
-          cargo miri test -p mizpah --
-          --skip process_
-          --skip signal_
-          --skip setsid
-          --skip hub_pid
+        # rust-toolchain.toml pins stable — RUSTUP_TOOLCHAIN forces nightly.
+        # Re-add miri in case rustup refreshed the nightly channel mid-job.
+        # Socket/network tests use #[cfg(not(miri))]; HOME avoids getpwuid_r.
+        run: |
+          set -euo pipefail
+          rustup component add miri
+          cargo miri setup
+          cargo miri test -p mizpah -- \
+            --skip process_ \
+            --skip signal_ \
+            --skip setsid \
+            --skip hub_pid
         env:
+          RUSTUP_TOOLCHAIN: nightly
           MIRIFLAGS: -Zmiri-disable-isolation
           HOME: /tmp/mizpah-miri-home
           MIZPAH_CONFIG_DIR: /tmp/mizpah-miri-config
