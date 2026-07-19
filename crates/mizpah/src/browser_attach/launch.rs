@@ -214,6 +214,8 @@ mod tests {
         assert_eq!(url.unwrap(), "ws://test");
     }
 
+    // reqwest/TCP (setsockopt keepalive) is unsupported under Miri.
+    #[cfg(not(miri))]
     #[tokio::test]
     async fn resolve_cdp_ws_url_for_reconnect_ignores_empty() {
         let url = resolve_cdp_ws_url_for_reconnect(9999, Some("  ")).await;
@@ -222,12 +224,19 @@ mod tests {
 
     #[test]
     fn chrome_profile_dir_returns_path() {
+        let _guard = crate::test_support::env_lock();
+        let old = std::env::var_os("MIZPAH_CONFIG_DIR");
+        std::env::set_var("MIZPAH_CONFIG_DIR", "/tmp/mizpah-chrome-profile-test");
         let dir = chrome_profile_dir();
-        assert!(dir.is_ok());
-        let path = dir.unwrap();
+        match old {
+            Some(v) => std::env::set_var("MIZPAH_CONFIG_DIR", v),
+            None => std::env::remove_var("MIZPAH_CONFIG_DIR"),
+        }
+        let path = dir.expect("chrome profile dir");
         assert!(path.to_str().unwrap().contains("chrome-profile"));
     }
 
+    #[cfg(not(miri))]
     #[tokio::test]
     async fn wait_for_cdp_timeout() {
         let result = wait_for_cdp_until(19999, Duration::from_millis(400)).await;
@@ -236,6 +245,7 @@ mod tests {
         assert!(err.contains("timed out"));
     }
 
+    #[cfg(not(miri))]
     #[tokio::test]
     async fn fetch_browser_ws_url_not_reachable() {
         let result = fetch_browser_ws_url(19998).await;
@@ -253,6 +263,7 @@ mod tests {
     }
 
     /// Minimal HTTP server answering Chrome `/json/version`.
+    #[cfg(not(miri))]
     async fn serve_cdp_version(body: &str) -> u16 {
         use tokio::io::{AsyncReadExt, AsyncWriteExt};
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -271,6 +282,7 @@ mod tests {
         port
     }
 
+    #[cfg(not(miri))]
     #[tokio::test]
     async fn fetch_browser_ws_url_success() {
         let port =
@@ -280,6 +292,7 @@ mod tests {
         assert!(url.contains("devtools/browser"));
     }
 
+    #[cfg(not(miri))]
     #[tokio::test]
     async fn fetch_browser_ws_url_missing_field() {
         let port = serve_cdp_version(r#"{"Browser":"Chrome"}"#).await;
@@ -287,6 +300,7 @@ mod tests {
         assert!(err.contains("missing webSocketDebuggerUrl"));
     }
 
+    #[cfg(not(miri))]
     #[tokio::test]
     async fn fetch_browser_ws_url_http_error_status() {
         use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -303,6 +317,7 @@ mod tests {
         assert!(err.contains("returned"));
     }
 
+    #[cfg(not(miri))]
     #[tokio::test]
     async fn wait_for_cdp_succeeds_when_ready() {
         let port =
@@ -313,6 +328,7 @@ mod tests {
             .unwrap();
     }
 
+    #[cfg(not(miri))]
     #[tokio::test]
     async fn resolve_cdp_ws_url_fetches_when_no_override() {
         let port =

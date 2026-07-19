@@ -79,6 +79,9 @@ mod tests {
         })
     }
 
+    // Full axum oneshot + embedded assets is extremely slow under Miri; resolve_*
+    // unit tests cover the same routing logic without the service stack.
+    #[cfg(not(miri))]
     #[tokio::test]
     async fn serves_index_at_root() {
         let app = test_app();
@@ -95,6 +98,7 @@ mod tests {
         );
     }
 
+    #[cfg(not(miri))]
     #[tokio::test]
     async fn serves_embedded_asset() {
         let js_path = Assets::iter()
@@ -122,6 +126,7 @@ mod tests {
         );
     }
 
+    #[cfg(not(miri))]
     #[tokio::test]
     async fn spa_fallback_for_missing_path() {
         let app = test_app();
@@ -211,6 +216,7 @@ mod tests {
         assert_ne!(ct, "\n");
     }
 
+    #[cfg(not(miri))]
     #[tokio::test]
     async fn static_handler_serves_embedded_assets() {
         let resp = static_handler(Uri::from_static("/")).await;
