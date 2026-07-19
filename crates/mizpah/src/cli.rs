@@ -1839,6 +1839,8 @@ mod tests {
         assert_eq!(run_parsed(parse(&["mizpah", "--no-open"]), &deps).await, 3);
     }
 
+    // Real CliDeps hits reqwest (setsockopt keepalive) — unsupported under Miri.
+    #[cfg(not(miri))]
     #[tokio::test]
     async fn run_parsed_real_deps_fast_failures() {
         let _guard = crate::test_support::env_lock();

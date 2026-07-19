@@ -321,6 +321,8 @@ mod tests {
         assert!(result.is_ok());
     }
 
+    // probe_hub uses reqwest (setsockopt keepalive) — unsupported under Miri.
+    #[cfg(not(miri))]
     #[tokio::test]
     async fn ensure_hub_remote_denied() {
         let result = ensure_hub("192.168.1.1", 9999, None, false).await;
@@ -341,12 +343,14 @@ mod tests {
         assert!(result.is_ok());
     }
 
+    #[cfg(not(miri))]
     #[tokio::test]
     async fn run_hub_stop_not_running() {
         let result = run_hub_stop("127.0.0.1".to_string(), 19999).await;
         assert!(result.is_ok());
     }
 
+    #[cfg(not(miri))]
     #[tokio::test]
     async fn run_hub_stop_with_stale_pid() {
         use crate::hub::pid::{hub_pid_path, write_hub_pid};
@@ -376,6 +380,7 @@ mod tests {
         assert!(result.is_ok());
     }
 
+    #[cfg(not(miri))]
     #[tokio::test]
     async fn run_hub_restart_not_running() {
         // Stop is a no-op when nothing is listening; start may fail if the

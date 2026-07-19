@@ -349,6 +349,7 @@ aggregate --group-by level level != ""
         }
     }
 
+    #[cfg(not(miri))]
     #[tokio::test]
     async fn run_script_hub_unreachable_errors() {
         let dir = tempfile::tempdir().unwrap();

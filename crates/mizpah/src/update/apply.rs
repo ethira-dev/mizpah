@@ -588,6 +588,7 @@ mod tests {
         tar.finish().expect("finish tar");
     }
 
+    #[cfg(not(miri))]
     async fn start_static_http(body: Vec<u8>, content_length: bool) -> String {
         use axum::body::Body;
         use axum::http::{header, Response, StatusCode};
@@ -1581,6 +1582,7 @@ mod tests {
         clear_quarantine(&bin);
     }
 
+    #[cfg(not(miri))]
     #[tokio::test]
     async fn download_with_progress_writes_file_with_content_length() {
         let body = b"hello-update-bytes".to_vec();
@@ -1678,6 +1680,7 @@ mod tests {
         );
     }
 
+    #[cfg(not(miri))]
     #[test]
     fn real_download_delegates_to_download_with_progress() {
         let rt = tokio::runtime::Runtime::new().expect("runtime");
@@ -1763,6 +1766,7 @@ mod tests {
         assert_eq!(result.unwrap_err(), "download failed");
     }
 
+    #[cfg(not(miri))]
     #[tokio::test]
     async fn download_with_progress_without_content_length() {
         let body = b"chunked-body".to_vec();

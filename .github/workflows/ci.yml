@@ -76,11 +76,26 @@ jobs:
           set -euo pipefail
           rustup component add miri
           cargo miri setup
+          # Also skip residual real-socket paths (reqwest keepalive setsockopt).
           cargo miri test -p mizpah -- \
             --skip process_ \
             --skip signal_ \
             --skip setsid \
-            --skip hub_pid
+            --skip hub_pid \
+            --skip probe_hub \
+            --skip run_hub_ \
+            --skip ensure_hub_remote_denied \
+            --skip ensure_hub_already_up \
+            --skip download_with_progress \
+            --skip real_download_ \
+            --skip run_parsed_real_deps \
+            --skip run_script_hub_unreachable \
+            --skip post_batch_ \
+            --skip fetch_browser_ws_url \
+            --skip wait_for_cdp \
+            --skip resolve_cdp_ws_url_fetch \
+            --skip pipe_mode_ \
+            --skip flush_batch_
         env:
           RUSTUP_TOOLCHAIN: nightly
           MIRIFLAGS: -Zmiri-disable-isolation

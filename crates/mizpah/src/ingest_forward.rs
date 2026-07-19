@@ -124,6 +124,7 @@ mod tests {
         }
     }
 
+    #[cfg(not(miri))]
     #[tokio::test]
     async fn post_batch_empty_lines_is_noop() {
         let client = http_client().unwrap();
