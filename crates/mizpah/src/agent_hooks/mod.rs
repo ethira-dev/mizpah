@@ -242,6 +242,7 @@ mod tests {
         assert!(cmd.contains("__hook-forward --source cursor"));
     }
 
+    #[cfg(not(miri))]
     #[tokio::test]
     async fn run_attach_source_cursor_writes_hooks_and_state() {
         let (hub_url, _store) = crate::test_support::spawn_test_hub().await;
@@ -288,6 +289,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&home);
     }
 
+    #[cfg(not(miri))]
     #[tokio::test]
     async fn run_attach_source_claude_idempotent() {
         let (hub_url, _store) = crate::test_support::spawn_test_hub().await;
@@ -431,6 +433,7 @@ mod tests {
         });
     }
 
+    #[cfg(not(miri))]
     #[tokio::test]
     async fn run_attach_source_reports_already_present() {
         let (hub_url, _store) = crate::test_support::spawn_test_hub().await;
@@ -476,6 +479,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&home);
     }
 
+    #[cfg(not(miri))]
     #[tokio::test]
     async fn run_attach_source_invalid_cursor_json_errors() {
         let (hub_url, _store) = crate::test_support::spawn_test_hub().await;
@@ -542,6 +546,7 @@ mod tests {
         });
     }
 
+    #[cfg(not(miri))]
     #[tokio::test]
     async fn run_attach_claude_wrapper() {
         let (hub_url, _store) = crate::test_support::spawn_test_hub().await;
@@ -575,6 +580,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&home);
     }
 
+    #[cfg(not(miri))]
     #[tokio::test]
     async fn run_attach_cursor_wrapper() {
         let (hub_url, _store) = crate::test_support::spawn_test_hub().await;
@@ -606,6 +612,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&home);
     }
 
+    #[cfg(not(miri))]
     #[tokio::test]
     async fn run_attach_source_default_service() {
         let (hub_url, _store) = crate::test_support::spawn_test_hub().await;

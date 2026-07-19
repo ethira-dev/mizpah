@@ -258,6 +258,7 @@ mod tests {
     use super::*;
     use serde_json::json;
 
+    #[cfg(not(miri))]
     #[tokio::test]
     async fn flush_grouped_with_empty_buffer() {
         let (hub_url, _store) = crate::test_support::spawn_test_hub().await;
@@ -269,6 +270,7 @@ mod tests {
         assert!(buf.is_empty());
     }
 
+    #[cfg(not(miri))]
     #[tokio::test]
     async fn flush_grouped_groups_by_service() {
         let (hub_url, store) = crate::test_support::spawn_test_hub().await;
@@ -304,6 +306,7 @@ mod tests {
         assert_eq!(entries.len(), 3);
     }
 
+    #[cfg(not(miri))]
     #[tokio::test]
     async fn flush_grouped_with_service_override() {
         let (hub_url, store) = crate::test_support::spawn_test_hub().await;
@@ -329,6 +332,7 @@ mod tests {
         assert_eq!(entries[0].service, "overridden");
     }
 
+    #[cfg(not(miri))]
     #[tokio::test]
     async fn flush_grouped_splits_large_batch() {
         let (hub_url, store) = crate::test_support::spawn_test_hub().await;
@@ -367,6 +371,7 @@ mod tests {
         assert!(!opts.all_network);
     }
 
+    #[cfg(not(miri))]
     #[tokio::test]
     async fn run_ingest_forwarder_flushes_and_exits() {
         let (hub_url, store) = crate::test_support::spawn_test_hub().await;

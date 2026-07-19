@@ -513,17 +513,19 @@ msgField = "text"
 id = "mine"
 matchKeys = ["mineId"]
 matchAny = ["extra"]
-levelField = "severityText"
-msgField = "body"
+levelField = "lvl"
+msgField = "text"
 "#,
         )
         .unwrap();
+        let _guard = crate::test_support::env_lock();
         std::env::set_var("MIZPAH_CONFIG_DIR", dir.path());
+        // Avoid OTEL builtin keys (severityText/body) so the user pack wins.
         let obj = json!({
             "mineId": 1,
             "extra": true,
-            "severityText": "WARNING",
-            "body": "hello"
+            "lvl": "WARNING",
+            "text": "hello"
         });
         let Value::Object(map) = obj else { panic!() };
         let n = classify_json_object(&map).expect("user pack");

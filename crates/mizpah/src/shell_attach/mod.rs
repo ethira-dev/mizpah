@@ -85,9 +85,17 @@ pub async fn run_open(host: String, port: u16) -> Result<(), String> {
         ));
     }
     let url = crate::hub::hub_url(&host, port);
-    open::that(&url).map_err(|e| format!("failed to open browser: {e}"))?;
+    open_browser(&url)?;
     eprintln!("opened {url}");
     Ok(())
+}
+
+fn open_browser(url: &str) -> Result<(), String> {
+    #[cfg(test)]
+    if std::env::var_os("MIZPAH_TEST_SKIP_BROWSER").is_some() {
+        return Ok(());
+    }
+    open::that(url).map_err(|e| format!("failed to open browser: {e}"))
 }
 
 #[cfg(test)]
@@ -203,6 +211,7 @@ mod tests {
         });
     }
 
+    #[cfg(not(miri))]
     #[tokio::test]
     async fn run_attach_enables_state_and_installs_hooks() {
         let (hub_url, _store) = crate::test_support::spawn_test_hub().await;
@@ -247,19 +256,25 @@ mod tests {
         let _ = std::fs::remove_dir_all(&home);
     }
 
+    #[cfg(not(miri))]
     #[tokio::test]
     async fn run_open_unreachable_hub_errors() {
         let err = run_open("127.0.0.1".into(), 19996).await.unwrap_err();
         assert!(err.contains("not reachable"));
     }
 
+    #[cfg(not(miri))]
     #[tokio::test]
     async fn run_open_succeeds_when_hub_up() {
+        let _guard = env_lock();
+        std::env::set_var("MIZPAH_TEST_SKIP_BROWSER", "1");
         let (hub_url, _store) = crate::test_support::spawn_test_hub().await;
         let url = url::Url::parse(&hub_url).unwrap();
         let host = url.host_str().unwrap_or("127.0.0.1").to_string();
         let port = url.port().unwrap_or(80);
-        run_open(host, port).await.unwrap();
+        let result = run_open(host, port).await;
+        std::env::remove_var("MIZPAH_TEST_SKIP_BROWSER");
+        result.unwrap();
     }
 
     #[test]

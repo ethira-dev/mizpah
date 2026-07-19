@@ -257,6 +257,7 @@ aggregate --group-by level level != ""
         }
     }
 
+    #[cfg(not(miri))]
     #[tokio::test]
     async fn run_script_executes_query_and_aggregate() {
         let (url, store) = spawn_test_hub().await;
@@ -324,6 +325,7 @@ aggregate --group-by level level != ""
         assert_eq!(err.to_string(), "hub down");
     }
 
+    #[cfg(not(miri))]
     #[tokio::test]
     async fn run_script_empty_query_matches_all() {
         let (url, store) = spawn_test_hub().await;

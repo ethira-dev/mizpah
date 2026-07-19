@@ -1662,6 +1662,7 @@ mod tests {
         );
     }
 
+    #[cfg(not(miri))]
     #[tokio::test]
     async fn run_parsed_query_sql_live_hub() {
         let (base, _store) = crate::test_support::spawn_test_hub().await;

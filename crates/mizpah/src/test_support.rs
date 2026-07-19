@@ -88,6 +88,7 @@ mod tests {
         let _again = terminal_opener_lock();
     }
 
+    #[cfg(not(miri))]
     #[tokio::test]
     async fn spawn_test_hub_serves() {
         let (base, store) = spawn_test_hub().await;

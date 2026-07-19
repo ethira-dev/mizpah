@@ -179,6 +179,7 @@ mod tests {
         use super::*;
         use crate::test_support::hub::spawn_test_hub;
 
+        #[cfg(not(miri))]
         #[tokio::test]
         async fn post_batch_success() {
             let (url, store) = spawn_test_hub().await;
@@ -214,6 +215,7 @@ mod tests {
             assert!(matches!(err, BatchError::Other(_)));
         }
 
+        #[cfg(not(miri))]
         #[tokio::test]
         async fn post_batch_disconnected_on_conflict() {
             let (url, _store) = spawn_test_hub().await;
@@ -273,6 +275,7 @@ mod tests {
             assert!(matches!(err, BatchError::Other(ref s) if s.contains("500")));
         }
 
+        #[cfg(not(miri))]
         #[tokio::test]
         async fn post_batch_hint_includes_format() {
             let (url, store) = spawn_test_hub().await;

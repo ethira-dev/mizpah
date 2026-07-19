@@ -309,6 +309,7 @@ mod tests {
         assert_eq!(hub_url("localhost", 8080), "http://localhost:8080");
     }
 
+    #[cfg(not(miri))]
     #[tokio::test]
     async fn ensure_hub_already_up() {
         let (base_url, _store) = crate::test_support::spawn_test_hub().await;
@@ -328,6 +329,7 @@ mod tests {
         assert!(err.contains("not reachable") || err.contains("allow-remote"));
     }
 
+    #[cfg(not(miri))]
     #[tokio::test]
     async fn run_hub_start_already_running() {
         let (base_url, _store) = crate::test_support::spawn_test_hub().await;
@@ -413,12 +415,14 @@ mod tests {
         }
     }
 
+    #[cfg(not(miri))]
     #[tokio::test]
     async fn probe_hub_not_running() {
         let result = probe_hub("127.0.0.1", 19996).await;
         assert!(!result);
     }
 
+    #[cfg(not(miri))]
     #[tokio::test]
     async fn probe_hub_running() {
         let (base_url, _store) = crate::test_support::spawn_test_hub().await;
@@ -429,6 +433,7 @@ mod tests {
         assert!(result);
     }
 
+    #[cfg(not(miri))]
     #[tokio::test]
     async fn run_hub_stop_running_without_pid_file() {
         let (base_url, _store) = crate::test_support::spawn_test_hub().await;
@@ -603,6 +608,7 @@ mod tests {
         assert!(result.unwrap_err().to_string().contains("no binary"));
     }
 
+    #[cfg(not(miri))]
     #[tokio::test]
     async fn run_hub_stop_stale_pid_while_hub_running() {
         use crate::hub::pid::{hub_pid_path, write_hub_pid};

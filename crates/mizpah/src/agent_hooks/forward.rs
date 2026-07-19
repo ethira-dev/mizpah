@@ -488,6 +488,7 @@ mod tests {
         assert!(derive_msg("c", "k", &json!({"hookSource": "x"})).contains('x'));
     }
 
+    #[cfg(not(miri))]
     #[tokio::test]
     async fn forward_once_corrupt_state_errors() {
         let _guard = env_lock();
@@ -544,6 +545,7 @@ mod tests {
         assert!(msg.contains("startup"));
     }
 
+    #[cfg(not(miri))]
     #[tokio::test]
     async fn run_hook_forward_with_enabled_claude() {
         let (hub_url, store) = crate::test_support::spawn_test_hub().await;

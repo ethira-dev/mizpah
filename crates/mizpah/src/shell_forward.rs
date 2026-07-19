@@ -596,6 +596,7 @@ mod tests {
             let _ = std::fs::remove_dir_all(&dir);
         }
 
+        #[cfg(not(miri))]
         #[tokio::test]
         async fn flush_batch_success_posts_to_hub() {
             let (hub_url, store) = crate::test_support::spawn_test_hub().await;
@@ -645,6 +646,7 @@ mod tests {
             let _ = std::fs::remove_dir_all(&dir);
         }
 
+        #[cfg(not(miri))]
         #[tokio::test]
         async fn flush_batch_disconnect_resets_dropped() {
             let (hub_url, _store) = crate::test_support::spawn_test_hub().await;
@@ -727,6 +729,7 @@ mod tests {
             assert_eq!(backoff, Duration::from_millis(200));
         }
 
+        #[cfg(not(miri))]
         #[tokio::test]
         async fn forward_worker_with_disabled_attach_drops_lines() {
             let (hub_url, store) = crate::test_support::spawn_test_hub().await;
@@ -751,6 +754,7 @@ mod tests {
             let _ = std::fs::remove_dir_all(&dir);
         }
 
+        #[cfg(not(miri))]
         #[tokio::test]
         async fn forward_worker_flushes_lines_and_meta() {
             let (hub_url, store) = crate::test_support::spawn_test_hub().await;
@@ -791,6 +795,7 @@ mod tests {
             let _ = std::fs::remove_dir_all(&dir);
         }
 
+        #[cfg(not(miri))]
         #[tokio::test]
         async fn forward_worker_batch_max_flush() {
             let (hub_url, store) = crate::test_support::spawn_test_hub().await;
@@ -826,6 +831,7 @@ mod tests {
             let _ = std::fs::remove_dir_all(&dir);
         }
 
+        #[cfg(not(miri))]
         #[tokio::test]
         async fn forward_worker_drains_on_empty_meta_cmd() {
             let (hub_url, _store) = crate::test_support::spawn_test_hub().await;
@@ -863,6 +869,7 @@ mod tests {
             let _ = std::fs::remove_dir_all(&dir);
         }
 
+        #[cfg(not(miri))]
         #[tokio::test]
         async fn flush_batch_reads_attach_state_from_env() {
             let (hub_url, store) = crate::test_support::spawn_test_hub().await;
@@ -901,6 +908,7 @@ mod tests {
             let _ = std::fs::remove_dir_all(&dir);
         }
 
+        #[cfg(not(miri))]
         #[tokio::test]
         async fn forward_worker_flushes_on_channel_close() {
             let (hub_url, store) = crate::test_support::spawn_test_hub().await;
@@ -925,6 +933,7 @@ mod tests {
             let _ = std::fs::remove_dir_all(&dir);
         }
 
+        #[cfg(not(miri))]
         #[tokio::test]
         async fn forward_worker_times_out_batch_flush() {
             let (hub_url, store) = crate::test_support::spawn_test_hub().await;
