@@ -583,6 +583,8 @@ mod tests {
         assert_eq!(out, "compressed\n");
     }
 
+    // libbz2 FFI is unsupported under Miri.
+    #[cfg(not(miri))]
     #[test]
     fn open_reader_bzip2() {
         use bzip2::write::BzEncoder;

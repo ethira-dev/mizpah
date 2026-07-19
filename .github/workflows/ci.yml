@@ -95,7 +95,9 @@ jobs:
             --skip wait_for_cdp \
             --skip resolve_cdp_ws_url_fetch \
             --skip pipe_mode_ \
-            --skip flush_batch_
+            --skip flush_batch_ \
+            --skip open_reader_bzip2 \
+            --skip bzip2
         env:
           RUSTUP_TOOLCHAIN: nightly
           MIRIFLAGS: -Zmiri-disable-isolation
