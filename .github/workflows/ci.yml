@@ -71,8 +71,10 @@ jobs:
       - name: Miri tests (skip unsupported FFI)
         # Skip FFI / process helpers. Socket/network tests use #[cfg(not(miri))].
         # HOME avoids directories → getpwuid_r (unsupported under Miri).
+        # Use the toolchain installed above (no `+nightly`) so rustup does not
+        # auto-update to a newer nightly that lacks the miri component.
         run: >
-          cargo +nightly miri test -p mizpah --
+          cargo miri test -p mizpah --
           --skip process_
           --skip signal_
           --skip setsid
