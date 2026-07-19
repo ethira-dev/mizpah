@@ -11,7 +11,15 @@ pub fn home_dir() -> Option<PathBuf> {
             return Some(PathBuf::from(trimmed));
         }
     }
-    directories::UserDirs::new().map(|u| u.home_dir().to_path_buf())
+    // directories → libc getpwuid_r is unsupported under Miri.
+    #[cfg(miri)]
+    {
+        return None;
+    }
+    #[cfg(not(miri))]
+    {
+        directories::UserDirs::new().map(|u| u.home_dir().to_path_buf())
+    }
 }
 
 pub fn config_dir() -> io::Result<PathBuf> {
@@ -21,9 +29,19 @@ pub fn config_dir() -> io::Result<PathBuf> {
             return Ok(PathBuf::from(trimmed));
         }
     }
-    directories::ProjectDirs::from("dev", "ethira", "mizpah")
-        .map(|d| d.config_dir().to_path_buf())
-        .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "could not resolve config dir"))
+    #[cfg(miri)]
+    {
+        return Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            "could not resolve config dir under miri (set MIZPAH_CONFIG_DIR)",
+        ));
+    }
+    #[cfg(not(miri))]
+    {
+        directories::ProjectDirs::from("dev", "ethira", "mizpah")
+            .map(|d| d.config_dir().to_path_buf())
+            .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "could not resolve config dir"))
+    }
 }
 
 /// Atomically replace `path` with `content`. On Unix, preserves existing mode when present,
@@ -65,29 +83,48 @@ mod tests {
     #[test]
     fn home_dir_skips_empty_env() {
         let _guard = env_lock();
+        let old = std::env::var_os("HOME");
         std::env::set_var("HOME", "   ");
+        // Empty/whitespace HOME falls through; under miri there is no getpwuid fallback.
+        #[cfg(not(miri))]
         assert!(home_dir().is_some());
-        std::env::remove_var("HOME");
+        #[cfg(miri)]
+        assert!(home_dir().is_none());
+        match old {
+            Some(v) => std::env::set_var("HOME", v),
+            None => std::env::remove_var("HOME"),
+        }
     }
 
     #[test]
     fn config_dir_honors_env_override() {
         let _guard = env_lock();
+        let old = std::env::var_os("MIZPAH_CONFIG_DIR");
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().to_str().unwrap();
         std::env::set_var("MIZPAH_CONFIG_DIR", path);
         let resolved = config_dir().unwrap();
         assert_eq!(resolved, PathBuf::from(path));
-        std::env::remove_var("MIZPAH_CONFIG_DIR");
+        match old {
+            Some(v) => std::env::set_var("MIZPAH_CONFIG_DIR", v),
+            None => std::env::remove_var("MIZPAH_CONFIG_DIR"),
+        }
     }
 
     #[test]
     fn config_dir_falls_back_when_env_empty() {
         let _guard = env_lock();
+        let old = std::env::var_os("MIZPAH_CONFIG_DIR");
         std::env::set_var("MIZPAH_CONFIG_DIR", "   ");
         let resolved = config_dir();
-        std::env::remove_var("MIZPAH_CONFIG_DIR");
+        match old {
+            Some(v) => std::env::set_var("MIZPAH_CONFIG_DIR", v),
+            None => std::env::remove_var("MIZPAH_CONFIG_DIR"),
+        }
+        #[cfg(not(miri))]
         assert!(resolved.is_ok());
+        #[cfg(miri)]
+        assert!(resolved.is_err());
     }
 
     #[cfg(unix)]

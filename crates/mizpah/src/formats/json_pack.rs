@@ -519,6 +519,7 @@ msgField = "text"
         )
         .unwrap();
         let _guard = crate::test_support::env_lock();
+        let old = std::env::var_os("MIZPAH_CONFIG_DIR");
         std::env::set_var("MIZPAH_CONFIG_DIR", dir.path());
         // Avoid OTEL builtin keys (severityText/body) so the user pack wins.
         let obj = json!({
@@ -531,7 +532,10 @@ msgField = "text"
         let n = classify_json_object(&map).expect("user pack");
         assert_eq!(n.format_id, "mine");
         assert_eq!(n.data["level"], "warn");
-        std::env::remove_var("MIZPAH_CONFIG_DIR");
+        match old {
+            Some(v) => std::env::set_var("MIZPAH_CONFIG_DIR", v),
+            None => std::env::remove_var("MIZPAH_CONFIG_DIR"),
+        }
     }
 
     #[test]

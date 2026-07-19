@@ -86,6 +86,7 @@ mod tests {
         router(test_state(Arc::new(Store::new(1_000_000))))
     }
 
+    #[cfg(not(miri))]
     #[tokio::test]
     async fn ingest_single_line() {
         let store = Arc::new(Store::new(1_000_000));
@@ -117,6 +118,7 @@ mod tests {
         assert!(mzp.get("exe").is_some());
     }
 
+    #[cfg(not(miri))]
     #[tokio::test]
     async fn ingest_batch_ordered() {
         let store = Arc::new(Store::new(1_000_000));
@@ -162,6 +164,7 @@ mod tests {
         assert!(entries.iter().all(|e| e.data.get("_mzp").is_some()));
     }
 
+    #[cfg(not(miri))]
     #[tokio::test]
     async fn ingest_batch_injects_cmd() {
         let store = Arc::new(Store::new(1_000_000));
@@ -206,6 +209,7 @@ mod tests {
         assert_eq!(entries[1].data["msg"], json!("hi"));
     }
 
+    #[cfg(not(miri))]
     #[tokio::test]
     async fn ingest_batch_rejects_empty_service() {
         let app = test_app();
@@ -223,6 +227,7 @@ mod tests {
         assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
     }
 
+    #[cfg(not(miri))]
     #[tokio::test]
     async fn ingest_batch_rejects_oversized() {
         let app = test_app();
@@ -243,6 +248,7 @@ mod tests {
         assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
     }
 
+    #[cfg(not(miri))]
     #[tokio::test]
     async fn investigate_missing_entry_is_404() {
         let app = test_app();
@@ -322,6 +328,7 @@ mod tests {
         assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
     }
 
+    #[cfg(not(miri))]
     #[tokio::test]
     async fn disconnect_blocks_ingest_and_lists_blocked() {
         let store = Arc::new(Store::new(1_000_000));
