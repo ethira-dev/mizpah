@@ -423,6 +423,7 @@ mod tests {
         assert_eq!(store.stats().await.count, 1);
     }
 
+    #[cfg(not(miri))]
     #[tokio::test]
     async fn aggregate_nav_bookmarks_spectrogram() {
         let store = Arc::new(Store::new(1_000_000));

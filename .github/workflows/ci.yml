@@ -70,6 +70,7 @@ jobs:
           components: miri
       - name: Miri tests (skip unsupported FFI)
         # Skip FFI / process helpers. Socket/network tests use #[cfg(not(miri))].
+        # HOME avoids directories → getpwuid_r (unsupported under Miri).
         run: >
           cargo +nightly miri test -p mizpah --
           --skip process_
@@ -78,6 +79,8 @@ jobs:
           --skip hub_pid
         env:
           MIRIFLAGS: -Zmiri-disable-isolation
+          HOME: /tmp/mizpah-miri-home
+          MIZPAH_CONFIG_DIR: /tmp/mizpah-miri-config
 
   audit:
     name: audit
