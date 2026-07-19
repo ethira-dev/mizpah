@@ -37,7 +37,7 @@ my-app 2>&1 | mzp --service api
 # 3. Install the agent skill (Cursor, Claude Code, Codex, …)
 npx skills add ethira-dev/mizpah
 
-# 4. Register MCP tools so search_logs / get_logs_around are available
+# 4. Register MCP tools (search_logs, aggregate_logs, get_trace, query_sql, …)
 mzp mcp install
 # restart the agent client
 ```
@@ -66,8 +66,17 @@ Also available as a Cursor plugin (repo-root `.cursor-plugin/` + `skills/mizpah/
 | `list_properties` | `service?`, `q?` | Discovered paths + sample values (for writing CEL) |
 | `search_logs` | `q?` (CEL), `service?`, `limit?`, `cursor?` | Newest-first; **default limit 20, max 50**; `hasMore` for pagination |
 | `get_logs_around` | `id`, `before?` (default 5), `after?` (default 5), `service?`, `q?` | Window around an entry for stack/context |
+| `aggregate_logs` | `group_by?`, `q?`, `service?`, `limit?` | Top-N counts (GROUP BY); default `group_by=["service"]`; **default limit 20, max 50** |
+| `get_trace` | `opid`, `limit?` | All buffered rows for a trace/request id (oldest-first); hard-capped |
+| `list_traces` | `limit?` | Distinct traces in the buffer (counts + time range) |
+| `query_sql` | `sql`, `limit?` | Single `SELECT` / `WITH … SELECT` over snapshot `all_logs`; **max 50 rows** via MCP |
+| `list_bookmarks` | (none) | Bookmarks / tags / comments on buffered entries |
+| `nav_level` | `from_id`, `direction?`, `levels?` | Next/prev error or warn (hub-wide) |
+| `spectrogram` | `field?`, `time_buckets?` | Time × field heat-map (default `field=level`) |
 
 Server instructions tell the model to keep limits small and never dump the full buffer. If the hub is down, start a stream: `my-app 2>&1 | mzp --service <name>`.
+
+Bookmarks, spectrogram, SQL, and aggregates are also available in the web UI Tools sheet and via REST/CLI.
 
 ### Tool result format (TOON)
 
@@ -96,6 +105,8 @@ hasMore: false
 1. list_properties (optional) → learn fields
 2. search_logs q='level == "error"' service='api' limit=10
 3. get_logs_around id=<id> before=5 after=5
+4. aggregate_logs group_by=['level'] q='service == "api"' limit=10
+5. get_trace opid=<trace-id>   # or query_sql for GROUP BY analytics
 ```
 
 ## Investigate from the UI

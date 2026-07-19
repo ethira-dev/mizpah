@@ -1,0 +1,32 @@
+{
+    "logrus_log": {
+        "title": "Logrus text",
+        "description": "sirupsen/logrus TextFormatter lines (time= level=info msg=…)",
+        "url": "https://github.com/sirupsen/logrus",
+        "regex": {
+            "std": {
+                "pattern": "^time=\"(?<timestamp>[^\"]+)\"\\s+level=(?<level>trace|debug|info|warning|warn|error|fatal|panic)\\s+msg=\"(?<body>(?:\\\\.|[^\"\\\\])*)\".*$"
+            }
+        },
+        "level-field": "level",
+        "body-field": "body",
+        "timestamp-field": "timestamp",
+        "level": {
+            "trace": "trace",
+            "debug": "debug",
+            "info": "info",
+            "warn": "^(?:warning|warn)$",
+            "error": "error",
+            "fatal": "fatal",
+            "critical": "panic"
+        },
+        "sample": [
+            {
+                "line": "time=\"2020-01-01T00:00:00Z\" level=info msg=\"server listening\""
+            },
+            {
+                "line": "time=\"2020-01-01T00:00:00Z\" level=error msg=\"request failed\" error=\"timeout\""
+            }
+        ]
+    }
+}

@@ -1,0 +1,22 @@
+{
+    "kafka_log": {
+        "title": "Apache Kafka",
+        "description": "Kafka broker / log4j-style logs",
+        "regex": {
+            "std": {
+                "pattern": "^\\[(?<timestamp>\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2},\\d+)\\] (?<level>\\w+)\\s+(?<body>.*)$"
+            }
+        },
+        "sample": [
+            {
+                "line": "[2020-01-01 00:00:00,000] INFO [KafkaServer id=0] started (kafka.server.KafkaServer)"
+            },
+            {
+                "line": "[2020-01-01 00:00:00,000] ERROR [KafkaApi-0] Error when handling request (kafka.server.KafkaApis)"
+            }
+        ],
+        "url": "https://kafka.apache.org/documentation/",
+        "level-field": "level",
+        "body-field": "body"
+    }
+}

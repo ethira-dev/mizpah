@@ -1,0 +1,30 @@
+{
+    "nextjs_log": {
+        "title": "Next.js",
+        "description": "Next.js / Turbopack / webpack-style dev server console lines",
+        "url": "https://nextjs.org/docs",
+        "regex": {
+            "compile": {
+                "pattern": "^(?<body>(?:○|✓|⨯|⚠|▲)\\s+(?:Compiling|Compiled|Building|Ready|Error|Warn).*)"
+            },
+            "request": {
+                "pattern": "^(?<method>GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\\s+(?<path>\\S+)\\s+(?<status>\\d{3})\\s+in\\s+(?<duration>[\\d.]+\\w+)$"
+            },
+            "ready": {
+                "pattern": "^(?<body>(?:▲ Next\\.js|✓ Ready in|○ Compiling|Fast Refresh|event\\s+-|wait\\s+-|warn\\s+-|error\\s+-).*)"
+            }
+        },
+        "body-field": "body",
+        "sample": [
+            {
+                "line": "✓ Compiled / in 120ms"
+            },
+            {
+                "line": "GET /api/health 200 in 45ms"
+            },
+            {
+                "line": "▲ Next.js 14.0.0"
+            }
+        ]
+    }
+}

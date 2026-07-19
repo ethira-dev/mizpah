@@ -1,0 +1,37 @@
+{
+    "auth0_log": {
+        "title": "Auth0",
+        "description": "Auth0 tenant log events",
+        "file-type": "json",
+        "json": true,
+        "timestamp-field": "date",
+        "line-format": [
+            {
+                "field": "date"
+            },
+            " ",
+            {
+                "field": "type"
+            },
+            " ",
+            {
+                "field": "description"
+            },
+            " ",
+            {
+                "field": "user_name"
+            },
+            " ",
+            {
+                "field": "ip"
+            }
+        ],
+        "url": "https://auth0.com/docs/customize/log-streams",
+        "body-field": "type",
+        "sample": [
+            {
+                "line": "{\"date\":\"2020-01-01T00:00:00.000Z\",\"type\":\"s\",\"description\":\"Success Login\",\"connection\":\"Username-Password-Authentication\",\"connection_id\":\"con_xxx\",\"client_id\":\"abc\",\"client_name\":\"My App\",\"ip\":\"1.2.3.4\",\"user_id\":\"auth0|123\",\"user_name\":\"alice@example.com\",\"log_id\":\"90020200101000000000000000000000000000000000000000000001\"}"
+            }
+        ]
+    }
+}

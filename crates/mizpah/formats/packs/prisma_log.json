@@ -1,0 +1,35 @@
+{
+    "prisma_log": {
+        "title": "Prisma",
+        "description": "Prisma query and engine log lines",
+        "url": "https://www.prisma.io/docs/orm/prisma-client/observability-and-logging",
+        "regex": {
+            "query": {
+                "pattern": "^(?:(?<timestamp>\\d{4}-\\d{2}-\\d{2}[ T]\\d{2}:\\d{2}:\\d{2}(?:[.,]\\d+)?Z?)\\s+)?prisma:(?<level>query|info|warn|error)\\s+(?<body>.*)$"
+            },
+            "engine": {
+                "pattern": "^(?<timestamp>\\d{4}-\\d{2}-\\d{2}[ T]\\d{2}:\\d{2}:\\d{2}(?:[.,]\\d+)?Z?)\\s+(?<level>INFO|WARN|ERROR|DEBUG)\\s+prisma::(?<component>\\S+)\\s+(?<body>.*)$"
+            }
+        },
+        "level-field": "level",
+        "body-field": "body",
+        "timestamp-field": "timestamp",
+        "level": {
+            "debug": "^(?:query|DEBUG)$",
+            "info": "^(?:info|INFO)$",
+            "warn": "^(?:warn|WARN)$",
+            "error": "^(?:error|ERROR)$"
+        },
+        "sample": [
+            {
+                "line": "prisma:query SELECT \"public\".\"User\".\"id\" FROM \"public\".\"User\" WHERE 1=1"
+            },
+            {
+                "line": "prisma:info Starting a postgresql pool with 9 connections."
+            },
+            {
+                "line": "2020-01-01T00:00:00.000Z INFO prisma::engine query engine started"
+            }
+        ]
+    }
+}

@@ -1,0 +1,37 @@
+{
+    "splunk_hec_log": {
+        "title": "Splunk HEC",
+        "description": "Splunk HTTP Event Collector event envelope",
+        "file-type": "json",
+        "json": true,
+        "timestamp-field": "time",
+        "line-format": [
+            {
+                "field": "time"
+            },
+            " ",
+            {
+                "field": "host"
+            },
+            " ",
+            {
+                "field": "source"
+            },
+            " ",
+            {
+                "field": "sourcetype"
+            },
+            " ",
+            {
+                "field": "event"
+            }
+        ],
+        "url": "https://docs.splunk.com/Documentation/Splunk/latest/Data/HECExamples",
+        "body-field": "event",
+        "sample": [
+            {
+                "line": "{\"time\":1577836800,\"host\":\"localhost\",\"source\":\"datasource\",\"sourcetype\":\"httpevent\",\"index\":\"main\",\"event\":{\"message\":\"Hello world\",\"severity\":\"INFO\"}}"
+            }
+        ]
+    }
+}

@@ -30,6 +30,11 @@ order: 7
 | `mzp hub stop` | Stop the hub for this port (via PID file) |
 | `mzp hub restart` | Stop then start (clears the in-memory buffer) |
 | `mzp open` | Open the web UI (hub must already be reachable) |
+| `mzp ingest` / `mzp files` | Ingest local files/globs (gzip/bzip2; optional `--follow`; SSH `user@host:path` unless secure) |
+| `mzp query` | CEL query (or `--group-by` aggregate) against the hub |
+| `mzp sql` | Run a `SELECT` against the hub snapshot |
+| `mzp script` | Run a line-oriented script (`query` / `aggregate`) |
+| `mzp tui` | Minimal terminal UI against a running hub |
 | `mzp mcp` | Stdio MCP server (hub at `:3149`, or `MIZPAH_URL`) |
 | `mzp mcp install` | Merge MCP config into Cursor / Claude / Codex |
 | `mzp mcp uninstall` | Remove those MCP entries |

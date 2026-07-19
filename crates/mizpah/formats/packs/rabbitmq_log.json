@@ -1,0 +1,22 @@
+{
+    "rabbitmq_log": {
+        "title": "RabbitMQ",
+        "description": "RabbitMQ server logs",
+        "regex": {
+            "std": {
+                "pattern": "^(?<timestamp>\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}\\.\\d{3}) \\[(?<level>\\w+)\\] <(?<pid>[^>]+)> (?<body>.*)$"
+            }
+        },
+        "sample": [
+            {
+                "line": "2020-01-01 00:00:00.000 [info] <0.123.0> Starting RabbitMQ 3.8.0 on Erlang 22.0"
+            },
+            {
+                "line": "2020-01-01 00:00:00.000 [error] <0.456.0> Channel error on connection"
+            }
+        ],
+        "url": "https://www.rabbitmq.com/docs/logging",
+        "level-field": "level",
+        "body-field": "body"
+    }
+}

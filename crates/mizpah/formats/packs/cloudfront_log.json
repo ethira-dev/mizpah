@@ -1,0 +1,22 @@
+{
+    "cloudfront_log": {
+        "title": "Amazon CloudFront",
+        "description": "CloudFront standard access logs (tab-separated data rows)",
+        "regex": {
+            "std": {
+                "pattern": "^(?<date>\\d{4}-\\d{2}-\\d{2})\\t(?<time>\\d{2}:\\d{2}:\\d{2})\\t(?<x_edge_location>\\S+)\\t(?<sc_bytes>\\d+)\\t(?<c_ip>[\\w.:-]+)\\t(?<cs_method>\\S+)\\t(?<cs_host>\\S+)\\t(?<cs_uri_stem>\\S+)\\t(?<sc_status>\\d+)\\t(?<cs_referer>\\S+)\\t(?<cs_user_agent>\\S+)\\t(?<cs_uri_query>\\S+)\\t(?<cs_cookie>\\S+)\\t(?<x_edge_result_type>\\S+)\\t(?<x_edge_request_id>\\S+)"
+            }
+        },
+        "sample": [
+            {
+                "line": "2019-12-04\t21:02:16\tLAX1\t392\t192.0.2.10\tGET\td111111abcdef8.cloudfront.net\t/index.html\t200\t-\tMozilla/5.0\t-\t-\tHit\tExAmPlE="
+            }
+        ],
+        "url": "https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/AccessLogs.html",
+        "level-field": "sc_status",
+        "level": {
+            "error": "^[45].*",
+            "info": "^[123].*"
+        }
+    }
+}

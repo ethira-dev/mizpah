@@ -1,0 +1,25 @@
+{
+    "nginx_error_log": {
+        "title": "Nginx error",
+        "description": "Nginx error_log format",
+        "regex": {
+            "std": {
+                "pattern": "^(?<timestamp>\\d{4}/\\d{2}/\\d{2} \\d{2}:\\d{2}:\\d{2}) \\[(?<level>\\w+)\\] (?<pid>\\d+)#(?<tid>\\d+):(?: \\*(?<cid>\\d+))? (?<body>.*)$"
+            }
+        },
+        "sample": [
+            {
+                "line": "2020/01/01 00:00:00 [error] 1234#0: *1 open() \"/usr/share/nginx/html/missing\" failed (2: No such file or directory), client: 1.2.3.4, server: localhost, request: \"GET /missing HTTP/1.1\", host: \"example.com\""
+            }
+        ],
+        "url": "https://nginx.org/en/docs/ngx_core_module.html#error_log",
+        "level-field": "level",
+        "level": {
+            "error": "error|crit|alert|emerg",
+            "warn": "warn",
+            "info": "info|notice",
+            "debug": "debug"
+        },
+        "body-field": "body"
+    }
+}

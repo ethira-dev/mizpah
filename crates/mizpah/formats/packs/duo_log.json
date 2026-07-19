@@ -1,0 +1,37 @@
+{
+    "duo_log": {
+        "title": "Duo",
+        "description": "Duo authentication / admin logs",
+        "file-type": "json",
+        "json": true,
+        "timestamp-field": "timestamp",
+        "line-format": [
+            {
+                "field": "timestamp"
+            },
+            " ",
+            {
+                "field": "event_type"
+            },
+            " ",
+            {
+                "field": "username"
+            },
+            " ",
+            {
+                "field": "factor"
+            },
+            " ",
+            {
+                "field": "result"
+            }
+        ],
+        "url": "https://duo.com/docs/adminapi",
+        "body-field": "event_type",
+        "sample": [
+            {
+                "line": "{\"timestamp\":1577836800,\"username\":\"alice@example.com\",\"factor\":\"push\",\"result\":\"SUCCESS\",\"reason\":\"User approved\",\"event_type\":\"authentication\",\"access_device\":\"iOS\",\"application\":{\"name\":\"VPN\",\"key\":\"DIXXXXXXXXXXXXXXXXXX\"},\"auth_device\":{\"name\":\"Alice Phone\",\"ip\":\"1.2.3.4\"}}"
+            }
+        ]
+    }
+}

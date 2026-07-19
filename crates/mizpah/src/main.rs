@@ -3,24 +3,35 @@ mod api;
 mod attach;
 mod browser_attach;
 mod cli;
+mod config;
 mod error;
+mod event_time;
+mod file_ingest;
 mod filter;
+mod formats;
 mod hub;
 mod ingest;
 mod ingest_forward;
 mod investigate;
+mod keymap;
 mod mcp;
 mod models;
 mod mzp_meta;
 mod pretty_ingest;
 mod properties;
+mod script;
 mod shell_attach;
 mod shell_forward;
+mod sql;
 mod stdin_lines;
 mod store;
+mod tui;
 mod unix_process;
 mod update;
 mod util;
+
+#[cfg(test)]
+mod test_support;
 
 use api::AppState;
 use cli::Cli;
@@ -59,9 +70,10 @@ fn is_bind_loopback(host: &str) -> bool {
     }
 }
 
-pub(crate) fn ensure_bind_allowed(host: &str, allow_remote: bool) {
+/// Validate bind host policy. Returns `Err(message)` when bind must be refused.
+pub(crate) fn check_bind_allowed(host: &str, allow_remote: bool) -> Result<(), String> {
     if is_bind_loopback(host) {
-        return;
+        return Ok(());
     }
     if allow_remote {
         eprintln!(
@@ -70,14 +82,21 @@ pub(crate) fn ensure_bind_allowed(host: &str, allow_remote: bool) {
              query data, and trigger investigate/update. Prefer SSH tunnels or a reverse\n\
              proxy with auth when exposing Mizpah beyond this machine."
         );
-        return;
+        return Ok(());
     }
-    eprintln!(
+    Err(format!(
         "error: refusing to bind hub on non-loopback address {host:?}\n\
          hint: use --host 127.0.0.1 (default), or pass --allow-remote if you understand\n\
          that ingest/API are unauthenticated on the bound interface"
-    );
-    std::process::exit(2);
+    ))
+}
+
+/// Validate bind policy, printing the refusal message on error (no process exit).
+pub(crate) fn ensure_bind_allowed_result(host: &str, allow_remote: bool) -> Result<(), String> {
+    check_bind_allowed(host, allow_remote).map_err(|msg| {
+        eprintln!("{msg}");
+        msg
+    })
 }
 
 fn resolve_service(service: Option<&str>) -> String {
@@ -111,37 +130,87 @@ fn resolve_project_dir(project: Option<PathBuf>) -> PathBuf {
     }
 }
 
-pub(crate) async fn run_pipe_mode(cli: Cli) {
+/// Pipe-mode control flow without `process::exit` (CLI maps `Err(code)` to process exit).
+pub(crate) async fn run_pipe_mode(cli: Cli) -> Result<(), i32> {
+    run_pipe_mode_with(
+        cli,
+        try_bind,
+        |listener, host, port, max_bytes, ttl_hours, no_open, service, project_dir| async move {
+            run_hub(
+                listener,
+                &host,
+                port,
+                max_bytes,
+                ttl_hours,
+                no_open,
+                service,
+                project_dir,
+            )
+            .await
+            .map_err(|e| e.to_string())
+        },
+        |base_url, service| async move {
+            attach::attach_and_forward(&base_url, &service)
+                .await
+                .map_err(|e| e.to_string())
+        },
+    )
+    .await
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) async fn run_pipe_mode_with<B, H, HF, A, AF>(
+    cli: Cli,
+    bind: B,
+    on_hub: H,
+    on_attach: A,
+) -> Result<(), i32>
+where
+    B: FnOnce(SocketAddr) -> std::io::Result<TcpListener>,
+    H: FnOnce(TcpListener, String, u16, u64, u64, bool, String, PathBuf) -> HF,
+    HF: std::future::Future<Output = Result<(), String>>,
+    A: FnOnce(String, String) -> AF,
+    AF: std::future::Future<Output = Result<(), String>>,
+{
     let service = resolve_service(cli.service.as_deref());
 
-    let addr: SocketAddr = format!("{}:{}", cli.hub.host, cli.hub.port)
-        .parse()
-        .unwrap_or_else(|e| {
+    let addr: SocketAddr = match format!("{}:{}", cli.hub.host, cli.hub.port).parse() {
+        Ok(a) => a,
+        Err(e) => {
             eprintln!("error: invalid host/port: {e}");
-            std::process::exit(2);
-        });
+            return Err(2);
+        }
+    };
 
     let project_dir = resolve_project_dir(cli.project);
+    let host = cli.hub.host.clone();
+    let port = cli.hub.port;
+    let max_bytes = cli.max_bytes;
+    let ttl_hours = cli.ttl_hours;
+    let no_open = cli.no_open;
+    let allow_remote = cli.allow_remote;
 
-    match try_bind(addr) {
+    match bind(addr) {
         Ok(listener) => {
-            // Only enforce when we actually become the hub (bind succeeded).
-            ensure_bind_allowed(&cli.hub.host, cli.allow_remote);
-            if let Err(err) = run_hub(
+            if ensure_bind_allowed_result(&host, allow_remote).is_err() {
+                return Err(2);
+            }
+            if let Err(err) = on_hub(
                 listener,
-                &cli.hub.host,
-                cli.hub.port,
-                cli.max_bytes,
-                cli.ttl_hours,
-                cli.no_open,
+                host,
+                port,
+                max_bytes,
+                ttl_hours,
+                no_open,
                 service,
                 project_dir,
             )
             .await
             {
                 error!(error = %err, "hub failed");
-                std::process::exit(1);
+                return Err(1);
             }
+            Ok(())
         }
         Err(bind_err) => {
             let in_use = bind_err.kind() == std::io::ErrorKind::AddrInUse;
@@ -150,15 +219,16 @@ pub(crate) async fn run_pipe_mode(cli: Cli) {
                     "error: could not bind {addr}: {bind_err}\n\
                      hint: if another Mizpah hub should be used, ensure it is reachable"
                 );
-                std::process::exit(1);
+                return Err(1);
             }
 
-            let base_url = format!("http://{}:{}", cli.hub.host, cli.hub.port);
+            let base_url = format!("http://{host}:{port}");
             info!(%addr, "port in use; attaching as ingest client");
-            if let Err(err) = attach::attach_and_forward(&base_url, &service).await {
+            if let Err(err) = on_attach(base_url, service).await {
                 eprintln!("error: {err}");
-                std::process::exit(1);
+                return Err(1);
             }
+            Ok(())
         }
     }
 }
@@ -198,6 +268,16 @@ async fn run_hub(
     }
 
     let store = Arc::new(Store::with_ttl_hours(max_bytes, ttl_hours));
+    if let Some(persist_dir) = crate::config::MizpahConfig::load().resolve_persist_dir() {
+        match store.hydrate_from_persist(&persist_dir).await {
+            Ok(0) => {}
+            Ok(n) => info!(restored = n, path = %persist_dir.display(), "hydrated from persist"),
+            Err(err) => tracing::warn!(error = %err, "persist hydrate failed"),
+        }
+        if let Err(err) = store.enable_persist(&persist_dir).await {
+            tracing::warn!(error = %err, "persist enable failed");
+        }
+    }
     match store.restore_update_spill().await {
         Ok(0) => {}
         Ok(n) => info!(restored = n, "restored log buffer from update spill"),
@@ -297,5 +377,306 @@ mod tests {
         assert_eq!(from_empty, from_none);
         assert_eq!(from_ws, from_none);
         assert!(!from_none.is_empty());
+    }
+
+    #[test]
+    fn bind_loopback_hosts() {
+        assert!(is_bind_loopback("127.0.0.1"));
+        assert!(is_bind_loopback("localhost"));
+        assert!(is_bind_loopback("::1"));
+        assert!(!is_bind_loopback("0.0.0.0"));
+        assert!(!is_bind_loopback("192.168.1.1"));
+    }
+
+    #[test]
+    fn check_bind_allowed_policy() {
+        assert!(check_bind_allowed("127.0.0.1", false).is_ok());
+        assert!(check_bind_allowed("0.0.0.0", true).is_ok());
+        assert!(check_bind_allowed("0.0.0.0", false).is_err());
+    }
+
+    #[test]
+    fn print_startup_banner_smoke() {
+        print_startup_banner("http://127.0.0.1:3149");
+    }
+
+    #[test]
+    fn try_bind_ephemeral_port() {
+        let listener = try_bind("127.0.0.1:0".parse().unwrap()).unwrap();
+        assert!(listener.local_addr().is_ok());
+    }
+
+    #[cfg(not(miri))]
+    #[tokio::test]
+    async fn run_hub_serves_stats_then_abort() {
+        crate::util::ensure_rustls_crypto_provider();
+        let _guard = crate::test_support::env_lock();
+        let dir = tempfile::tempdir().unwrap();
+        std::env::set_var("MIZPAH_CONFIG_DIR", dir.path());
+
+        let std_listener = try_bind("127.0.0.1:0".parse().unwrap()).unwrap();
+        let port = std_listener.local_addr().unwrap().port();
+        let project = dir.path().to_path_buf();
+
+        let hub = tokio::spawn(async move {
+            run_hub(
+                std_listener,
+                "127.0.0.1",
+                port,
+                1_000_000,
+                0,
+                true, // no_open
+                "test".into(),
+                project,
+            )
+            .await
+        });
+
+        // Wait until hub answers.
+        let client = reqwest::Client::new();
+        let url = format!("http://127.0.0.1:{port}/api/stats");
+        let mut ok = false;
+        for _ in 0..50 {
+            if let Ok(resp) = client.get(&url).send().await {
+                if resp.status().is_success() {
+                    ok = true;
+                    break;
+                }
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        }
+        assert!(ok, "hub did not become ready");
+
+        hub.abort();
+        let _ = hub.await;
+        std::env::remove_var("MIZPAH_CONFIG_DIR");
+    }
+
+    #[test]
+    fn try_bind_port_in_use() {
+        let listener = try_bind("127.0.0.1:0".parse().unwrap()).unwrap();
+        let addr = listener.local_addr().unwrap();
+        let result = try_bind(addr);
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().kind(), std::io::ErrorKind::AddrInUse);
+    }
+
+    #[test]
+    fn resolve_project_dir_defaults() {
+        let resolved = resolve_project_dir(None);
+        assert!(resolved.is_absolute() || resolved == std::path::PathBuf::from("."));
+    }
+
+    #[test]
+    fn service_from_cwd_non_empty() {
+        let svc = service_from_cwd();
+        assert!(!svc.is_empty());
+    }
+
+    #[test]
+    fn resolve_project_dir_with_some() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("project");
+        std::fs::create_dir(&path).unwrap();
+        let resolved = resolve_project_dir(Some(path.clone()));
+        assert!(resolved.ends_with("project") || resolved == path);
+    }
+
+    #[test]
+    fn resolve_project_dir_canonicalizes() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("proj");
+        std::fs::create_dir(&path).unwrap();
+        let resolved = resolve_project_dir(Some(path));
+        assert!(resolved.is_absolute());
+    }
+
+    fn pipe_cli(host: &str, port: u16, allow_remote: bool) -> Cli {
+        Cli::try_parse_from([
+            "mizpah",
+            "--no-open",
+            "--host",
+            host,
+            "--port",
+            &port.to_string(),
+            "--service",
+            "svc",
+        ]
+        .into_iter()
+        .chain(allow_remote.then_some("--allow-remote")))
+        .unwrap()
+    }
+
+    #[tokio::test]
+    async fn pipe_mode_invalid_host_port() {
+        let mut cli = pipe_cli("127.0.0.1", 1, false);
+        cli.hub.host = "not a host!!!".into();
+        let err = run_pipe_mode_with(
+            cli,
+            |_| unreachable!(),
+            |_, _, _, _, _, _, _, _| async { Ok(()) },
+            |_, _| async { Ok(()) },
+        )
+        .await;
+        assert_eq!(err, Err(2));
+    }
+
+    #[tokio::test]
+    async fn pipe_mode_bind_refused_non_loopback() {
+        let cli = pipe_cli("0.0.0.0", 0, false);
+        let err = run_pipe_mode_with(
+            cli,
+            |_| Ok(try_bind("127.0.0.1:0".parse().unwrap()).unwrap()),
+            |_, _, _, _, _, _, _, _| async { Ok(()) },
+            |_, _| async { Ok(()) },
+        )
+        .await;
+        assert_eq!(err, Err(2));
+    }
+
+    #[tokio::test]
+    async fn pipe_mode_hub_success_and_failure() {
+        run_pipe_mode_with(
+            pipe_cli("127.0.0.1", 0, false),
+            |_| Ok(try_bind("127.0.0.1:0".parse().unwrap()).unwrap()),
+            |_, _, _, _, _, _, _, _| async { Ok(()) },
+            |_, _| async { Ok(()) },
+        )
+        .await
+        .unwrap();
+
+        let err = run_pipe_mode_with(
+            pipe_cli("127.0.0.1", 0, false),
+            |_| Ok(try_bind("127.0.0.1:0".parse().unwrap()).unwrap()),
+            |_, _, _, _, _, _, _, _| async { Err("hub boom".into()) },
+            |_, _| async { Ok(()) },
+        )
+        .await;
+        assert_eq!(err, Err(1));
+    }
+
+    #[tokio::test]
+    async fn pipe_mode_attach_when_addr_in_use() {
+        let held = try_bind("127.0.0.1:0".parse().unwrap()).unwrap();
+        let port = held.local_addr().unwrap().port();
+        let cli = pipe_cli("127.0.0.1", port, false);
+        let attached = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let flag = attached.clone();
+        run_pipe_mode_with(
+            cli,
+            try_bind,
+            |_, _, _, _, _, _, _, _| async { Ok(()) },
+            move |_url, service| {
+                let flag = flag.clone();
+                async move {
+                    assert_eq!(service, "svc");
+                    flag.store(true, std::sync::atomic::Ordering::SeqCst);
+                    Ok(())
+                }
+            },
+        )
+        .await
+        .unwrap();
+        assert!(attached.load(std::sync::atomic::Ordering::SeqCst));
+        drop(held);
+    }
+
+    #[tokio::test]
+    async fn pipe_mode_attach_failure_and_other_bind_error() {
+        let held = try_bind("127.0.0.1:0".parse().unwrap()).unwrap();
+        let port = held.local_addr().unwrap().port();
+        let cli = pipe_cli("127.0.0.1", port, false);
+        let err = run_pipe_mode_with(
+            cli,
+            try_bind,
+            |_, _, _, _, _, _, _, _| async { Ok(()) },
+            |_, _| async { Err("attach failed".into()) },
+        )
+        .await;
+        assert_eq!(err, Err(1));
+        drop(held);
+
+        let cli = pipe_cli("127.0.0.1", 1, false);
+        let err = run_pipe_mode_with(
+            cli,
+            |_| Err(std::io::Error::new(std::io::ErrorKind::PermissionDenied, "nope")),
+            |_, _, _, _, _, _, _, _| async { Ok(()) },
+            |_, _| async { Ok(()) },
+        )
+        .await;
+        assert_eq!(err, Err(1));
+    }
+
+    #[test]
+    fn ensure_bind_allowed_result_ok_and_err() {
+        assert!(ensure_bind_allowed_result("127.0.0.1", false).is_ok());
+        assert!(ensure_bind_allowed_result("0.0.0.0", true).is_ok());
+        assert!(ensure_bind_allowed_result("0.0.0.0", false).is_err());
+    }
+
+    #[test]
+    fn init_tracing_stderr_smoke() {
+        // May already be initialized by other tests; ignore SetGlobalDefault errors via catch.
+        let _ = std::panic::catch_unwind(|| init_tracing_stderr());
+    }
+
+    #[cfg(not(miri))]
+    #[tokio::test]
+    async fn run_pipe_mode_attaches_to_live_hub() {
+        crate::util::ensure_rustls_crypto_provider();
+        let (url, _store) = crate::test_support::spawn_test_hub().await;
+        let parsed = url::Url::parse(&url).unwrap();
+        let port = parsed.port().unwrap();
+        let cli = pipe_cli("127.0.0.1", port, false);
+        // Empty stdin → attach_and_forward returns on EOF.
+        run_pipe_mode(cli).await.unwrap();
+    }
+
+    #[cfg(not(miri))]
+    #[tokio::test]
+    async fn run_hub_with_ttl_and_persist_config() {
+        crate::util::ensure_rustls_crypto_provider();
+        let _guard = crate::test_support::env_lock();
+        let dir = tempfile::tempdir().unwrap();
+        let persist = dir.path().join("persist");
+        std::fs::create_dir_all(&persist).unwrap();
+        std::env::set_var("MIZPAH_CONFIG_DIR", dir.path());
+        // Minimal config enabling persist under config dir.
+        std::fs::write(
+            dir.path().join("config.toml"),
+            format!("persist_dir = \"{}\"\n", persist.display()),
+        )
+        .unwrap();
+
+        let std_listener = try_bind("127.0.0.1:0".parse().unwrap()).unwrap();
+        let port = std_listener.local_addr().unwrap().port();
+        let project = dir.path().to_path_buf();
+        let hub = tokio::spawn(async move {
+            run_hub(
+                std_listener,
+                "127.0.0.1",
+                port,
+                1_000_000,
+                1, // enable TTL sweeper spawn
+                true,
+                "ttl-test".into(),
+                project,
+            )
+            .await
+        });
+
+        let client = reqwest::Client::new();
+        let url = format!("http://127.0.0.1:{port}/api/stats");
+        for _ in 0..50 {
+            if let Ok(resp) = client.get(&url).send().await {
+                if resp.status().is_success() {
+                    break;
+                }
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(40)).await;
+        }
+        hub.abort();
+        let _ = hub.await;
+        std::env::remove_var("MIZPAH_CONFIG_DIR");
     }
 }

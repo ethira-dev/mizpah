@@ -1,0 +1,23 @@
+{
+    "paloalto_log": {
+        "title": "Palo Alto PAN-OS",
+        "description": "PAN-OS CSV traffic/threat/system logs",
+        "regex": {
+            "std": {
+                "pattern": "^(?<future_use>[^,]*),(?<receive_time>\\d{4}/\\d{2}/\\d{2} \\d{2}:\\d{2}:\\d{2}),(?<serial>\\w+),(?<type>TRAFFIC|THREAT|SYSTEM|CONFIG|HIPMATCH|GLOBALPROTECT|USERID),(?<subtype>[^,]*),(?<body>.*)$"
+            }
+        },
+        "sample": [
+            {
+                "line": "1,2020/01/01 00:00:00,001234567890,TRAFFIC,end,1,2020/01/01 00:00:00,10.0.0.1,1.2.3.4,0.0.0.0,0.0.0.0,rule1,,,web-browsing,vsys1,trust,untrust,ethernet1/1,ethernet1/2,Logger,2020/01/01 00:00:00,1,1,12345,443,0,0,0x0,tcp,allow,1234,56,78,5,2020/01/01 00:00:00,1,any,0,1234567890,0x0,10.0.0.0-10.255.255.255,United States,0,1,1"
+            }
+        ],
+        "url": "https://docs.paloaltonetworks.com/pan-os",
+        "level-field": "type",
+        "level": {
+            "error": "THREAT",
+            "info": "TRAFFIC|SYSTEM|CONFIG"
+        },
+        "body-field": "body"
+    }
+}

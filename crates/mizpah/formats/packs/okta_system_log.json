@@ -1,0 +1,33 @@
+{
+    "okta_system_log": {
+        "title": "Okta System Log",
+        "description": "Okta System Log API events",
+        "file-type": "json",
+        "json": true,
+        "timestamp-field": "published",
+        "line-format": [
+            {
+                "field": "published"
+            },
+            " ",
+            {
+                "field": "eventType"
+            },
+            " ",
+            {
+                "field": "displayMessage"
+            },
+            " ",
+            {
+                "field": "severity"
+            }
+        ],
+        "url": "https://developer.okta.com/docs/reference/api/system-log/",
+        "body-field": "displayMessage",
+        "sample": [
+            {
+                "line": "{\"uuid\":\"a1b2c3d4-e5f6-7890-abcd-ef1234567890\",\"published\":\"2020-01-01T00:00:00.000Z\",\"eventType\":\"user.session.start\",\"displayMessage\":\"User login to Okta\",\"severity\":\"INFO\",\"actor\":{\"id\":\"00u1\",\"type\":\"User\",\"alternateId\":\"alice@example.com\",\"displayName\":\"Alice\"},\"outcome\":{\"result\":\"SUCCESS\"},\"legacyEventType\":\"core.user_auth.login_success\"}"
+            }
+        ]
+    }
+}

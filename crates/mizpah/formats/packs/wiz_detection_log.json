@@ -1,0 +1,37 @@
+{
+    "wiz_detection_log": {
+        "title": "Wiz Detection",
+        "description": "Wiz threat detection / automation native push JSON",
+        "file-type": "json",
+        "json": true,
+        "timestamp-field": "issue.created",
+        "line-format": [
+            {
+                "field": "issue.created"
+            },
+            " ",
+            {
+                "field": "eventType"
+            },
+            " ",
+            {
+                "field": "trigger.source"
+            },
+            " ",
+            {
+                "field": "issue.status"
+            },
+            " ",
+            {
+                "field": "outcome.result"
+            }
+        ],
+        "url": "https://www.wiz.io/",
+        "body-field": "eventType",
+        "sample": [
+            {
+                "line": "{\"eventType\":\"ISSUE_CREATED\",\"trigger\":{\"source\":\"CONTROL\"},\"issue\":{\"created\":\"2020-01-01T00:00:00Z\",\"status\":\"OPEN\",\"severity\":\"CRITICAL\",\"id\":\"issue-2\",\"projects\":[\"Production\"]},\"outcome\":{\"result\":\"BLOCK\",\"reason\":\"Toxic combination\"},\"category\":\"THREAT_DETECTION\"}"
+            }
+        ]
+    }
+}

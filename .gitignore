@@ -11,6 +11,8 @@ web/.vite/
 site/node_modules/
 site/dist/
 site/.astro/
+site/src/data/format-index.json
+site/public/formats/packs/
 
 # Embedded UI is produced by `npm run build` in web/
 # Keep a placeholder so rust-embed always has a folder; built assets are committed optionally.

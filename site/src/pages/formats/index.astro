@@ -1,0 +1,42 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro"
+import { FormatsBrowser } from "../../components/FormatsBrowser"
+import formatIndex from "../../data/format-index.json"
+
+const base = import.meta.env.BASE_URL
+const withBase = (path: string) =>
+  `${base}${path.replace(/^\//, "")}`.replace(/\/{2,}/g, "/")
+---
+
+<BaseLayout
+  title="Supported Formats"
+  description="Browse every vendored format-v1 pack Mizpah ships — search by id or title, then inspect the pack JSON."
+  current="formats"
+>
+  <main class="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-10">
+    <div class="animate-fade-up mb-6 max-w-2xl">
+      <p class="font-mono text-xs text-primary">{formatIndex.length} packs</p>
+      <h1 class="mt-2 text-3xl tracking-tight text-foreground sm:text-4xl">
+        Supported Formats
+      </h1>
+      <p class="mt-3 text-sm text-muted-foreground sm:text-base">
+        Vendored format-v1 packs from the repo. Search, pick a row, and inspect
+        the pack definition as syntax-highlighted JSON. Detection order and
+        built-ins are covered in
+        <a
+          href={withBase("/docs/formats/")}
+          class="text-primary underline-offset-4 hover:underline"
+          >Log formats</a
+        >.
+      </p>
+    </div>
+    <div class="animate-fade-up" style="animation-delay: 0.08s">
+      <FormatsBrowser
+        client:load
+        formats={formatIndex}
+        base={base}
+        docsHref={withBase("/docs/formats/")}
+      />
+    </div>
+  </main>
+</BaseLayout>

@@ -60,7 +60,11 @@ pub(crate) async fn fetch_browser_ws_url(cdp_port: u16) -> Result<String, String
 }
 
 pub(crate) async fn wait_for_cdp(cdp_port: u16) -> Result<(), String> {
-    let deadline = tokio::time::Instant::now() + Duration::from_secs(15);
+    wait_for_cdp_until(cdp_port, Duration::from_secs(15)).await
+}
+
+pub(crate) async fn wait_for_cdp_until(cdp_port: u16, timeout: Duration) -> Result<(), String> {
+    let deadline = tokio::time::Instant::now() + timeout;
     let mut last_err = String::new();
     while tokio::time::Instant::now() < deadline {
         match fetch_browser_ws_url(cdp_port).await {
@@ -81,13 +85,9 @@ pub(crate) fn launch_browser(cdp_port: u16) -> Result<std::process::Child, Strin
     let profile = chrome_profile_dir()?;
     std::fs::create_dir_all(&profile)
         .map_err(|e| format!("failed to create chrome profile dir: {e}"))?;
-
+    let args = browser_launch_args(cdp_port, &profile);
     let mut cmd = std::process::Command::new(&binary);
-    cmd.arg(format!("--remote-debugging-port={cdp_port}"))
-        .arg(format!("--user-data-dir={}", profile.display()))
-        .arg("--no-first-run")
-        .arg("--no-default-browser-check")
-        .arg("about:blank")
+    cmd.args(&args)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null());
@@ -105,6 +105,16 @@ pub(crate) fn launch_browser(cdp_port: u16) -> Result<std::process::Child, Strin
         "browser attach: launched browser (dedicated profile)"
     );
     Ok(child)
+}
+
+pub(crate) fn browser_launch_args(cdp_port: u16, profile: &std::path::Path) -> Vec<String> {
+    vec![
+        format!("--remote-debugging-port={cdp_port}"),
+        format!("--user-data-dir={}", profile.display()),
+        "--no-first-run".into(),
+        "--no-default-browser-check".into(),
+        "about:blank".into(),
+    ]
 }
 
 fn chrome_profile_dir() -> Result<PathBuf, String> {
@@ -163,4 +173,160 @@ fn find_browser_binary() -> Option<PathBuf> {
 #[cfg(target_os = "linux")]
 fn which_bin(name: &str) -> Option<PathBuf> {
     crate::util::which(name)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn find_browser_returns_some_or_none() {
+        let result = find_browser_binary();
+        if let Some(path) = result {
+            assert!(path.to_str().is_some());
+        }
+    }
+
+    #[tokio::test]
+    async fn resolve_cdp_ws_url_with_explicit_url() {
+        let opts = BrowserAttachOpts {
+            cdp_url: Some("ws://localhost:9222/devtools/browser/abc".into()),
+            ..Default::default()
+        };
+        let url = resolve_cdp_ws_url(&opts).await.unwrap();
+        assert_eq!(url, "ws://localhost:9222/devtools/browser/abc");
+    }
+
+    #[tokio::test]
+    async fn resolve_cdp_ws_url_rejects_empty() {
+        let opts = BrowserAttachOpts {
+            cdp_url: Some("  ".into()),
+            ..Default::default()
+        };
+        let result = resolve_cdp_ws_url(&opts).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("must not be empty"));
+    }
+
+    #[tokio::test]
+    async fn resolve_cdp_ws_url_for_reconnect_with_url() {
+        let url = resolve_cdp_ws_url_for_reconnect(9222, Some("ws://test")).await;
+        assert_eq!(url.unwrap(), "ws://test");
+    }
+
+    #[tokio::test]
+    async fn resolve_cdp_ws_url_for_reconnect_ignores_empty() {
+        let url = resolve_cdp_ws_url_for_reconnect(9999, Some("  ")).await;
+        assert!(url.is_err());
+    }
+
+    #[test]
+    fn chrome_profile_dir_returns_path() {
+        let dir = chrome_profile_dir();
+        assert!(dir.is_ok());
+        let path = dir.unwrap();
+        assert!(path.to_str().unwrap().contains("chrome-profile"));
+    }
+
+    #[tokio::test]
+    async fn wait_for_cdp_timeout() {
+        let result = wait_for_cdp_until(19999, Duration::from_millis(400)).await;
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.contains("timed out"));
+    }
+
+    #[tokio::test]
+    async fn fetch_browser_ws_url_not_reachable() {
+        let result = fetch_browser_ws_url(19998).await;
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.contains("cannot reach") || err.contains("Chrome"));
+    }
+
+    #[test]
+    fn browser_launch_args_include_port_and_profile() {
+        let args = browser_launch_args(9333, std::path::Path::new("/tmp/prof"));
+        assert!(args.iter().any(|a| a.contains("9333")));
+        assert!(args.iter().any(|a| a.contains("/tmp/prof")));
+        assert!(args.iter().any(|a| a == "about:blank"));
+    }
+
+    /// Minimal HTTP server answering Chrome `/json/version`.
+    async fn serve_cdp_version(body: &str) -> u16 {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let body = body.to_string();
+        tokio::spawn(async move {
+            let (mut sock, _) = listener.accept().await.unwrap();
+            let mut buf = [0u8; 1024];
+            let _ = sock.read(&mut buf).await;
+            let resp = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            );
+            let _ = sock.write_all(resp.as_bytes()).await;
+        });
+        port
+    }
+
+    #[tokio::test]
+    async fn fetch_browser_ws_url_success() {
+        let port = serve_cdp_version(
+            r#"{"webSocketDebuggerUrl":"ws://127.0.0.1:1/devtools/browser/x"}"#,
+        )
+        .await;
+        let url = fetch_browser_ws_url(port).await.unwrap();
+        assert!(url.contains("devtools/browser"));
+    }
+
+    #[tokio::test]
+    async fn fetch_browser_ws_url_missing_field() {
+        let port = serve_cdp_version(r#"{"Browser":"Chrome"}"#).await;
+        let err = fetch_browser_ws_url(port).await.unwrap_err();
+        assert!(err.contains("missing webSocketDebuggerUrl"));
+    }
+
+    #[tokio::test]
+    async fn fetch_browser_ws_url_http_error_status() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        tokio::spawn(async move {
+            let (mut sock, _) = listener.accept().await.unwrap();
+            let mut buf = [0u8; 512];
+            let _ = sock.read(&mut buf).await;
+            let resp = "HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
+            let _ = sock.write_all(resp.as_bytes()).await;
+        });
+        let err = fetch_browser_ws_url(port).await.unwrap_err();
+        assert!(err.contains("returned"));
+    }
+
+    #[tokio::test]
+    async fn wait_for_cdp_succeeds_when_ready() {
+        let port = serve_cdp_version(
+            r#"{"webSocketDebuggerUrl":"ws://127.0.0.1:1/devtools/browser/x"}"#,
+        )
+        .await;
+        wait_for_cdp_until(port, Duration::from_secs(2))
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn resolve_cdp_ws_url_fetches_when_no_override() {
+        let port = serve_cdp_version(
+            r#"{"webSocketDebuggerUrl":"ws://127.0.0.1:1/devtools/browser/y"}"#,
+        )
+        .await;
+        let opts = BrowserAttachOpts {
+            cdp_port: port,
+            cdp_url: None,
+            ..Default::default()
+        };
+        let url = resolve_cdp_ws_url(&opts).await.unwrap();
+        assert!(url.contains("browser/y"));
+    }
 }

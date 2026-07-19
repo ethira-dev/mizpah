@@ -108,3 +108,64 @@ pub(crate) fn estimate_json_len(value: &Value) -> u64 {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::{Duration as ChronoDuration, Utc};
+    use serde_json::json;
+
+    #[test]
+    fn in_time_range_respects_from_and_to() {
+        let ts = Utc::now();
+        assert!(in_time_range(
+            ts,
+            Some(ts - ChronoDuration::hours(1)),
+            Some(ts + ChronoDuration::hours(1))
+        ));
+        assert!(!in_time_range(ts, Some(ts + ChronoDuration::seconds(1)), None));
+        assert!(!in_time_range(ts, None, Some(ts)));
+    }
+
+    #[test]
+    fn parse_line_covers_empty_json_and_raw() {
+        assert_eq!(parse_line("").get("_raw"), Some(&json!("")));
+        assert_eq!(parse_line("42").get("_value"), Some(&json!(42)));
+        assert_eq!(parse_line(r#"{"a":1}"#).get("a"), Some(&json!(1)));
+        assert_eq!(
+            parse_line("plain").get("_raw"),
+            Some(&json!("plain"))
+        );
+    }
+
+    #[test]
+    fn inject_and_estimate_helpers() {
+        let mut data = json!({"msg": "hi"});
+        inject_cmd(&mut data, "npm test");
+        assert_eq!(data["cmd"], json!("npm test"));
+        let mzp = crate::mzp_meta::MzpMeta {
+            cwd: "/tmp".into(),
+            user: "u".into(),
+            pid: 1,
+            exe: "/bin/mzp".into(),
+        };
+        inject_mzp(&mut data, &mzp);
+        assert_eq!(data["_mzp"], json!(mzp));
+
+        assert_eq!(estimate_json_len(&json!(null)), 4);
+        assert_eq!(estimate_json_len(&json!(true)), 4);
+        assert_eq!(estimate_json_len(&json!(false)), 5);
+        let arr = json!([1, 2]);
+        assert!(estimate_json_len(&arr) > estimate_json_len(&json!(1)));
+        assert!(estimate_bytes("api", &data) > 64);
+    }
+
+    #[test]
+    fn try_parse_json_object_and_raw_payloads() {
+        assert!(try_parse_json_object(r#"{"a":1}"#).is_some());
+        assert!(try_parse_json_object("not-json").is_none());
+        let raw = raw_payloads_from_lines(vec!["line".into()]);
+        assert_eq!(raw.len(), 1);
+        assert_eq!(raw[0]["_raw"], json!("line"));
+    }
+}

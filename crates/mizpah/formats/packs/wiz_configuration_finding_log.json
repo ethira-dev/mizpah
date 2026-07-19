@@ -1,0 +1,38 @@
+{
+    "wiz_configuration_finding_log": {
+        "title": "Wiz Configuration Finding",
+        "description": "Wiz cloud configuration / CSPM finding JSON",
+        "file-type": "json",
+        "json": true,
+        "timestamp-field": "firstSeenAt",
+        "line-format": [
+            {
+                "field": "firstSeenAt"
+            },
+            " ",
+            {
+                "field": "severity"
+            },
+            " ",
+            {
+                "field": "result"
+            },
+            " ",
+            {
+                "field": "rule"
+            },
+            " ",
+            {
+                "field": "resource"
+            }
+        ],
+        "url": "https://www.wiz.io/",
+        "level-field": "severity",
+        "body-field": "result",
+        "sample": [
+            {
+                "line": "{\"id\":\"cfg-1\",\"firstSeenAt\":\"2020-01-01T00:00:00Z\",\"severity\":\"HIGH\",\"result\":\"FAIL\",\"remediation\":\"Enable encryption at rest\",\"resource\":{\"id\":\"res-2\",\"name\":\"data-bucket\",\"type\":\"BUCKET\",\"subscription\":{\"id\":\"sub1\",\"name\":\"prod\",\"externalId\":\"123\",\"cloudProvider\":\"AWS\"}},\"rule\":{\"id\":\"rule1\",\"name\":\"Ensure S3 bucket encryption\",\"description\":\"Buckets should be encrypted\"}}"
+            }
+        ]
+    }
+}

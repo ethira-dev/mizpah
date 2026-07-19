@@ -1,0 +1,22 @@
+{
+    "envoy_access_log": {
+        "title": "Envoy access",
+        "description": "Envoy default access log format",
+        "regex": {
+            "std": {
+                "pattern": "^\\[(?<timestamp>[^\\]]+)\\] \"(?<method>\\S+) (?<path>\\S+) (?<protocol>\\S+)\" (?<response_code>\\d+) (?<response_flags>\\S+) (?<bytes_received>\\d+) (?<bytes_sent>\\d+) (?<duration>\\d+) (?<upstream_service_time>\\d+|-) \"(?<x_forwarded_for>[^\"]*)\" \"(?<user_agent>[^\"]*)\" \"(?<request_id>[^\"]*)\" \"(?<authority>[^\"]*)\" \"(?<upstream_host>[^\"]*)\"$"
+            }
+        },
+        "sample": [
+            {
+                "line": "[2020-01-01T00:00:00.000Z] \"GET / HTTP/1.1\" 200 - 0 13 2 1 \"-\" \"curl/7.0\" \"req-id\" \"example.com\" \"10.0.0.2:8080\""
+            }
+        ],
+        "url": "https://www.envoyproxy.io/docs/envoy/latest/configuration/observability/access_log/usage",
+        "level-field": "response_code",
+        "level": {
+            "error": "^[45].*",
+            "info": "^[123].*"
+        }
+    }
+}

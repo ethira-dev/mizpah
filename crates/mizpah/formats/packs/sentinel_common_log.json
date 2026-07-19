@@ -1,0 +1,19 @@
+{
+    "sentinel_common_log": {
+        "title": "Sentinel CommonSecurityLog",
+        "description": "Microsoft Sentinel CommonSecurityLog-style CEF-in-syslog",
+        "regex": {
+            "std": {
+                "pattern": "^(?<timestamp>\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z)\\s+CEF:(?<cef_version>\\d+)\\|(?<DeviceVendor>[^|]*)\\|(?<DeviceProduct>[^|]*)\\|(?<DeviceVersion>[^|]*)\\|(?<DeviceEventClassID>[^|]*)\\|(?<Activity>[^|]*)\\|(?<LogSeverity>[^|]*)\\|(?<body>.*)$"
+            }
+        },
+        "sample": [
+            {
+                "line": "2020-01-01T00:00:00Z CEF:0|Palo Alto Networks|PAN-OS|9.0|THREAT|spyware|5|src=10.0.0.1 dst=1.2.3.4"
+            }
+        ],
+        "url": "https://learn.microsoft.com/en-us/azure/sentinel/normalization",
+        "level-field": "LogSeverity",
+        "body-field": "body"
+    }
+}

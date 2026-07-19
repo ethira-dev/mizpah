@@ -1,0 +1,22 @@
+{
+    "squid_access_log": {
+        "title": "Squid access",
+        "description": "Squid native access.log",
+        "regex": {
+            "std": {
+                "pattern": "^(?<timestamp>\\d+(?:\\.\\d+)?)\\s+(?<response_time>\\d+)\\s+(?<client_ip>[\\w.:-]+)\\s+(?<squid_status>\\w+)/(?<http_status>\\d+)\\s+(?<bytes>\\d+)\\s+(?<method>\\S+)\\s+(?<url>\\S+)\\s+(?<user>\\S+)\\s+(?<hierarchy>\\S+)/(?<peer>\\S+)\\s+(?<content_type>\\S+)$"
+            }
+        },
+        "sample": [
+            {
+                "line": "1577836800.000      1 192.0.2.1 TCP_MISS/200 123 GET http://example.com/ - HIER_DIRECT/93.184.216.34 text/html"
+            }
+        ],
+        "url": "https://wiki.squid-cache.org/Features/LogFormat",
+        "level-field": "http_status",
+        "level": {
+            "error": "^[45].*",
+            "info": "^[123].*"
+        }
+    }
+}

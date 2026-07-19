@@ -315,4 +315,167 @@ mod tests {
         assert!(!discover_paths_into(&data, "", &mut map, true));
         assert_eq!(map["level"].count, 2);
     }
+
+    #[test]
+    fn nested_array_paths_and_decrement() {
+        let mut map = HashMap::new();
+        let data = json!({
+            "items": [{"name": "a"}, {"name": "b"}],
+            "tags": [1, 2]
+        });
+        assert!(discover_paths_into(&data, "", &mut map, true));
+        assert!(map.contains_key("items[0].name"));
+        assert!(map.contains_key("items[1].name"));
+
+        decrement_counts_for_entry(&data, &mut map);
+        assert_eq!(map["items[0].name"].count, 0);
+    }
+
+    #[test]
+    fn sample_truncation_and_filter_by_value() {
+        let long = "x".repeat(100);
+        let sample = sample_of(&json!(long)).unwrap();
+        assert!(sample.ends_with('…'));
+        assert_eq!(sample.chars().count(), 81);
+
+        let infos = vec![
+            PropertyInfo {
+                path: "user.email".into(),
+                types: vec!["string".into()],
+                sample_values: vec!["alice@example.com".into()],
+                count: 1,
+                values: vec![PropertyValueInfo {
+                    value: "alice@example.com".into(),
+                    count: 1,
+                }],
+            },
+        ];
+        let filtered = filter_properties_by_query(infos, "alice");
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].path, "user.email");
+    }
+
+    #[test]
+    fn paths_to_info_and_service_property() {
+        let mut map = HashMap::new();
+        let data = json!({"level": "info"});
+        discover_paths_into(&data, "", &mut map, true);
+        let infos = paths_to_info(&map);
+        assert!(infos.iter().any(|p| p.path == "level"));
+
+        let mut infos = infos.clone();
+        let mut services = HashMap::from([("api".into(), 2u64), ("web".into(), 1u64)]);
+        push_service_property(&mut infos, &services, None);
+        assert!(infos.iter().any(|p| p.path == "service"));
+
+        let mut filtered_infos = infos.clone();
+        push_service_property(&mut filtered_infos, &services, Some("api"));
+        let svc = filtered_infos.iter().find(|p| p.path == "service").unwrap();
+        assert_eq!(svc.sample_values, vec!["api"]);
+
+        push_service_property(&mut infos, &services, Some("missing"));
+        assert!(!infos.iter().any(|p| p.path == "service"));
+
+        push_service_property(&mut infos, &HashMap::new(), None);
+    }
+
+    #[test]
+    fn rebuild_and_no_bump_schema_only() {
+        use chrono::Utc;
+        use std::collections::VecDeque;
+
+        let mut map = HashMap::new();
+        let data = json!({"n": 1});
+        assert!(discover_paths_into(&data, "root", &mut map, false));
+        assert_eq!(map["root.n"].count, 0);
+
+        let entry = LogEntry {
+            id: 1,
+            received_at: Utc::now(),
+            event_time: None,
+            service: "api".into(),
+            format_id: None,
+            data: json!({"k": "v"}),
+            approx_bytes: 0,
+        };
+        let mut entries = VecDeque::from([entry]);
+        let props = rebuild_properties_from_entries(&entries);
+        assert!(props.contains_key("k"));
+
+        let by_svc = rebuild_properties_by_service(&entries);
+        assert!(by_svc.contains_key("api"));
+    }
+
+    #[test]
+    fn decrement_unknown_path_is_noop() {
+        let mut map = HashMap::new();
+        decrement_counts_for_entry(&json!({"other": 1}), &mut map);
+    }
+
+    #[test]
+    fn filter_keeps_path_match_without_value_filter() {
+        let infos = vec![PropertyInfo {
+            path: "request.path".into(),
+            types: vec!["string".into()],
+            sample_values: vec!["/health".into()],
+            count: 1,
+            values: vec![PropertyValueInfo {
+                value: "/health".into(),
+                count: 1,
+            }],
+        }];
+        let filtered = filter_properties_by_query(infos, "request");
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].sample_values.len(), 1);
+    }
+
+    #[test]
+    fn discover_non_object_with_prefix_records_path() {
+        let mut map = HashMap::new();
+        assert!(discover_paths_into(&json!("leaf"), "root", &mut map, true));
+        assert_eq!(map["root"].count, 1);
+    }
+
+    #[test]
+    fn discover_boolean_and_null_types() {
+        let mut map = HashMap::new();
+        discover_paths_into(
+            &json!({"flag": true, "empty": null}),
+            "",
+            &mut map,
+            true,
+        );
+        assert!(map["flag"].types.contains("boolean"));
+        assert!(map["empty"].types.contains("null"));
+    }
+
+    #[test]
+    fn get_at_path_rejects_invalid_brackets() {
+        assert!(get_at_path(&json!({"a": [1]}), "a[bad]").is_none());
+        assert!(get_at_path(&json!({"a": [1]}), "a[0").is_none());
+    }
+
+    #[test]
+    fn filter_drops_non_matching_properties() {
+        let infos = vec![PropertyInfo {
+            path: "request.id".into(),
+            types: vec!["string".into()],
+            sample_values: vec!["abc".into()],
+            count: 1,
+            values: vec![PropertyValueInfo {
+                value: "abc".into(),
+                count: 1,
+            }],
+        }];
+        assert!(filter_properties_by_query(infos, "missing").is_empty());
+    }
+
+    #[test]
+    fn push_service_property_wildcard_lists_all() {
+        let mut infos = Vec::new();
+        let services = HashMap::from([("api".into(), 2u64), ("web".into(), 1u64)]);
+        push_service_property(&mut infos, &services, Some("*"));
+        let svc = infos.iter().find(|p| p.path == "service").unwrap();
+        assert_eq!(svc.sample_values.len(), 2);
+    }
 }

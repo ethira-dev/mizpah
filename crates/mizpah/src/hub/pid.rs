@@ -67,13 +67,13 @@ pub fn remove_hub_pid(port: u16) -> io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_support::env_lock;
     use crate::unix_process;
 
-    #[test]
-    #[cfg(not(miri))]
-    fn hub_pid_roundtrip_and_stale_cleanup() {
+    fn with_isolated_config_dir<F: FnOnce(&std::path::Path)>(suffix: &str, f: F) {
+        let _guard = env_lock();
         let dir = std::env::temp_dir().join(format!(
-            "mizpah-hub-pid-{}-{}",
+            "mizpah-hub-pid-{suffix}-{}-{}",
             std::process::id(),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -82,26 +82,71 @@ mod tests {
         ));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
-        // SAFETY: test-only env override for config dir isolation.
+        let old = std::env::var_os("MIZPAH_CONFIG_DIR");
         std::env::set_var("MIZPAH_CONFIG_DIR", &dir);
-
-        let port = 3149u16;
-        assert!(read_hub_pid(port).unwrap().is_none());
-
-        write_hub_pid(port).unwrap();
-        assert_eq!(read_hub_pid(port).unwrap(), Some(std::process::id()));
-        assert!(hub_pid_path(port).unwrap().starts_with(&dir));
-
-        remove_hub_pid(port).unwrap();
-        assert!(read_hub_pid(port).unwrap().is_none());
-
-        fs::write(hub_pid_path(port).unwrap(), "not-a-pid\n").unwrap();
-        assert!(read_hub_pid(port).is_err());
-        remove_hub_pid(port).unwrap();
-
-        assert!(!unix_process::process_exists(999_999_999));
-
-        std::env::remove_var("MIZPAH_CONFIG_DIR");
+        f(&dir);
+        match old {
+            Some(v) => std::env::set_var("MIZPAH_CONFIG_DIR", v),
+            None => std::env::remove_var("MIZPAH_CONFIG_DIR"),
+        }
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    #[cfg(not(miri))]
+    fn hub_pid_roundtrip_and_stale_cleanup() {
+        with_isolated_config_dir("roundtrip", |dir| {
+            let port = 3149u16;
+            assert!(read_hub_pid(port).unwrap().is_none());
+
+            write_hub_pid(port).unwrap();
+            assert_eq!(read_hub_pid(port).unwrap(), Some(std::process::id()));
+            assert!(hub_pid_path(port).unwrap().starts_with(dir));
+
+            remove_hub_pid(port).unwrap();
+            assert!(read_hub_pid(port).unwrap().is_none());
+
+            fs::write(hub_pid_path(port).unwrap(), "not-a-pid\n").unwrap();
+            assert!(read_hub_pid(port).is_err());
+            remove_hub_pid(port).unwrap();
+
+            assert!(!unix_process::process_exists(999_999_999));
+        });
+    }
+
+    #[test]
+    #[cfg(not(miri))]
+    fn empty_pid_file_returns_none() {
+        with_isolated_config_dir("empty", |dir| {
+            let port = 3150u16;
+            fs::write(hub_pid_path(port).unwrap(), "\n").unwrap();
+            assert!(read_hub_pid(port).unwrap().is_none());
+            let _ = dir;
+        });
+    }
+
+    #[test]
+    #[cfg(not(miri))]
+    fn remove_missing_hub_pid_is_ok() {
+        with_isolated_config_dir("remove-missing", |_| {
+            remove_hub_pid(3999).unwrap();
+        });
+    }
+
+    #[test]
+    #[cfg(not(miri))]
+    fn read_hub_pid_propagates_io_errors() {
+        with_isolated_config_dir("io", |dir| {
+            let port = 3151u16;
+            let path = hub_pid_path(port).unwrap();
+            fs::write(&path, "12345\n").unwrap();
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                fs::set_permissions(&path, fs::Permissions::from_mode(0o000)).unwrap();
+                assert!(read_hub_pid(port).is_err());
+            }
+            let _ = dir;
+        });
     }
 }

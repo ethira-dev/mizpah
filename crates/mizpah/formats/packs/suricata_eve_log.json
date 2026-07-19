@@ -1,0 +1,33 @@
+{
+    "suricata_eve_log": {
+        "title": "Suricata EVE",
+        "description": "Suricata EVE JSON logs",
+        "file-type": "json",
+        "json": true,
+        "timestamp-field": "timestamp",
+        "line-format": [
+            {
+                "field": "timestamp"
+            },
+            " ",
+            {
+                "field": "event_type"
+            },
+            " ",
+            {
+                "field": "src_ip"
+            },
+            " ",
+            {
+                "field": "dest_ip"
+            }
+        ],
+        "url": "https://docs.suricata.io/en/latest/output/eve/eve-json-format.html",
+        "body-field": "event_type",
+        "sample": [
+            {
+                "line": "{\"timestamp\":\"2020-01-01T00:00:00.000000+0000\",\"event_type\":\"alert\",\"src_ip\":\"10.0.0.1\",\"src_port\":12345,\"dest_ip\":\"10.0.0.2\",\"dest_port\":80,\"proto\":\"TCP\",\"alert\":{\"signature\":\"ET EXAMPLE\",\"severity\":1,\"category\":\"A Network Trojan was detected\"}}"
+            }
+        ]
+    }
+}

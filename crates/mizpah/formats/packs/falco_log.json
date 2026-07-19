@@ -1,0 +1,34 @@
+{
+    "falco_log": {
+        "title": "Falco",
+        "description": "Falco runtime security JSON output",
+        "file-type": "json",
+        "json": true,
+        "timestamp-field": "time",
+        "line-format": [
+            {
+                "field": "time"
+            },
+            " ",
+            {
+                "field": "priority"
+            },
+            " ",
+            {
+                "field": "rule"
+            },
+            " ",
+            {
+                "field": "output"
+            }
+        ],
+        "url": "https://falco.org/docs/",
+        "level-field": "priority",
+        "body-field": "output",
+        "sample": [
+            {
+                "line": "{\"time\":\"2020-01-01T00:00:00.000000000Z\",\"rule\":\"Terminal shell in container\",\"priority\":\"Notice\",\"output\":\"A shell was spawned in a container (user=root)\",\"output_fields\":{\"container.id\":\"abc\",\"proc.name\":\"bash\"},\"source\":\"syscall\",\"hostname\":\"node1\"}"
+            }
+        ]
+    }
+}

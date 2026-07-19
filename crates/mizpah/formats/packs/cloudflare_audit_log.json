@@ -1,0 +1,30 @@
+{
+    "cloudflare_audit_log": {
+        "title": "Cloudflare Audit",
+        "description": "Cloudflare Logpush audit_logs",
+        "file-type": "json",
+        "json": true,
+        "timestamp-field": "When",
+        "line-format": [
+            {
+                "field": "When"
+            },
+            " ",
+            {
+                "field": "Action.type"
+            },
+            " ",
+            {
+                "field": "Action.info"
+            }
+        ],
+        "url": "https://developers.cloudflare.com/logs/logpush/",
+        "level-field": "Action.type",
+        "body-field": "Action.info",
+        "sample": [
+            {
+                "line": "{\"When\":\"2020-01-01T00:00:00Z\",\"ID\":\"abc\",\"Action\":{\"type\":\"zone_settings\",\"info\":\"updated\"},\"Actor\":{\"email\":\"alice@example.com\",\"type\":\"user\",\"ip\":\"1.2.3.4\"},\"Resource\":{\"id\":\"zone1\",\"type\":\"zone\"},\"NewValue\":{},\"OldValue\":{}}"
+            }
+        ]
+    }
+}

@@ -1,0 +1,34 @@
+{
+    "azure_activity_log": {
+        "title": "Azure Activity Log",
+        "description": "Azure Monitor Activity / ARM operation logs",
+        "file-type": "json",
+        "json": true,
+        "timestamp-field": "time",
+        "line-format": [
+            {
+                "field": "time"
+            },
+            " ",
+            {
+                "field": "level"
+            },
+            " ",
+            {
+                "field": "operationName"
+            },
+            " ",
+            {
+                "field": "resourceId"
+            }
+        ],
+        "url": "https://learn.microsoft.com/en-us/azure/azure-monitor/essentials/activity-log",
+        "level-field": "level",
+        "body-field": "operationName",
+        "sample": [
+            {
+                "line": "{\"time\":\"2020-01-01T00:00:00.000Z\",\"resourceId\":\"/subscriptions/000/resourceGroups/rg/providers/Microsoft.Storage/storageAccounts/sa\",\"operationName\":\"Microsoft.Storage/storageAccounts/listKeys/action\",\"category\":\"Administrative\",\"resultType\":\"Success\",\"level\":\"Information\",\"caller\":\"alice@example.com\",\"correlationId\":\"11111111-2222-3333-4444-555555555555\"}"
+            }
+        ]
+    }
+}

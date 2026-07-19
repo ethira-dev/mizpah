@@ -1,11 +1,12 @@
 import CodeMirror, { type ReactCodeMirrorRef } from "@uiw/react-codemirror"
-import { CircleAlert, Star } from "lucide-react"
-import { useEffect, useMemo, useRef, useState } from "react"
+import { CircleAlert, Loader2, Star } from "lucide-react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 import {
   QueryLibraryPanel,
   SaveQueryForm,
 } from "@/components/query-library-panel"
+import { SqlResultTable } from "@/components/sql-result-table"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -16,12 +17,14 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { useQueryLibrary } from "@/hooks/use-query-library"
+import { runSql, type SqlResult } from "@/lib/api"
 import { celSyntaxHint, createCelExtensions } from "@/lib/cel-lang"
 import {
   CEL_CHEAT_SHEET,
   CEL_RECIPES,
   fieldChips,
 } from "@/lib/cel-recipes"
+import type { QueryMode } from "@/lib/filter-storage"
 import { defaultQueryName } from "@/lib/query-library-storage"
 import type { PropertyInfo } from "@/lib/types"
 import { cn } from "@/lib/utils"
@@ -29,8 +32,11 @@ import { cn } from "@/lib/utils"
 type QueryEditorDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
+  mode: QueryMode
   value: string
   onApply: (value: string) => void
+  sqlValue: string
+  onSqlChange: (value: string) => void
   properties: PropertyInfo[]
   /** Server error from the last applied query (shown when draft matches applied). */
   appliedError?: string | null
@@ -44,33 +50,48 @@ function isMacPlatform(): boolean {
 export function QueryEditorDialog({
   open,
   onOpenChange,
+  mode,
   value,
   onApply,
+  sqlValue,
+  onSqlChange,
   properties,
   appliedError,
 }: QueryEditorDialogProps) {
   const [draft, setDraft] = useState(value)
+  const [sqlDraft, setSqlDraft] = useState(sqlValue)
   const [wasOpen, setWasOpen] = useState(open)
   const [naming, setNaming] = useState(false)
+  const [sqlResult, setSqlResult] = useState<SqlResult | null>(null)
+  const [sqlLoading, setSqlLoading] = useState(false)
+  const [sqlError, setSqlError] = useState<string | null>(null)
   const editorRef = useRef<ReactCodeMirrorRef>(null)
+  const sqlTextareaRef = useRef<HTMLTextAreaElement>(null)
   const modKey = isMacPlatform() ? "⌘" : "Ctrl"
   const library = useQueryLibrary()
+  const isSql = mode === "sql"
 
   if (open !== wasOpen) {
     setWasOpen(open)
     if (open) {
       setDraft(value)
+      setSqlDraft(sqlValue)
       setNaming(false)
+      setSqlError(null)
     }
   }
 
   useEffect(() => {
     if (!open) return
     const id = window.setTimeout(() => {
-      editorRef.current?.view?.focus()
+      if (isSql) {
+        sqlTextareaRef.current?.focus()
+      } else {
+        editorRef.current?.view?.focus()
+      }
     }, 50)
     return () => window.clearTimeout(id)
-  }, [open])
+  }, [open, isSql])
 
   const paths = useMemo(
     () => properties.map((p) => p.path),
@@ -106,6 +127,22 @@ export function QueryEditorDialog({
     onApply(next)
     onOpenChange(false)
   }
+
+  const runSqlQuery = useCallback(async () => {
+    const next = sqlDraft.trim()
+    if (!next || sqlLoading) return
+    onSqlChange(sqlDraft)
+    setSqlLoading(true)
+    setSqlError(null)
+    try {
+      setSqlResult(await runSql(next, 100))
+    } catch (e) {
+      setSqlResult(null)
+      setSqlError(e instanceof Error ? e.message : "SQL failed")
+    } finally {
+      setSqlLoading(false)
+    }
+  }, [onSqlChange, sqlDraft, sqlLoading])
 
   function insertAtCursor(text: string) {
     const view = editorRef.current?.view
@@ -182,134 +219,180 @@ export function QueryEditorDialog({
         onKeyDown={(e) => {
           if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
             e.preventDefault()
-            apply()
+            if (isSql) {
+              void runSqlQuery()
+            } else {
+              apply()
+            }
           }
         }}
       >
         <DialogHeader className="shrink-0 space-y-1 border-b px-5 py-4 pr-12">
-          <DialogTitle>Filter logs</DialogTitle>
+          <DialogTitle>{isSql ? "Query with SQL" : "Filter logs"}</DialogTitle>
           <DialogDescription>
-            CEL expression · empty shows everything
+            {isSql
+              ? "Read-only SELECT over all_logs · results stay in this dialog"
+              : "CEL expression · empty shows everything"}
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row">
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-5 overflow-y-auto px-5 py-4">
+        {isSql ? (
+          <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-5 py-4">
             <div className="space-y-2">
-              <div
+              <textarea
+                ref={sqlTextareaRef}
                 className={cn(
-                  "min-h-[10.5rem] overflow-hidden rounded-lg border border-input bg-background/50",
-                  "focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50",
-                  displayError &&
-                    "border-destructive focus-within:border-destructive focus-within:ring-destructive/30"
+                  "min-h-[10.5rem] w-full resize-y rounded-lg border border-input bg-background/50 px-3 py-2",
+                  "font-mono text-xs outline-none",
+                  "focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50",
+                  sqlError &&
+                    "border-destructive focus-visible:border-destructive focus-visible:ring-destructive/30"
                 )}
-              >
-                <CodeMirror
-                  ref={editorRef}
-                  value={draft}
-                  height="168px"
-                  basicSetup={false}
-                  theme="none"
-                  extensions={extensions}
-                  onChange={setDraft}
-                  className="cm-cel-query-modal [&_.cm-editor]:bg-transparent [&_.cm-content]:bg-transparent"
-                />
-              </div>
-              {displayError ? (
+                value={sqlDraft}
+                onChange={(e) => {
+                  const next = e.target.value
+                  setSqlDraft(next)
+                  onSqlChange(next)
+                  setSqlError(null)
+                }}
+                spellCheck={false}
+                placeholder="SELECT service, count(*) AS n FROM all_logs GROUP BY 1"
+              />
+              {sqlError ? (
                 <p className="flex items-start gap-1.5 text-xs text-destructive">
                   <CircleAlert className="mt-0.5 size-3.5 shrink-0" />
-                  <span className="font-mono">{displayError}</span>
+                  <span className="font-mono">{sqlError}</span>
                 </p>
               ) : (
                 <p className="text-xs text-muted-foreground">
-                  Autocomplete suggests fields and helpers as you type.
+                  Columns: id, received_at, event_time, service, format_id,
+                  level, msg, data
                 </p>
               )}
             </div>
-
-            <div className="space-y-2">
-              <p className="text-xs font-medium text-muted-foreground">
-                Try a recipe
-              </p>
-              <div className="flex flex-wrap gap-1.5">
-                {CEL_RECIPES.map((recipe) => (
-                  <button
-                    key={recipe.expression}
-                    type="button"
-                    onClick={() => setRecipe(recipe.expression)}
-                    className={cn(
-                      "rounded-md border border-border bg-muted/40 px-2 py-1",
-                      "font-mono text-[11px] text-foreground/90 transition-colors",
-                      "hover:border-primary/50 hover:bg-primary/10",
-                      "focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50",
-                      draft.trim() === recipe.expression &&
-                        "border-primary/60 bg-primary/15"
-                    )}
-                    title={recipe.expression}
-                  >
-                    {recipe.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <p className="text-xs font-medium text-muted-foreground">
-                Insert field
-              </p>
-              <div className="flex flex-wrap gap-1.5">
-                {chips.map((path) => (
-                  <button
-                    key={path}
-                    type="button"
-                    onClick={() => insertAtCursor(path)}
-                    className={cn(
-                      "rounded-md border border-border px-2 py-1",
-                      "font-mono text-[11px] text-muted-foreground transition-colors",
-                      "hover:border-border hover:bg-muted hover:text-foreground",
-                      "focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-                    )}
-                  >
-                    {path}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="grid gap-4 border-t pt-4 sm:grid-cols-3">
-              {CEL_CHEAT_SHEET.map((group) => (
-                <div key={group.title} className="space-y-2">
-                  <p className="text-xs font-medium text-muted-foreground">
-                    {group.title}
-                  </p>
-                  <ul className="space-y-1.5">
-                    {group.items.map((item) => (
-                      <li
-                        key={item.code}
-                        className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5 text-xs"
-                      >
-                        <code className="font-mono text-[11px] text-foreground">
-                          {item.code}
-                        </code>
-                        <span className="text-muted-foreground">{item.hint}</span>
-                      </li>
-                    ))}
-                  </ul>
+            {sqlResult ? <SqlResultTable result={sqlResult} /> : null}
+          </div>
+        ) : (
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row">
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-5 overflow-y-auto px-5 py-4">
+              <div className="space-y-2">
+                <div
+                  className={cn(
+                    "min-h-[10.5rem] overflow-hidden rounded-lg border border-input bg-background/50",
+                    "focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50",
+                    displayError &&
+                      "border-destructive focus-within:border-destructive focus-within:ring-destructive/30"
+                  )}
+                >
+                  <CodeMirror
+                    ref={editorRef}
+                    value={draft}
+                    height="168px"
+                    basicSetup={false}
+                    theme="none"
+                    extensions={extensions}
+                    onChange={setDraft}
+                    className="cm-cel-query-modal [&_.cm-editor]:bg-transparent [&_.cm-content]:bg-transparent"
+                  />
                 </div>
-              ))}
-            </div>
+                {displayError ? (
+                  <p className="flex items-start gap-1.5 text-xs text-destructive">
+                    <CircleAlert className="mt-0.5 size-3.5 shrink-0" />
+                    <span className="font-mono">{displayError}</span>
+                  </p>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    Autocomplete suggests fields and helpers as you type.
+                  </p>
+                )}
+              </div>
 
-            <div className="border-t pt-4 md:hidden">
-              <div className="max-h-64 overflow-hidden rounded-lg border border-border">
-                {renderLibraryPanel()}
+              <div className="space-y-2">
+                <p className="text-xs font-medium text-muted-foreground">
+                  Try a recipe
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {CEL_RECIPES.map((recipe) => (
+                    <button
+                      key={recipe.expression}
+                      type="button"
+                      onClick={() => setRecipe(recipe.expression)}
+                      className={cn(
+                        "rounded-md border border-border bg-muted/40 px-2 py-1",
+                        "font-mono text-[11px] text-foreground/90 transition-colors",
+                        "hover:border-primary/50 hover:bg-primary/10",
+                        "focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50",
+                        draft.trim() === recipe.expression &&
+                          "border-primary/60 bg-primary/15"
+                      )}
+                      title={recipe.expression}
+                    >
+                      {recipe.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <p className="text-xs font-medium text-muted-foreground">
+                  Insert field
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {chips.map((path) => (
+                    <button
+                      key={path}
+                      type="button"
+                      onClick={() => insertAtCursor(path)}
+                      className={cn(
+                        "rounded-md border border-border px-2 py-1",
+                        "font-mono text-[11px] text-muted-foreground transition-colors",
+                        "hover:border-border hover:bg-muted hover:text-foreground",
+                        "focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                      )}
+                    >
+                      {path}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid gap-4 border-t pt-4 sm:grid-cols-3">
+                {CEL_CHEAT_SHEET.map((group) => (
+                  <div key={group.title} className="space-y-2">
+                    <p className="text-xs font-medium text-muted-foreground">
+                      {group.title}
+                    </p>
+                    <ul className="space-y-1.5">
+                      {group.items.map((item) => (
+                        <li
+                          key={item.code}
+                          className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5 text-xs"
+                        >
+                          <code className="font-mono text-[11px] text-foreground">
+                            {item.code}
+                          </code>
+                          <span className="text-muted-foreground">
+                            {item.hint}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+
+              <div className="border-t pt-4 md:hidden">
+                <div className="max-h-64 overflow-hidden rounded-lg border border-border">
+                  {renderLibraryPanel()}
+                </div>
               </div>
             </div>
-          </div>
 
-          <div className="hidden min-h-0 w-[16.5rem] shrink-0 border-l md:flex md:flex-col">
-            {renderLibraryPanel()}
+            <div className="hidden min-h-0 w-[16.5rem] shrink-0 border-l md:flex md:flex-col">
+              {renderLibraryPanel()}
+            </div>
           </div>
-        </div>
+        )}
 
         <DialogFooter
           className={cn(
@@ -317,7 +400,47 @@ export function QueryEditorDialog({
             naming ? "sm:justify-stretch" : "sm:justify-between"
           )}
         >
-          {naming ? (
+          {isSql ? (
+            <>
+              <p className="hidden text-xs text-muted-foreground sm:block">
+                {modKey}↵ run · Esc close
+              </p>
+              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setSqlDraft("")
+                    onSqlChange("")
+                    setSqlResult(null)
+                    setSqlError(null)
+                  }}
+                >
+                  Clear
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => onOpenChange(false)}
+                >
+                  Close
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={sqlLoading || !sqlDraft.trim()}
+                  onClick={() => void runSqlQuery()}
+                >
+                  {sqlLoading ? (
+                    <Loader2 className="size-3.5 animate-spin" />
+                  ) : null}
+                  Run SELECT
+                </Button>
+              </div>
+            </>
+          ) : naming ? (
             <SaveQueryForm
               defaultName={defaultQueryName(draftTrimmed)}
               onConfirm={confirmSave}

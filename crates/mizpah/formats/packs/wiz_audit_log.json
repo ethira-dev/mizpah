@@ -1,0 +1,33 @@
+{
+    "wiz_audit_log": {
+        "title": "Wiz Audit",
+        "description": "Wiz auditLogEntries GraphQL node JSON",
+        "file-type": "json",
+        "json": true,
+        "timestamp-field": "timestamp",
+        "line-format": [
+            {
+                "field": "timestamp"
+            },
+            " ",
+            {
+                "field": "action"
+            },
+            " ",
+            {
+                "field": "status"
+            },
+            " ",
+            {
+                "field": "requestId"
+            }
+        ],
+        "url": "https://www.wiz.io/",
+        "body-field": "action",
+        "sample": [
+            {
+                "line": "{\"id\":\"hhd8ab9c-f1bf-4a80-a1e1-13bc8769caf4\",\"action\":\"Login\",\"requestId\":\"hhd8ab9c-f1bf-4a80-a1e1-13bc8769caf4\",\"status\":\"SUCCESS\",\"timestamp\":\"2023-07-21T07:07:21.105685Z\",\"sourceIP\":\"1.2.3.4\",\"serviceAccount\":{\"id\":\"sa1\",\"name\":\"collector\"},\"user\":null,\"userAgent\":\"WizCollector/1.0\",\"actionParameters\":{\"clientID\":\"abc\",\"scopes\":[\"read:issues\"]}}"
+            }
+        ]
+    }
+}

@@ -1,0 +1,63 @@
+{
+    "nestjs_log": {
+        "title": "NestJS ConsoleLogger",
+        "description": "Default NestJS ConsoleLogger lines ([Nest] pid - timestamp LEVEL [Context] message)",
+        "url": "https://docs.nestjs.com/techniques/logger",
+        "regex": {
+            "std": {
+                "pattern": "^\\[Nest\\]\\s+(?<pid>\\d+)\\s+-\\s+(?<timestamp>\\d{1,2}/\\d{1,2}/\\d{4},\\s+\\d{1,2}:\\d{2}:\\d{2}(?:\\s*[AP]M)?)\\s+(?<level>LOG|ERROR|WARN|DEBUG|VERBOSE)\\s+(?:\\[(?<context>[^\\]]+)\\]\\s+)?(?<body>.*?)(?:\\s+(?<duration>\\+\\d+ms))?\\s*$"
+            }
+        },
+        "level-field": "level",
+        "body-field": "body",
+        "timestamp-field": "timestamp",
+        "level": {
+            "error": "ERROR",
+            "warn": "WARN",
+            "info": "LOG",
+            "debug": "DEBUG",
+            "trace": "VERBOSE"
+        },
+        "value": {
+            "pid": {
+                "kind": "integer",
+                "identifier": true
+            },
+            "level": {
+                "kind": "string"
+            },
+            "context": {
+                "kind": "string",
+                "identifier": true
+            },
+            "timestamp": {
+                "kind": "string"
+            },
+            "duration": {
+                "kind": "string"
+            }
+        },
+        "sample": [
+            {
+                "line": "[Nest] 16680  - 15/08/2024, 23:30:49     LOG [NestApplication] Nest application successfully started +3ms",
+                "level": "info"
+            },
+            {
+                "line": "[Nest] 48210  - 07/19/2026, 10:17:00 PM     LOG [NestFactory] Starting Nest application...",
+                "level": "info"
+            },
+            {
+                "line": "[Nest] 16680  - 15/08/2024, 23:30:49     ERROR [ExceptionsHandler] Cannot GET /missing",
+                "level": "error"
+            },
+            {
+                "line": "[Nest] 16680  - 15/08/2024, 23:30:49     WARN [RouterExplorer] Legacy route detected",
+                "level": "warn"
+            },
+            {
+                "line": "[Nest] 16680  - 15/08/2024, 23:30:49     LOG Hello world!",
+                "level": "info"
+            }
+        ]
+    }
+}

@@ -1,0 +1,26 @@
+{
+    "logrus_json_log": {
+        "title": "Logrus JSON",
+        "description": "sirupsen/logrus JSONFormatter objects (time, level, msg)",
+        "url": "https://github.com/sirupsen/logrus",
+        "file-type": "json",
+        "timestamp-field": "time",
+        "level-field": "level",
+        "body-field": "msg",
+        "line-format": [
+            { "field": "time" },
+            " ",
+            { "field": "level" },
+            " ",
+            { "field": "msg" }
+        ],
+        "sample": [
+            {
+                "line": "{\"time\":\"2020-01-01T00:00:00Z\",\"level\":\"info\",\"msg\":\"server listening\"}"
+            },
+            {
+                "line": "{\"time\":\"2020-01-01T00:00:00Z\",\"level\":\"error\",\"msg\":\"request failed\",\"error\":\"timeout\"}"
+            }
+        ]
+    }
+}

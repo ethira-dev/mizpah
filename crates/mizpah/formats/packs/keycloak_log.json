@@ -1,0 +1,37 @@
+{
+    "keycloak_log": {
+        "title": "Keycloak",
+        "description": "Keycloak event / admin event JSON",
+        "file-type": "json",
+        "json": true,
+        "timestamp-field": "time",
+        "line-format": [
+            {
+                "field": "time"
+            },
+            " ",
+            {
+                "field": "type"
+            },
+            " ",
+            {
+                "field": "realmId"
+            },
+            " ",
+            {
+                "field": "userId"
+            },
+            " ",
+            {
+                "field": "ipAddress"
+            }
+        ],
+        "url": "https://www.keycloak.org/docs/",
+        "body-field": "type",
+        "sample": [
+            {
+                "line": "{\"time\":1577836800000,\"type\":\"LOGIN\",\"realmId\":\"master\",\"clientId\":\"account\",\"userId\":\"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee\",\"sessionId\":\"bbbbbbbb-cccc-dddd-eeee-ffffffffffff\",\"ipAddress\":\"1.2.3.4\",\"error\":null,\"details\":{\"username\":\"alice\",\"auth_method\":\"openid-connect\"}}"
+            }
+        ]
+    }
+}

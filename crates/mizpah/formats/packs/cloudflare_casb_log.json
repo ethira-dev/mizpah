@@ -1,0 +1,30 @@
+{
+    "cloudflare_casb_log": {
+        "title": "Cloudflare CASB",
+        "description": "Cloudflare Logpush CASB findings",
+        "file-type": "json",
+        "json": true,
+        "timestamp-field": "Timestamp",
+        "line-format": [
+            {
+                "field": "Timestamp"
+            },
+            " ",
+            {
+                "field": "Severity"
+            },
+            " ",
+            {
+                "field": "FindingTypeID"
+            }
+        ],
+        "url": "https://developers.cloudflare.com/logs/logpush/",
+        "level-field": "Severity",
+        "body-field": "FindingTypeID",
+        "sample": [
+            {
+                "line": "{\"Timestamp\":\"2020-01-01T00:00:00Z\",\"Severity\":\"high\",\"FindingTypeID\":\"google_drive_public_link\",\"InstanceID\":\"inst1\",\"AssetID\":\"file1\",\"VendorName\":\"Google Workspace\",\"FindingDetails\":{\"url\":\"https://drive.google.com/x\"}}"
+            }
+        ]
+    }
+}

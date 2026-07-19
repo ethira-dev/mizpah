@@ -1,12 +1,25 @@
-import { CircleAlert, Search, X } from "lucide-react"
+import { Check, ChevronDown, CircleAlert, Search, X } from "lucide-react"
 import { useEffect, useState } from "react"
 
 import { QueryEditorDialog } from "@/components/query-editor-dialog"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import {
+  readQueryModeFromSession,
+  readSqlFromSession,
+  writeQueryModeToSession,
+  writeSqlToSession,
+  type QueryMode,
+} from "@/lib/filter-storage"
 import type { PropertyInfo } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
@@ -48,7 +61,17 @@ export function CelQueryEditor({
   onClearFilter,
 }: CelQueryEditorProps) {
   const [open, setOpen] = useState(false)
+  const [mode, setMode] = useState<QueryMode>(() => readQueryModeFromSession())
+  const [sql, setSql] = useState(() => readSqlFromSession())
   const modKey = isMacPlatform() ? "⌘" : "Ctrl"
+
+  useEffect(() => {
+    writeQueryModeToSession(mode)
+  }, [mode])
+
+  useEffect(() => {
+    writeSqlToSession(sql)
+  }, [sql])
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -62,9 +85,11 @@ export function CelQueryEditor({
     return () => window.removeEventListener("keydown", onKeyDown)
   }, [])
 
-  const display = value.trim()
-  const hasError = Boolean(error)
+  const display = mode === "sql" ? sql.trim() : value.trim()
+  const hasError = mode === "cel" && Boolean(error)
   const showFilterChip = filterActive && showingCount != null
+  const placeholder =
+    mode === "sql" ? "Query with SQL…" : "Filter with CEL…"
 
   function clearFilter() {
     if (onClearFilter) {
@@ -91,7 +116,13 @@ export function CelQueryEditor({
             "outline-none focus-visible:ring-2 focus-visible:ring-ring"
           )}
           onClick={() => setOpen(true)}
-          aria-label={display ? `Edit filter: ${display}` : "Open filter editor"}
+          aria-label={
+            display
+              ? `Edit ${mode === "sql" ? "SQL" : "filter"}: ${display}`
+              : mode === "sql"
+                ? "Open SQL editor"
+                : "Open filter editor"
+          }
         >
           <Search className="size-3.5 shrink-0 text-muted-foreground" />
           <span
@@ -100,12 +131,50 @@ export function CelQueryEditor({
               display ? "text-foreground" : "text-muted-foreground"
             )}
           >
-            {display || "Filter with CEL…"}
+            {display || placeholder}
           </span>
-          <kbd className="pointer-events-none hidden shrink-0 rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground sm:inline">
-            {modKey}K
-          </kbd>
         </button>
+
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              className={cn(
+                "flex shrink-0 items-center gap-0.5 rounded-full border border-border",
+                "bg-muted/70 px-2 py-0.5",
+                "text-[10px] font-medium text-muted-foreground",
+                "hover:bg-muted hover:text-foreground",
+                "focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+                "data-[state=open]:bg-muted data-[state=open]:text-foreground"
+              )}
+              aria-label={`Query language: ${mode === "sql" ? "SQL" : "CEL"}`}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {mode === "sql" ? "SQL" : "CEL"}
+              <ChevronDown className="size-3 opacity-70" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="min-w-28">
+            <DropdownMenuItem
+              onSelect={() => setMode("cel")}
+              className="justify-between"
+            >
+              CEL
+              {mode === "cel" ? <Check className="size-3.5" /> : null}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onSelect={() => setMode("sql")}
+              className="justify-between"
+            >
+              SQL
+              {mode === "sql" ? <Check className="size-3.5" /> : null}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        <kbd className="pointer-events-none hidden shrink-0 rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground sm:inline">
+          {modKey}K
+        </kbd>
 
         {hasError ? (
           <Tooltip>
@@ -159,8 +228,11 @@ export function CelQueryEditor({
       <QueryEditorDialog
         open={open}
         onOpenChange={setOpen}
+        mode={mode}
         value={value}
         onApply={onChange}
+        sqlValue={sql}
+        onSqlChange={setSql}
         properties={properties}
         appliedError={error}
       />

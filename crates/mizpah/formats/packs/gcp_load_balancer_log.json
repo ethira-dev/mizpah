@@ -1,0 +1,29 @@
+{
+    "gcp_load_balancer_log": {
+        "title": "GCP Load Balancer",
+        "description": "GCP HTTP(S) Load Balancing request logs",
+        "file-type": "json",
+        "json": true,
+        "timestamp-field": "timestamp",
+        "line-format": [
+            {
+                "field": "timestamp"
+            },
+            " ",
+            {
+                "field": "httpRequest"
+            },
+            " ",
+            {
+                "field": "jsonPayload"
+            }
+        ],
+        "url": "https://cloud.google.com/load-balancing/docs/https/https-logging-monitoring",
+        "body-field": "httpRequest",
+        "sample": [
+            {
+                "line": "{\"timestamp\":\"2020-01-01T00:00:00.000Z\",\"severity\":\"INFO\",\"httpRequest\":{\"requestMethod\":\"GET\",\"requestUrl\":\"https://example.com/\",\"status\":200,\"userAgent\":\"curl/7.0\",\"remoteIp\":\"1.2.3.4\",\"latency\":\"0.012s\"},\"resource\":{\"type\":\"http_load_balancer\"},\"jsonPayload\":{\"@type\":\"type.googleapis.com/google.cloud.loadbalancing.type.LoadBalancerLogEntry\",\"statusDetails\":\"response_sent_by_backend\"}}"
+            }
+        ]
+    }
+}

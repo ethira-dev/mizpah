@@ -1,0 +1,24 @@
+{
+    "lambda_cloudwatch_log": {
+        "title": "AWS Lambda CloudWatch",
+        "description": "Lambda START/END/REPORT lines from CloudWatch Logs",
+        "regex": {
+            "std": {
+                "pattern": "^(?<type>START|END|REPORT) RequestId: (?<request_id>[0-9a-fA-F-]+)(?:\\s+(?<body>.*))?$"
+            }
+        },
+        "sample": [
+            {
+                "line": "START RequestId: 6befe6ab-c4d0-4c2c-9c8a-0a1b2c3d4e5f Version: $LATEST"
+            },
+            {
+                "line": "END RequestId: 6befe6ab-c4d0-4c2c-9c8a-0a1b2c3d4e5f"
+            },
+            {
+                "line": "REPORT RequestId: 6befe6ab-c4d0-4c2c-9c8a-0a1b2c3d4e5f\tDuration: 12.34 ms\tBilled Duration: 13 ms\tMemory Size: 128 MB\tMax Memory Used: 64 MB"
+            }
+        ],
+        "url": "https://docs.aws.amazon.com/lambda/latest/dg/monitoring-cloudwatchlogs.html",
+        "body-field": "body"
+    }
+}

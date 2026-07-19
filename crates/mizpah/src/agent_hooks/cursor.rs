@@ -188,4 +188,62 @@ mod tests {
         assert!(!CURSOR_EVENTS.contains(&"beforeTabFileRead"));
         assert!(!CURSOR_EVENTS.contains(&"afterTabFileEdit"));
     }
+
+    #[test]
+    fn merge_cursor_invalid_json_errors() {
+        let err = merge_cursor_hooks("{bad", "/bin/mzp __hook-forward --source cursor").unwrap_err();
+        assert!(err.contains("invalid Cursor hooks.json"));
+    }
+
+    #[test]
+    fn merge_cursor_refreshes_stale_command_path() {
+        let cmd = managed_command(Path::new("/new/mzp"), HookSource::Cursor);
+        let existing = r#"{
+          "version": 1,
+          "hooks": {
+            "stop": [{ "command": "/old/mzp __hook-forward --source cursor" }]
+          }
+        }"#;
+        let (out, changed) = merge_cursor_hooks(existing, &cmd).unwrap();
+        assert!(changed);
+        assert!(out.contains("/new/mzp"));
+    }
+
+    #[test]
+    fn remove_cursor_empty_input() {
+        let (out, changed) = remove_cursor_hooks("").unwrap();
+        assert!(!changed);
+        assert!(out.is_empty());
+    }
+
+    #[test]
+    fn merge_cursor_root_not_object_errors() {
+        let err = merge_cursor_hooks("[]", "cmd").unwrap_err();
+        assert!(err.contains("root must be an object"));
+    }
+
+    #[test]
+    fn merge_cursor_event_not_array_errors() {
+        let err = merge_cursor_hooks(r#"{"hooks":{"stop":"x"}}"#, "cmd").unwrap_err();
+        assert!(err.contains("must be an array"));
+    }
+
+    #[test]
+    fn merge_cursor_no_change_when_command_current() {
+        let cmd = managed_command(Path::new("/bin/mzp"), HookSource::Cursor);
+        let (once, _) = merge_cursor_hooks("", &cmd).unwrap();
+        let (_, changed) = merge_cursor_hooks(&once, &cmd).unwrap();
+        assert!(!changed);
+    }
+
+    #[test]
+    fn merge_cursor_hooks_field_not_object_errors() {
+        let err = merge_cursor_hooks(r#"{"hooks":"nope"}"#, "cmd").unwrap_err();
+        assert!(err.contains("`hooks` must be an object"));
+    }
+
+    #[test]
+    fn remove_cursor_invalid_json_errors() {
+        assert!(remove_cursor_hooks("{").is_err());
+    }
 }

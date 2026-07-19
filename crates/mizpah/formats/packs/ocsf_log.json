@@ -1,0 +1,38 @@
+{
+    "ocsf_log": {
+        "title": "OCSF",
+        "description": "Open Cybersecurity Schema Framework events",
+        "file-type": "json",
+        "json": true,
+        "timestamp-field": "time",
+        "line-format": [
+            {
+                "field": "time"
+            },
+            " ",
+            {
+                "field": "class_name"
+            },
+            " ",
+            {
+                "field": "activity_name"
+            },
+            " ",
+            {
+                "field": "severity"
+            },
+            " ",
+            {
+                "field": "message"
+            }
+        ],
+        "url": "https://schema.ocsf.io/",
+        "level-field": "severity",
+        "body-field": "message",
+        "sample": [
+            {
+                "line": "{\"metadata\":{\"version\":\"1.1.0\",\"product\":{\"name\":\"Demo\"}},\"time\":1577836800000,\"class_uid\":3002,\"class_name\":\"Authentication\",\"category_uid\":3,\"category_name\":\"Identity & Access Management\",\"activity_id\":1,\"activity_name\":\"Logon\",\"severity_id\":1,\"severity\":\"Info\",\"message\":\"User logged on\",\"status\":\"Success\"}"
+            }
+        ]
+    }
+}

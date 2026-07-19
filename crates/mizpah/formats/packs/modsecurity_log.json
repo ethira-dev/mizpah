@@ -1,0 +1,29 @@
+{
+    "modsecurity_log": {
+        "title": "ModSecurity",
+        "description": "ModSecurity audit log JSON (SecAuditLogFormat JSON)",
+        "file-type": "json",
+        "json": true,
+        "timestamp-field": "transaction.time_stamp",
+        "line-format": [
+            {
+                "field": "transaction.time_stamp"
+            },
+            " ",
+            {
+                "field": "transaction.request.uri"
+            },
+            " ",
+            {
+                "field": "transaction.response.http_code"
+            }
+        ],
+        "url": "https://github.com/owasp-modsecurity/ModSecurity",
+        "body-field": "transaction.request.uri",
+        "sample": [
+            {
+                "line": "{\"transaction\":{\"client_ip\":\"1.2.3.4\",\"time_stamp\":\"Wed Jan  1 00:00:00 2020\",\"request\":{\"method\":\"GET\",\"uri\":\"/admin\",\"http_version\":1.1},\"response\":{\"http_code\":403},\"producer\":{\"modsecurity\":\"ModSecurity v3\",\"connector\":\"nginx\"}},\"messages\":[{\"message\":\"Access denied\",\"details\":{\"ruleId\":\"949110\"}}]}"
+            }
+        ]
+    }
+}

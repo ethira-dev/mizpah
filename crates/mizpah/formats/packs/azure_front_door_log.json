@@ -1,0 +1,33 @@
+{
+    "azure_front_door_log": {
+        "title": "Azure Front Door",
+        "description": "Azure Front Door access logs",
+        "file-type": "json",
+        "json": true,
+        "timestamp-field": "time",
+        "line-format": [
+            {
+                "field": "time"
+            },
+            " ",
+            {
+                "field": "httpStatusCode"
+            },
+            " ",
+            {
+                "field": "requestUri"
+            },
+            " ",
+            {
+                "field": "clientIp"
+            }
+        ],
+        "url": "https://learn.microsoft.com/en-us/azure/frontdoor/front-door-diagnostics",
+        "body-field": "requestUri",
+        "sample": [
+            {
+                "line": "{\"time\":\"2020-01-01T00:00:00Z\",\"resourceId\":\"/SUBSCRIPTIONS/000/RESOURCEGROUPS/RG/PROVIDERS/MICROSOFT.CDN/PROFILES/AFD\",\"category\":\"FrontDoorAccessLog\",\"operationName\":\"Microsoft.Cdn/Profiles/AccessLog/Write\",\"clientIp\":\"1.2.3.4\",\"requestUri\":\"https://contoso.azurefd.net/\",\"httpStatusCode\":200,\"httpMethod\":\"GET\",\"userAgent\":\"curl/7.0\"}"
+            }
+        ]
+    }
+}

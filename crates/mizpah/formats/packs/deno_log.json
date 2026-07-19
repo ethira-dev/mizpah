@@ -1,0 +1,35 @@
+{
+    "deno_log": {
+        "title": "Deno",
+        "description": "Deno default logger / CLI console lines",
+        "url": "https://docs.deno.com/runtime/manual/basics/testing/#logging",
+        "regex": {
+            "level": {
+                "pattern": "^(?<level>TRACE|DEBUG|INFO|WARN|ERROR)\\s+(?<body>.+)$"
+            },
+            "download": {
+                "pattern": "^(?<body>(?:Download|Check|Compile|Listening on)\\s+.*)$"
+            }
+        },
+        "level-field": "level",
+        "body-field": "body",
+        "level": {
+            "trace": "TRACE",
+            "debug": "DEBUG",
+            "info": "INFO",
+            "warn": "WARN",
+            "error": "ERROR"
+        },
+        "sample": [
+            {
+                "line": "INFO Listening on http://127.0.0.1:8000/"
+            },
+            {
+                "line": "Download https://deno.land/std/http/server.ts"
+            },
+            {
+                "line": "ERROR Uncaught Error: boom"
+            }
+        ]
+    }
+}

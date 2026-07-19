@@ -1,0 +1,33 @@
+{
+    "route53_query_log": {
+        "title": "AWS Route 53 Query",
+        "description": "Route 53 Resolver / public DNS query logs",
+        "file-type": "json",
+        "json": true,
+        "timestamp-field": "query_timestamp",
+        "line-format": [
+            {
+                "field": "query_timestamp"
+            },
+            " ",
+            {
+                "field": "query_name"
+            },
+            " ",
+            {
+                "field": "query_type"
+            },
+            " ",
+            {
+                "field": "rcode"
+            }
+        ],
+        "url": "https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/query-logs.html",
+        "body-field": "query_name",
+        "sample": [
+            {
+                "line": "{\"version\":\"1.0\",\"account_id\":\"123456789012\",\"region\":\"us-east-1\",\"query_timestamp\":\"2020-01-01T00:00:00Z\",\"query_name\":\"example.com.\",\"query_type\":\"A\",\"query_class\":\"IN\",\"rcode\":\"NOERROR\",\"answers\":[{\"Rdata\":\"93.184.216.34\",\"Type\":\"A\",\"Class\":\"IN\"}],\"srcaddr\":\"192.0.2.1\",\"srcport\":\"12345\",\"transport\":\"UDP\"}"
+            }
+        ]
+    }
+}

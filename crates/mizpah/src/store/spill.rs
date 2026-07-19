@@ -1,5 +1,6 @@
 //! Secure on-disk spill of the log buffer across self-update restarts.
 
+use super::annotate::{AnnotatedEntry, Annotation};
 use super::ingest::estimate_bytes;
 use super::Store;
 use crate::models::LogEntry;
@@ -7,13 +8,26 @@ use crate::properties::{rebuild_properties_by_service, rebuild_properties_from_e
 use crate::util;
 use chrono::Utc;
 use hmac::{Hmac, Mac};
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use sha2::Sha256;
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering;
 type HmacSha256 = Hmac<Sha256>;
+
+const SPILL_KIND_ANNOTATION: &str = "annotation";
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SpillAnnotationLine {
+    #[serde(rename = "_spillKind")]
+    spill_kind: String,
+    id: u64,
+    annotation: Annotation,
+}
 
 const SPILL_BODY: &str = "update-spill.ndjson";
 const SPILL_KEY: &str = "update-spill.key";
@@ -206,9 +220,18 @@ impl Store {
         // Clear any previous artifacts first.
         cleanup_spill_artifacts(dir);
 
-        let entries: Vec<LogEntry> = {
+        let (entries, annotations): (Vec<LogEntry>, Vec<AnnotatedEntry>) = {
             let inner = self.inner.read().await;
-            inner.entries.iter().cloned().collect()
+            let entries = inner.entries.iter().cloned().collect();
+            let annotations = inner
+                .annotations
+                .iter()
+                .map(|(&id, annotation)| AnnotatedEntry {
+                    id,
+                    annotation: annotation.clone(),
+                })
+                .collect();
+            (entries, annotations)
         };
 
         let tmp_body = private_temp_path(&body_path);
@@ -224,6 +247,19 @@ impl Store {
                 file.write_all(&line)?;
                 file.write_all(b"\n")?;
                 mac.update(&line);
+                mac.update(b"\n");
+            }
+            for ann in &annotations {
+                let line = SpillAnnotationLine {
+                    spill_kind: SPILL_KIND_ANNOTATION.into(),
+                    id: ann.id,
+                    annotation: ann.annotation.clone(),
+                };
+                let bytes = serde_json::to_vec(&line)
+                    .map_err(|e| SpillError::msg(format!("serialize spill annotation: {e}")))?;
+                file.write_all(&bytes)?;
+                file.write_all(b"\n")?;
+                mac.update(&bytes);
                 mac.update(b"\n");
             }
             file.sync_all()?;
@@ -299,6 +335,7 @@ impl Store {
         let mut mac =
             HmacSha256::new_from_slice(&key).map_err(|e| SpillError::msg(e.to_string()))?;
         let mut entries = Vec::new();
+        let mut annotations = Vec::new();
         {
             let file = open_existing_private_file(&body_path)?;
             let mut reader = BufReader::new(file);
@@ -322,7 +359,23 @@ impl Store {
                 if trimmed.len() as u64 > MAX_LINE_BYTES {
                     return Err(SpillError::msg("spill line exceeds size limit"));
                 }
-                let mut entry: LogEntry = serde_json::from_slice(trimmed)
+                let value: Value = serde_json::from_slice(trimmed)
+                    .map_err(|e| SpillError::msg(format!("invalid spill line: {e}")))?;
+                if value
+                    .get("_spillKind")
+                    .and_then(|v| v.as_str())
+                    == Some(SPILL_KIND_ANNOTATION)
+                {
+                    let ann: SpillAnnotationLine = serde_json::from_value(value).map_err(|e| {
+                        SpillError::msg(format!("invalid spill annotation: {e}"))
+                    })?;
+                    annotations.push(AnnotatedEntry {
+                        id: ann.id,
+                        annotation: ann.annotation,
+                    });
+                    continue;
+                }
+                let mut entry: LogEntry = serde_json::from_value(value)
                     .map_err(|e| SpillError::msg(format!("invalid spill entry: {e}")))?;
                 entry.approx_bytes = estimate_bytes(&entry.service, &entry.data);
                 entries.push(entry);
@@ -333,7 +386,22 @@ impl Store {
             .map_err(|_| SpillError::msg("spill HMAC verification failed"))?;
 
         let count = self.load_spilled_entries(entries).await;
+        self.load_spilled_annotations(annotations).await;
         Ok(count)
+    }
+
+    async fn load_spilled_annotations(&self, annotations: Vec<AnnotatedEntry>) {
+        if annotations.is_empty() {
+            return;
+        }
+        let mut inner = self.inner.write().await;
+        let live: HashSet<u64> = inner.entries.iter().map(|e| e.id).collect();
+        for ann in annotations {
+            if !live.contains(&ann.id) {
+                continue;
+            }
+            inner.annotations.insert(ann.id, ann.annotation);
+        }
     }
 
     /// Bulk-load verified entries, preserving ids/timestamps and rebuilding indexes.
@@ -408,7 +476,9 @@ mod tests {
         LogEntry {
             id,
             received_at: Utc::now(),
+            event_time: None,
             service: service.into(),
+            format_id: Some("json".into()),
             data,
             approx_bytes,
         }
@@ -429,6 +499,16 @@ mod tests {
             let inner = store.inner.read().await;
             inner.entries.clone()
         };
+        let mark_id = before[0].id;
+        store
+            .set_bookmark(
+                mark_id,
+                Some(true),
+                Some(vec!["keep".into()]),
+                Some(Some("note".into())),
+            )
+            .await
+            .unwrap();
 
         store.spill_for_update_to(dir.path()).await.expect("spill");
 
@@ -442,6 +522,10 @@ mod tests {
             let inner = restored.inner.read().await;
             inner.entries.clone()
         };
+        let ann = restored.get_annotation(mark_id).await.expect("annotation");
+        assert!(ann.marked);
+        assert_eq!(ann.tags, vec!["keep".to_string()]);
+        assert_eq!(ann.comment.as_deref(), Some("note"));
         assert_eq!(after.len(), before.len());
         for (a, b) in before.iter().zip(after.iter()) {
             assert_eq!(a.id, b.id);
@@ -542,5 +626,251 @@ mod tests {
                 .unwrap(),
             0
         );
+    }
+
+    #[tokio::test]
+    async fn incomplete_spill_package_is_rejected() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::new(1_000_000);
+        store
+            .push_line("api", r#"{"msg":"ok","level":"info"}"#)
+            .await;
+        store.spill_for_update_to(dir.path()).await.unwrap();
+        fs::remove_file(dir.path().join(SPILL_KEY)).unwrap();
+
+        let restored = Store::new(1_000_000);
+        let err = restored
+            .restore_update_spill_from_dir(dir.path())
+            .await
+            .unwrap_err();
+        assert!(err.to_string().contains("incomplete"), "{err}");
+    }
+
+    #[tokio::test]
+    async fn invalid_spill_hex_and_key_length_rejected() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::new(1_000_000);
+        store
+            .push_line("api", r#"{"msg":"ok","level":"info"}"#)
+            .await;
+        store.spill_for_update_to(dir.path()).await.unwrap();
+
+        fs::write(dir.path().join(SPILL_KEY), b"zz\n").unwrap();
+        let err = Store::new(1_000_000)
+            .restore_update_spill_from_dir(dir.path())
+            .await
+            .unwrap_err();
+        assert!(err.to_string().contains("hex"), "{err}");
+
+        store.spill_for_update_to(dir.path()).await.unwrap();
+        fs::write(dir.path().join(SPILL_KEY), b"0102\n").unwrap();
+        let err = Store::new(1_000_000)
+            .restore_update_spill_from_dir(dir.path())
+            .await
+            .unwrap_err();
+        assert!(err.to_string().contains("32 bytes"), "{err}");
+    }
+
+    #[tokio::test]
+    async fn orphan_annotations_are_ignored_on_restore() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::new(1_000_000);
+        let entries = store
+            .push_line("api", r#"{"msg":"only","level":"info"}"#)
+            .await;
+        let live_id = entries[0].id;
+        store
+            .set_bookmark(live_id, Some(true), None, None)
+            .await
+            .unwrap();
+        store.spill_for_update_to(dir.path()).await.unwrap();
+
+        let body_path = dir.path().join(SPILL_BODY);
+        let key_path = dir.path().join(SPILL_KEY);
+        let hmac_path = dir.path().join(SPILL_HMAC);
+        let key_hex = fs::read_to_string(&key_path).unwrap();
+        let key = hex_decode(&key_hex).unwrap();
+        let mut body = fs::read(&body_path).unwrap();
+        let orphan = serde_json::to_vec(&SpillAnnotationLine {
+            spill_kind: SPILL_KIND_ANNOTATION.into(),
+            id: live_id + 10_000,
+            annotation: Annotation {
+                marked: true,
+                tags: vec!["orphan".into()],
+                comment: None,
+            },
+        })
+        .unwrap();
+        body.extend_from_slice(&orphan);
+        body.push(b'\n');
+        fs::write(&body_path, &body).unwrap();
+        let mut mac =
+            HmacSha256::new_from_slice(&key).expect("key");
+        mac.update(&body);
+        fs::write(&hmac_path, hex_encode(&mac.finalize().into_bytes())).unwrap();
+
+        let restored = Store::new(1_000_000);
+        let n = restored
+            .restore_update_spill_from_dir(dir.path())
+            .await
+            .expect("restore");
+        assert_eq!(n, 1);
+        assert!(restored.get_annotation(live_id).await.unwrap().marked);
+        assert!(restored.get_annotation(live_id + 10_000).await.is_none());
+    }
+
+    #[test]
+    fn hex_decode_rejects_odd_length_and_bad_digits() {
+        assert!(hex_decode("abc").is_err());
+        assert!(hex_decode("gg").is_err());
+    }
+
+    #[tokio::test]
+    async fn invalid_spill_line_json_is_rejected() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::new(1_000_000);
+        store
+            .push_line("api", r#"{"msg":"ok","level":"info"}"#)
+            .await;
+        store.spill_for_update_to(dir.path()).await.unwrap();
+
+        let body_path = dir.path().join(SPILL_BODY);
+        let key_path = dir.path().join(SPILL_KEY);
+        let hmac_path = dir.path().join(SPILL_HMAC);
+        let key = hex_decode(&fs::read_to_string(&key_path).unwrap()).unwrap();
+        let mut body = b"not-json\n".to_vec();
+        body.extend_from_slice(&fs::read(&body_path).unwrap());
+        fs::write(&body_path, &body).unwrap();
+        let mut mac = HmacSha256::new_from_slice(&key).unwrap();
+        mac.update(&body);
+        fs::write(&hmac_path, hex_encode(&mac.finalize().into_bytes())).unwrap();
+
+        let err = Store::new(1_000_000)
+            .restore_update_spill_from_dir(dir.path())
+            .await
+            .unwrap_err();
+        assert!(err.to_string().contains("invalid spill line"), "{err}");
+    }
+
+    #[test]
+    fn hex_decode_accepts_uppercase() {
+        assert_eq!(hex_decode("ABCD").unwrap(), vec![0xab, 0xcd]);
+    }
+
+    #[tokio::test]
+    async fn cleanup_spill_artifacts_removes_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::new(1_000_000);
+        store
+            .push_line("api", r#"{"msg":"ok","level":"info"}"#)
+            .await;
+        store.spill_for_update_to(dir.path()).await.unwrap();
+        cleanup_spill_artifacts(dir.path());
+        assert!(!dir.path().join(SPILL_BODY).exists());
+        assert!(!dir.path().join(SPILL_KEY).exists());
+        assert!(!dir.path().join(SPILL_HMAC).exists());
+    }
+
+    #[tokio::test]
+    async fn restore_update_spill_missing_config_dir_is_noop() {
+        let _guard = crate::test_support::env_lock();
+        let old = std::env::var_os("MIZPAH_CONFIG_DIR");
+        std::env::set_var("MIZPAH_CONFIG_DIR", "/no/such/mizpah-config-dir");
+        let store = Store::new(1_000_000);
+        assert_eq!(store.restore_update_spill().await.unwrap(), 0);
+        match old {
+            Some(v) => std::env::set_var("MIZPAH_CONFIG_DIR", v),
+            None => std::env::remove_var("MIZPAH_CONFIG_DIR"),
+        }
+    }
+
+    #[tokio::test]
+    async fn oversized_spill_line_is_rejected() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::new(1_000_000);
+        store
+            .push_line("api", r#"{"msg":"ok","level":"info"}"#)
+            .await;
+        store.spill_for_update_to(dir.path()).await.unwrap();
+
+        let body_path = dir.path().join(SPILL_BODY);
+        let key_path = dir.path().join(SPILL_KEY);
+        let hmac_path = dir.path().join(SPILL_HMAC);
+        let key = hex_decode(&fs::read_to_string(&key_path).unwrap()).unwrap();
+        let mut body = fs::read(&body_path).unwrap();
+        let huge = vec![b'x'; (MAX_LINE_BYTES as usize) + 1];
+        body.extend_from_slice(&huge);
+        body.push(b'\n');
+        fs::write(&body_path, &body).unwrap();
+        let mut mac = HmacSha256::new_from_slice(&key).unwrap();
+        mac.update(&body);
+        fs::write(&hmac_path, hex_encode(&mac.finalize().into_bytes())).unwrap();
+
+        let err = Store::new(1_000_000)
+            .restore_update_spill_from_dir(dir.path())
+            .await
+            .unwrap_err();
+        assert!(err.to_string().contains("too large") || err.to_string().contains("size limit"), "{err}");
+    }
+
+    #[tokio::test]
+    async fn invalid_spill_entry_json_is_rejected() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::new(1_000_000);
+        store
+            .push_line("api", r#"{"msg":"ok","level":"info"}"#)
+            .await;
+        store.spill_for_update_to(dir.path()).await.unwrap();
+
+        let body_path = dir.path().join(SPILL_BODY);
+        let key_path = dir.path().join(SPILL_KEY);
+        let hmac_path = dir.path().join(SPILL_HMAC);
+        let key = hex_decode(&fs::read_to_string(&key_path).unwrap()).unwrap();
+        let bad = b"{\"not\":\"a log entry\"}\n".to_vec();
+        fs::write(&body_path, &bad).unwrap();
+        let mut mac = HmacSha256::new_from_slice(&key).unwrap();
+        mac.update(&bad);
+        fs::write(&hmac_path, hex_encode(&mac.finalize().into_bytes())).unwrap();
+
+        let err = Store::new(1_000_000)
+            .restore_update_spill_from_dir(dir.path())
+            .await
+            .unwrap_err();
+        assert!(err.to_string().contains("invalid spill entry"), "{err}");
+    }
+
+    #[tokio::test]
+    async fn restore_trims_entries_by_ttl_and_max_bytes() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::new(200);
+        store.inner.write().await.ttl = Some(std::time::Duration::from_secs(3600));
+        let old = chrono::Utc::now() - chrono::Duration::hours(2);
+        {
+            let mut inner = store.inner.write().await;
+            for i in 1..=3 {
+                let data = json!({"msg": format!("m{i}"), "level": "info"});
+                inner.entries.push_back(LogEntry {
+                    id: i,
+                    received_at: if i == 1 { old } else { chrono::Utc::now() },
+                    event_time: None,
+                    service: "api".into(),
+                    format_id: Some("json".into()),
+                    data: data.clone(),
+                    approx_bytes: estimate_bytes("api", &data),
+                });
+            }
+            inner.approx_bytes = inner.entries.iter().map(|e| e.approx_bytes).sum();
+        }
+        store.spill_for_update_to(dir.path()).await.unwrap();
+        let restored = Store::new(200);
+        restored.inner.write().await.ttl = Some(std::time::Duration::from_secs(3600));
+        let n = restored
+            .restore_update_spill_from_dir(dir.path())
+            .await
+            .unwrap();
+        assert_eq!(n, 2);
+        let inner = restored.inner.read().await;
+        assert_eq!(inner.entries.len(), 2);
+        assert!(inner.entries.front().unwrap().id >= 2);
     }
 }

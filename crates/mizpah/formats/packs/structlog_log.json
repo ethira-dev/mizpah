@@ -1,0 +1,39 @@
+{
+    "structlog_log": {
+        "title": "structlog console",
+        "description": "Python structlog ConsoleRenderer / KeyValueRenderer lines",
+        "url": "https://www.structlog.org/",
+        "regex": {
+            "console": {
+                "pattern": "^(?<timestamp>\\d{4}-\\d{2}-\\d{2}[ T]\\d{2}:\\d{2}:\\d{2}(?:[.,]\\d+)?Z?)\\s+\\[(?<level>debug|info|warning|warn|error|critical|exception)\\s*\\]\\s+(?<logger>[\\w.]+)\\s*:\\s*(?<body>.*)$"
+            },
+            "kv": {
+                "pattern": "^(?<timestamp>\\d{4}-\\d{2}-\\d{2}[ T]\\d{2}:\\d{2}:\\d{2}(?:[.,]\\d+)?Z?)\\s+(?<level>debug|info|warning|warn|error|critical)\\s+(?<body>event='(?:\\\\.|[^'])*'.*)$"
+            },
+            "bracket_level": {
+                "pattern": "^\\[(?<level>debug|info|warning|warn|error|critical|exception)\\s*\\]\\s+(?<body>.+)$"
+            }
+        },
+        "level-field": "level",
+        "body-field": "body",
+        "timestamp-field": "timestamp",
+        "level": {
+            "debug": "debug",
+            "info": "info",
+            "warn": "^(?:warning|warn)$",
+            "error": "^(?:error|exception)$",
+            "critical": "critical"
+        },
+        "sample": [
+            {
+                "line": "2020-01-01T00:00:00Z [info     ] myapp.api   : request completed"
+            },
+            {
+                "line": "2020-01-01T00:00:00Z info event='request completed' method='GET' status=200"
+            },
+            {
+                "line": "[error   ] boom"
+            }
+        ]
+    }
+}

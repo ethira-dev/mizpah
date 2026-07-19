@@ -44,3 +44,48 @@ pub(crate) fn cursor_hooks_path() -> Option<PathBuf> {
 pub(crate) fn claude_settings_path() -> Option<PathBuf> {
     Some(util::home_dir()?.join(".claude").join("settings.json"))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::agent_hooks::state::HookSource;
+    use crate::test_support::env_lock;
+
+    #[test]
+    fn read_file_or_empty_missing_is_empty() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("missing.json");
+        assert_eq!(read_file_or_empty(&path).unwrap(), "");
+    }
+
+    #[test]
+    fn write_config_file_creates_nested_path() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("nested/settings.json");
+        write_config_file(&path, "{}\n").unwrap();
+        assert_eq!(fs::read_to_string(&path).unwrap(), "{}\n");
+    }
+
+    #[test]
+    fn managed_command_markers_are_source_specific() {
+        let cmd = managed_command(Path::new("/bin/mzp"), HookSource::Claude);
+        assert!(is_managed_command(&cmd, HookSource::Claude));
+        assert!(!is_managed_command(&cmd, HookSource::Cursor));
+    }
+
+    #[test]
+    fn config_paths_under_home() {
+        let _guard = env_lock();
+        let home = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", home.path());
+        assert_eq!(
+            cursor_hooks_path().unwrap(),
+            home.path().join(".cursor/hooks.json")
+        );
+        assert_eq!(
+            claude_settings_path().unwrap(),
+            home.path().join(".claude/settings.json")
+        );
+        std::env::remove_var("HOME");
+    }
+}

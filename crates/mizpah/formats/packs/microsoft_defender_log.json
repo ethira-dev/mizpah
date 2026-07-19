@@ -1,0 +1,38 @@
+{
+    "microsoft_defender_log": {
+        "title": "Microsoft Defender",
+        "description": "Microsoft Defender for Endpoint alerts / device events",
+        "file-type": "json",
+        "json": true,
+        "timestamp-field": "time",
+        "line-format": [
+            {
+                "field": "time"
+            },
+            " ",
+            {
+                "field": "severity"
+            },
+            " ",
+            {
+                "field": "title"
+            },
+            " ",
+            {
+                "field": "category"
+            },
+            " ",
+            {
+                "field": "detectionSource"
+            }
+        ],
+        "url": "https://learn.microsoft.com/en-us/microsoft-365/security/defender-endpoint/",
+        "level-field": "severity",
+        "body-field": "title",
+        "sample": [
+            {
+                "line": "{\"time\":\"2020-01-01T00:00:00.000Z\",\"id\":\"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee\",\"title\":\"Suspicious PowerShell command line\",\"severity\":\"Medium\",\"category\":\"Execution\",\"detectionSource\":\"WindowsDefenderAtp\",\"machineId\":\"abc123\",\"computerDnsName\":\"workstation01.contoso.com\",\"status\":\"New\"}"
+            }
+        ]
+    }
+}

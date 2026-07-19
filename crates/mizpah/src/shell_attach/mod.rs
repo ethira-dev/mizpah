@@ -93,15 +93,191 @@ pub async fn run_open(host: String, port: u16) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::shell_attach::state::load_state_from;
+    use crate::test_support::env_lock;
+
+    fn with_home_and_config<F: FnOnce(&std::path::Path, &std::path::Path)>(
+        f: F,
+    ) {
+        let _guard = env_lock();
+        let home = std::env::temp_dir().join(format!(
+            "mizpah-attach-home-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let config = home.join("config");
+        let _ = std::fs::remove_dir_all(&home);
+        std::fs::create_dir_all(&config).unwrap();
+        let old_home = std::env::var_os("HOME");
+        let old_config = std::env::var_os("MIZPAH_CONFIG_DIR");
+        std::env::set_var("HOME", &home);
+        std::env::set_var("MIZPAH_CONFIG_DIR", &config);
+        f(&home, &config);
+        match old_home {
+            Some(v) => std::env::set_var("HOME", v),
+            None => std::env::remove_var("HOME"),
+        }
+        match old_config {
+            Some(v) => std::env::set_var("MIZPAH_CONFIG_DIR", v),
+            None => std::env::remove_var("MIZPAH_CONFIG_DIR"),
+        }
+        let _ = std::fs::remove_dir_all(&home);
+    }
 
     #[test]
     fn resolve_open_target_flags_override_defaults() {
-        let (h, p) = resolve_open_target(Some("127.0.0.1".into()), Some(3149)).unwrap();
-        assert_eq!(h, "127.0.0.1");
-        assert_eq!(p, 3149);
+        with_home_and_config(|_home, _config| {
+            save_state(&AttachState {
+                enabled: true,
+                service: None,
+                host: "10.0.0.5".into(),
+                port: 4000,
+            })
+            .unwrap();
+            let (h, p) = resolve_open_target(Some("127.0.0.1".into()), Some(3149)).unwrap();
+            assert_eq!(h, "127.0.0.1");
+            assert_eq!(p, 3149);
 
-        let (h, p) = resolve_open_target(Some("10.0.0.1".into()), Some(9999)).unwrap();
-        assert_eq!(h, "10.0.0.1");
-        assert_eq!(p, 9999);
+            let (h, p) = resolve_open_target(Some("10.0.0.1".into()), Some(9999)).unwrap();
+            assert_eq!(h, "10.0.0.1");
+            assert_eq!(p, 9999);
+        });
+    }
+
+    #[test]
+    fn resolve_open_target_from_saved_state() {
+        with_home_and_config(|_home, config| {
+            save_state(&AttachState {
+                enabled: true,
+                service: Some("api".into()),
+                host: "10.0.0.5".into(),
+                port: 4000,
+            })
+            .unwrap();
+            let (h, p) = resolve_open_target(None, None).unwrap();
+            assert_eq!(h, "10.0.0.5");
+            assert_eq!(p, 4000);
+            let _ = config;
+        });
+    }
+
+    #[test]
+    fn resolve_open_target_empty_host_uses_default() {
+        with_home_and_config(|_home, _config| {
+            save_state(&AttachState {
+                enabled: true,
+                service: None,
+                host: String::new(),
+                port: 0,
+            })
+            .unwrap();
+            let (h, p) = resolve_open_target(None, None).unwrap();
+            assert_eq!(h, DEFAULT_HOST);
+            assert_eq!(p, DEFAULT_PORT);
+        });
+    }
+
+    #[test]
+    fn run_detach_disables_enabled_state() {
+        with_home_and_config(|_home, _config| {
+            save_state(&AttachState {
+                enabled: true,
+                service: None,
+                host: DEFAULT_HOST.into(),
+                port: DEFAULT_PORT,
+            })
+            .unwrap();
+            run_detach().unwrap();
+            let state = load_state().unwrap();
+            assert!(!state.enabled);
+        });
+    }
+
+    #[test]
+    fn run_detach_idempotent_when_already_disabled() {
+        with_home_and_config(|_home, _config| {
+            run_detach().unwrap();
+            run_detach().unwrap();
+            assert!(!load_state().unwrap().enabled);
+        });
+    }
+
+    #[tokio::test]
+    async fn run_attach_enables_state_and_installs_hooks() {
+        let (hub_url, _store) = crate::test_support::spawn_test_hub().await;
+        let url = url::Url::parse(&hub_url).unwrap();
+        let host = url.host_str().unwrap_or("127.0.0.1").to_string();
+        let port = url.port().unwrap_or(80);
+
+        let _guard = env_lock();
+        let home = std::env::temp_dir().join(format!(
+            "mizpah-attach-run-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let config = home.join("config");
+        let _ = std::fs::remove_dir_all(&home);
+        std::fs::create_dir_all(&config).unwrap();
+        let old_home = std::env::var_os("HOME");
+        let old_config = std::env::var_os("MIZPAH_CONFIG_DIR");
+        std::env::set_var("HOME", &home);
+        std::env::set_var("MIZPAH_CONFIG_DIR", &config);
+
+        run_attach(Some("my-svc".into()), host.clone(), port)
+            .await
+            .unwrap();
+        let state = load_state().unwrap();
+        assert!(state.enabled);
+        assert_eq!(state.service.as_deref(), Some("my-svc"));
+        assert_eq!(state.host, host);
+        assert_eq!(state.port, port);
+
+        match old_home {
+            Some(v) => std::env::set_var("HOME", v),
+            None => std::env::remove_var("HOME"),
+        }
+        match old_config {
+            Some(v) => std::env::set_var("MIZPAH_CONFIG_DIR", v),
+            None => std::env::remove_var("MIZPAH_CONFIG_DIR"),
+        }
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    #[tokio::test]
+    async fn run_open_unreachable_hub_errors() {
+        let err = run_open("127.0.0.1".into(), 19996).await.unwrap_err();
+        assert!(err.contains("not reachable"));
+    }
+
+    #[tokio::test]
+    async fn run_open_succeeds_when_hub_up() {
+        let (hub_url, _store) = crate::test_support::spawn_test_hub().await;
+        let url = url::Url::parse(&hub_url).unwrap();
+        let host = url.host_str().unwrap_or("127.0.0.1").to_string();
+        let port = url.port().unwrap_or(80);
+        run_open(host, port).await.unwrap();
+    }
+
+    #[test]
+    fn resolve_open_target_empty_host_flag_uses_state() {
+        with_home_and_config(|_home, config| {
+            save_state(&AttachState {
+                enabled: true,
+                service: None,
+                host: "192.168.1.1".into(),
+                port: 9999,
+            })
+            .unwrap();
+            assert_eq!(load_state_from(&config.join("attach.json")).unwrap().port, 9999);
+            let (h, p) = resolve_open_target(Some(String::new()), None).unwrap();
+            assert_eq!(h, "192.168.1.1");
+            assert_eq!(p, 9999);
+        });
     }
 }

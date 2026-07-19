@@ -1,0 +1,37 @@
+{
+    "wiz_inventory_log": {
+        "title": "Wiz Inventory",
+        "description": "Wiz resource / inventory change JSON",
+        "file-type": "json",
+        "json": true,
+        "timestamp-field": "updatedAt",
+        "line-format": [
+            {
+                "field": "updatedAt"
+            },
+            " ",
+            {
+                "field": "name"
+            },
+            " ",
+            {
+                "field": "type"
+            },
+            " ",
+            {
+                "field": "cloudProvider"
+            },
+            " ",
+            {
+                "field": "subscription"
+            }
+        ],
+        "url": "https://www.wiz.io/",
+        "body-field": "name",
+        "sample": [
+            {
+                "line": "{\"id\":\"res-9\",\"name\":\"web-asg\",\"type\":\"VIRTUAL_MACHINE\",\"updatedAt\":\"2020-01-01T00:00:00Z\",\"cloudProvider\":\"AWS\",\"subscription\":{\"id\":\"sub1\",\"name\":\"prod\",\"externalId\":\"123456789012\"},\"region\":\"us-east-1\",\"status\":\"Active\",\"projects\":[{\"id\":\"p1\",\"name\":\"Production\"}]}"
+            }
+        ]
+    }
+}

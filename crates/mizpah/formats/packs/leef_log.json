@@ -1,0 +1,18 @@
+{
+    "leef_log": {
+        "title": "LEEF",
+        "description": "IBM QRadar Log Event Extended Format",
+        "regex": {
+            "std": {
+                "pattern": "^(?:(?<syslog_pri><\\d+>))?LEEF:(?<leef_version>[\\d.]+)\\|(?<vendor>[^|]*)\\|(?<product>[^|]*)\\|(?<version>[^|]*)\\|(?<event_id>[^|]*)\\|(?<body>.*)$"
+            }
+        },
+        "sample": [
+            {
+                "line": "LEEF:1.0|Microsoft|MSExchange|4.0 SP1|15345|src=10.0.0.1\tdst=2.1.2.2\tusrName=alice"
+            }
+        ],
+        "url": "https://www.ibm.com/docs/en/qradar-common?topic=format-log-event-extended-leef",
+        "body-field": "body"
+    }
+}

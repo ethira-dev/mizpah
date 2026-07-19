@@ -1,0 +1,18 @@
+{
+    "wireguard_log": {
+        "title": "WireGuard",
+        "description": "WireGuard handshake / peer kernel log lines",
+        "regex": {
+            "std": {
+                "pattern": "^(?:(?<syslog_pri><\\d+>)?(?<syslog_ts>\\w{3}\\s+\\d{1,2}\\s+\\d{2}:\\d{2}:\\d{2})\\s+(?<syslog_host>\\S+)\\s+)?(?<body>(?:kernel:\\s+)?wireguard:.*)$"
+            }
+        },
+        "sample": [
+            {
+                "line": "Jan  1 00:00:00 host kernel: wireguard: wg0: Receiving handshake initiation from peer 1 (1.2.3.4:51820)"
+            }
+        ],
+        "url": "https://www.wireguard.com/",
+        "body-field": "body"
+    }
+}

@@ -1,0 +1,19 @@
+{
+    "pingfederate_log": {
+        "title": "PingFederate",
+        "description": "PingFederate server / audit log lines",
+        "regex": {
+            "std": {
+                "pattern": "^(?<timestamp>\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2},\\d+)\\s+(?<level>\\w+)\\s+\\[(?<logger>[^\\]]+)\\]\\s+-\\s+(?<body>.*)$"
+            }
+        },
+        "sample": [
+            {
+                "line": "2020-01-01 00:00:00,000 INFO [org.sourceid.saml20.domain] - Authentication successful for subject alice@example.com"
+            }
+        ],
+        "url": "https://docs.pingidentity.com/pingfederate/",
+        "level-field": "level",
+        "body-field": "body"
+    }
+}

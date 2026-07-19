@@ -1,0 +1,35 @@
+{
+    "werkzeug_log": {
+        "title": "Werkzeug / Flask",
+        "description": "Werkzeug development server request lines from flask run",
+        "url": "https://werkzeug.palletsprojects.com/",
+        "regex": {
+            "request": {
+                "pattern": "^(?<client>\\S+)\\s+-\\s+-\\s+\\[(?<timestamp>\\d{1,2}/[A-Za-z]{3}/\\d{4} \\d{2}:\\d{2}:\\d{2})\\]\\s+\"(?<method>\\w+)\\s+(?<path>[^\"]+)\\s+(?<proto>HTTP/[^\"]+)\"\\s+(?<status>\\d{3})\\s+(?<size>\\S+)$"
+            },
+            "serving": {
+                "pattern": "^(?<timestamp>\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2})\\s+(?<level>WARNING|INFO|ERROR|DEBUG)\\s+(?<logger>werkzeug)\\s*:\\s*(?<body>.*)$"
+            },
+            "star": {
+                "pattern": "^\\s*\\*\\s+(?<body>(?:Running on|Restarting with|Debugger is active|Debugger PIN).+)$"
+            }
+        },
+        "level-field": "level",
+        "body-field": "body",
+        "timestamp-field": "timestamp",
+        "level": {
+            "debug": "DEBUG",
+            "info": "INFO",
+            "warn": "WARNING",
+            "error": "ERROR"
+        },
+        "sample": [
+            {
+                "line": "127.0.0.1 - - [01/Jan/2020 00:00:00] \"GET / HTTP/1.1\" 200 -"
+            },
+            {
+                "line": " * Running on http://127.0.0.1:5000"
+            }
+        ]
+    }
+}

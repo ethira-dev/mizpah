@@ -1,0 +1,28 @@
+{
+    "clickhouse_log": {
+        "title": "ClickHouse",
+        "description": "ClickHouse server logs",
+        "regex": {
+            "std": {
+                "pattern": "^(?<timestamp>\\d{4}\\.\\d{2}\\.\\d{2} \\d{2}:\\d{2}:\\d{2}\\.\\d+)\\s+\\[\\s*(?<thread>\\d+)\\s*\\]\\s+(?:\\{(?<query_id>[^}]*)\\}\\s+)?<(?<level_name>\\w+)>\\s+(?<body>.*)$"
+            }
+        },
+        "sample": [
+            {
+                "line": "2020.01.01 00:00:00.000000 [ 1 ] {} <Information> Application: Starting ClickHouse 20.1.1"
+            },
+            {
+                "line": "2020.01.01 00:00:00.000000 [ 123 ] {query_id} <Error> executeQuery: Code: 60"
+            }
+        ],
+        "url": "https://clickhouse.com/docs/en/operations/server-configuration-parameters/settings#logger",
+        "level-field": "level_name",
+        "level": {
+            "error": "Error|Fatal",
+            "warn": "Warning",
+            "info": "Information|Info",
+            "debug": "Debug|Trace|Test"
+        },
+        "body-field": "body"
+    }
+}

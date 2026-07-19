@@ -1,0 +1,34 @@
+{
+    "bun_log": {
+        "title": "Bun",
+        "description": "Bun runtime / CLI console lines",
+        "url": "https://bun.sh/docs",
+        "regex": {
+            "cli": {
+                "pattern": "^(?<body>(?:bun\\s+(?:install|run|test|build)|\\[[\\d.]+m?s\\]|Error:|warn:|Started\\s+dev\\s+server).*)"
+            },
+            "level": {
+                "pattern": "^(?<level>error|warn|info|debug|ERROR|WARN|INFO|DEBUG):\\s+(?<body>.+)$"
+            }
+        },
+        "level-field": "level",
+        "body-field": "body",
+        "level": {
+            "debug": "^(?:debug|DEBUG)$",
+            "info": "^(?:info|INFO)$",
+            "warn": "^(?:warn|WARN)$",
+            "error": "^(?:error|ERROR)$"
+        },
+        "sample": [
+            {
+                "line": "bun install v1.0.0"
+            },
+            {
+                "line": "[0.42ms] bun install"
+            },
+            {
+                "line": "Started dev server: http://localhost:3000"
+            }
+        ]
+    }
+}

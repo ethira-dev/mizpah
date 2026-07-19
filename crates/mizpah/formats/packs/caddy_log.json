@@ -1,0 +1,135 @@
+{
+    "caddy_log": {
+        "title": "Caddy log format",
+        "description": "",
+        "file-type": "json",
+        "timestamp-field": "ts",
+        "duration-field": "duration",
+        "opid": {
+            "description": {
+                "request": {
+                    "format": [
+                        {
+                            "field": "request/client_ip"
+                        },
+                        {
+                            "field": "request/headers/User-Agent#"
+                        }
+                    ]
+                }
+            }
+        },
+        "line-format": [
+            {
+                "field": "__timestamp__"
+            },
+            {
+                "prefix": " ",
+                "field": "request/client_ip",
+                "default-value": ""
+            },
+            {
+                "prefix": " ",
+                "field": "user_id",
+                "default-value": ""
+            },
+            {
+                "prefix": " \"",
+                "field": "request/method",
+                "default-value": ""
+            },
+            {
+                "prefix": " ",
+                "field": "request/host",
+                "default-value": ""
+            },
+            {
+                "field": "request/uri",
+                "default-value": ""
+            },
+            {
+                "prefix": " ",
+                "field": "request/proto",
+                "suffix": "\"",
+                "default-value": ""
+            },
+            {
+                "prefix": " ",
+                "field": "status",
+                "default-value": ""
+            },
+            {
+                "prefix": " ",
+                "field": "size",
+                "default-value": ""
+            },
+            {
+                "prefix": " ",
+                "field": "msg"
+            }
+        ],
+        "value": {
+            "bytes_read": {
+                "kind": "integer"
+            },
+            "duration": {
+                "kind": "integer"
+            },
+            "level": {
+                "kind": "string",
+                "hidden": true
+            },
+            "logger": {
+                "kind": "string",
+                "hidden": true
+            },
+            "request": {
+                "kind": "json",
+                "hidden": true
+            },
+            "request/client_ip": {
+                "kind": "string",
+                "collate": "ipaddress",
+                "identifier": true
+            },
+            "request/headers/User-Agent#": {
+                "kind": "string",
+                "identifier": true
+            },
+            "request/host": {
+                "kind": "string",
+                "identifier": true
+            },
+            "request/method": {
+                "kind": "string",
+                "identifier": true
+            },
+            "request/proto": {
+                "kind": "string",
+                "identifier": true
+            },
+            "request/uri": {
+                "kind": "string",
+                "identifier": true
+            },
+            "resp_headers": {
+                "kind": "json",
+                "hidden": true
+            },
+            "msg": {
+                "kind": "string"
+            },
+            "size": {
+                "kind": "integer"
+            },
+            "status": {
+                "kind": "integer",
+                "foreign-key": true
+            },
+            "user_id": {
+                "kind": "string",
+                "identifier": true
+            }
+        }
+    }
+}

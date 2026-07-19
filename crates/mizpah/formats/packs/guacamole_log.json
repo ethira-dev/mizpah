@@ -1,0 +1,22 @@
+{
+    "guacamole_log": {
+        "title": "Apache Guacamole",
+        "description": "Guacamole connection / session log lines",
+        "regex": {
+            "std": {
+                "pattern": "^(?<timestamp>\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}(?:,\\d+)?)\\s+\\[(?<level>\\w+)\\]\\s+(?<body>.*(?:Guacamole|guacamole|Connection|User).*)"
+            }
+        },
+        "sample": [
+            {
+                "line": "2020-01-01 00:00:00,000 [INFO] User \"alice\" successfully authenticated from 1.2.3.4"
+            },
+            {
+                "line": "2020-01-01 00:00:01,000 [INFO] Connection \"ssh-prod\" selected by user \"alice\""
+            }
+        ],
+        "url": "https://guacamole.apache.org/",
+        "level-field": "level",
+        "body-field": "body"
+    }
+}

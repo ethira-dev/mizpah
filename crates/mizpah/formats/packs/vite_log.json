@@ -1,0 +1,34 @@
+{
+    "vite_log": {
+        "title": "Vite",
+        "description": "Vite dev server console lines",
+        "url": "https://vitejs.dev/",
+        "regex": {
+            "banner": {
+                "pattern": "^\\s*(?<body>VITE v[\\d.]+\\s+ready in\\s+\\d+\\s*ms)$"
+            },
+            "local": {
+                "pattern": "^\\s*(?<body>➜\\s+Local:\\s+https?://\\S+)$"
+            },
+            "hmr": {
+                "pattern": "^\\s*(?<timestamp>\\d{1,2}:\\d{2}:\\d{2}\\s+[AP]M)\\s+\\[(?<logger>vite)\\]\\s+(?<body>.+)$"
+            },
+            "page_reload": {
+                "pattern": "^\\s*(?<timestamp>\\d{1,2}:\\d{2}:\\d{2}\\s+[AP]M)\\s+(?<body>(?:page reload|hmr update|\\[vite\\]).*)$"
+            }
+        },
+        "body-field": "body",
+        "timestamp-field": "timestamp",
+        "sample": [
+            {
+                "line": "  VITE v5.0.0  ready in 320 ms"
+            },
+            {
+                "line": "  ➜  Local:   http://localhost:5173/"
+            },
+            {
+                "line": "  12:00:00 PM [vite] hmr update /src/App.tsx"
+            }
+        ]
+    }
+}

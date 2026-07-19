@@ -1,0 +1,25 @@
+{
+    "cloudflare_dns_log": {
+        "title": "Cloudflare DNS",
+        "description": "Cloudflare Logpush dns_logs",
+        "file-type": "json",
+        "json": true,
+        "timestamp-field": "Timestamp",
+        "line-format": [
+            {
+                "field": "Timestamp"
+            },
+            " ",
+            {
+                "field": "QueryName"
+            }
+        ],
+        "url": "https://developers.cloudflare.com/logs/logpush/",
+        "body-field": "QueryName",
+        "sample": [
+            {
+                "line": "{\"Timestamp\":\"2020-01-01T00:00:00Z\",\"QueryName\":\"example.com\",\"QueryType\":\"A\",\"ResponseCode\":\"NOERROR\",\"SourceIP\":\"1.2.3.4\",\"ColoCode\":\"SFO\",\"Protocol\":\"UDP\"}"
+            }
+        ]
+    }
+}

@@ -1,0 +1,35 @@
+{
+    "zerolog_json_log": {
+        "title": "Zerolog JSON",
+        "description": "rs/zerolog JSON objects (level, time, message)",
+        "url": "https://github.com/rs/zerolog",
+        "file-type": "json",
+        "timestamp-field": "time",
+        "level-field": "level",
+        "body-field": "message",
+        "line-format": [
+            { "field": "time" },
+            " ",
+            { "field": "level" },
+            " ",
+            { "field": "message" }
+        ],
+        "level": {
+            "trace": "trace",
+            "debug": "debug",
+            "info": "info",
+            "warn": "warn",
+            "error": "error",
+            "fatal": "fatal",
+            "critical": "panic"
+        },
+        "sample": [
+            {
+                "line": "{\"level\":\"info\",\"time\":1577836800,\"message\":\"server listening\"}"
+            },
+            {
+                "line": "{\"level\":\"error\",\"time\":\"2020-01-01T00:00:00Z\",\"message\":\"request failed\"}"
+            }
+        ]
+    }
+}

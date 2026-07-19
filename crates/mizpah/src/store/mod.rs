@@ -17,11 +17,20 @@ pub use crate::models::{ActivityBucket, LogEntry, PropertyInfo, ServiceInfo, Sta
 pub use crate::mzp_meta::MzpMeta;
 
 mod activity;
+mod aggregate;
+mod annotate;
 mod ingest;
+mod nav;
+mod persist;
 mod query;
+mod spectrogram;
 mod spill;
+mod trace;
 
+pub use aggregate::{AggregateMetrics, AggregateRow};
 pub use ingest::parse_line;
+pub use nav::NavDirection;
+pub use spectrogram::SpectrogramResult;
 
 use ingest::{
     estimate_bytes, inject_cmd, inject_mzp, raw_payloads_from_lines, try_parse_json_object,
@@ -70,12 +79,16 @@ struct Inner {
     properties_by_service: HashMap<String, HashMap<String, PathMeta>>,
     /// Per-service accumulator for Nest-style pretty `{` … `}` dumps.
     pretty_buffers: HashMap<String, PrettyBuffer>,
+    /// Bookmarks / tags / comments (Phase E).
+    annotations: HashMap<u64, annotate::Annotation>,
 }
 
 pub struct Store {
     inner: RwLock<Inner>,
     next_id: AtomicU64,
     tx: broadcast::Sender<WsEvent>,
+    /// Optional durable append writer (Phase K).
+    persist: RwLock<Option<persist::PersistWriter>>,
 }
 
 impl Store {
@@ -103,9 +116,11 @@ impl Store {
                 properties: HashMap::new(),
                 properties_by_service: HashMap::new(),
                 pretty_buffers: HashMap::new(),
+                annotations: HashMap::new(),
             }),
             next_id: AtomicU64::new(1),
             tx,
+            persist: RwLock::new(None),
         }
     }
 
@@ -196,6 +211,19 @@ impl Store {
         cmd: Option<&str>,
         mzp: Option<&MzpMeta>,
     ) -> PushLineResult {
+        self.push_line_with_meta_hint(service, line, cmd, mzp, None)
+            .await
+    }
+
+    /// Like [`Self::push_line_with_meta`] with an optional locked format hint (file ingest).
+    pub async fn push_line_with_meta_hint(
+        &self,
+        service: &str,
+        line: &str,
+        cmd: Option<&str>,
+        mzp: Option<&MzpMeta>,
+        format_hint: Option<&str>,
+    ) -> PushLineResult {
         // Single lock check + commit path: blocked status is re-checked inside commit.
         let cleaned = strip_service_prefix(&strip_ansi(line), service);
         let payloads = {
@@ -203,7 +231,7 @@ impl Store {
             if inner.blocked.contains(service) {
                 return PushLineResult::Blocked;
             }
-            Self::resolve_payloads_locked(&mut inner, service, &cleaned)
+            Self::resolve_payloads_locked(&mut inner, service, &cleaned, format_hint)
         };
         let mut emitted = Vec::with_capacity(payloads.len());
         for mut data in payloads {
@@ -302,7 +330,12 @@ impl Store {
     }
 
     /// Decide which JSON payloads a cleaned line should become (may buffer).
-    fn resolve_payloads_locked(inner: &mut Inner, service: &str, cleaned: &str) -> Vec<Value> {
+    fn resolve_payloads_locked(
+        inner: &mut Inner,
+        service: &str,
+        cleaned: &str,
+        format_hint: Option<&str>,
+    ) -> Vec<Value> {
         // Mid pretty-block for this service
         if inner.pretty_buffers.contains_key(service) {
             // Complete single-line JSON interrupts an incomplete pretty dump
@@ -346,15 +379,25 @@ impl Store {
             return Vec::new();
         }
 
-        // Not buffering — prefer single-line JSON
-        if let Some(obj) = try_parse_json_object(cleaned) {
-            return vec![obj];
+        // Not buffering — single-line JSON goes through format packs (bunyan/pino/…).
+        if try_parse_json_object(cleaned).is_some() {
+            let (payload, _) =
+                crate::formats::parse_ingest_line_with_hint(cleaned, format_hint);
+            return vec![payload];
         }
 
         // Single-line JS-literal object `{ ... }`
         let trimmed = cleaned.trim();
         if trimmed.starts_with('{') && trimmed.ends_with('}') && trimmed.len() > 1 {
             if let Some(obj) = parse_pretty_block(trimmed) {
+                if let Value::Object(map) = &obj {
+                    if let Some(norm) = crate::formats::classify_json_object(map) {
+                        return vec![norm.data];
+                    }
+                    if let Some(norm) = crate::formats::classify_pack_json(map) {
+                        return vec![norm.data];
+                    }
+                }
                 return vec![obj];
             }
         }
@@ -368,17 +411,37 @@ impl Store {
             return Vec::new();
         }
 
-        vec![parse_line(cleaned)]
+        // Format detectors (logfmt, syslog, access_log, packs, …) then raw
+        let (payload, _) =
+            crate::formats::parse_ingest_line_with_hint(cleaned, format_hint);
+        vec![payload]
     }
 
     /// Commit one entry. Returns `None` if the service became blocked.
     async fn commit_entry(&self, service: &str, data: Value) -> Option<LogEntry> {
         let approx_bytes = estimate_bytes(service, &data);
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
+        let received_at = Utc::now();
+        let event_time = crate::event_time::extract_event_time(&data).or(Some(received_at));
+        let format_id = data
+            .as_object()
+            .and_then(|o| o.get("_format"))
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())
+            .or_else(|| {
+                if data.get("_raw").is_some() && data.as_object().map(|o| o.len() == 1) == Some(true)
+                {
+                    Some("raw".into())
+                } else {
+                    Some("json".into())
+                }
+            });
         let entry = LogEntry {
             id,
-            received_at: Utc::now(),
+            received_at,
+            event_time,
             service: service.to_string(),
+            format_id,
             data,
             approx_bytes,
         };
@@ -429,6 +492,7 @@ impl Store {
         self.publish(WsEvent::Log {
             entry: entry.clone(),
         });
+        self.persist_entry(&entry).await;
 
         Some(entry)
     }
@@ -897,5 +961,44 @@ mod tests {
         assert!(store.expire_ttl().await.is_empty());
         store.push_line("api", r#"{"msg":"new"}"#).await;
         assert_eq!(store.stats().await.count, 2);
+    }
+
+    #[tokio::test]
+    async fn evicts_oldest_when_over_byte_capacity() {
+        let store = Store::new(180);
+        store.push_line("api", r#"{"msg":"first"}"#).await;
+        store
+            .push_line("api", r#"{"msg":"second-with-more-bytes"}"#)
+            .await;
+        assert_eq!(store.stats().await.count, 1);
+    }
+
+    #[tokio::test]
+    async fn oversized_pretty_buffer_flushes_as_raw() {
+        let store = Store::new(1_000_000);
+        assert!(store.push_line("api", "{").await.is_empty());
+        for _ in 0..254 {
+            assert!(store.push_line("api", "  x: 1,").await.is_empty());
+        }
+        let entries = store.push_line("api", "  x: 1,").await;
+        assert!(!entries.is_empty());
+        assert!(entries.iter().all(|e| e.data.get("_raw").is_some()));
+    }
+
+    #[tokio::test]
+    async fn single_line_js_object_ingests() {
+        let store = Store::new(1_000_000);
+        let entries = store
+            .push_line("api", "{ level: 'info', msg: 'hi' }")
+            .await;
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].data["level"], json!("info"));
+        assert_eq!(entries[0].data["msg"], json!("hi"));
+    }
+
+    #[tokio::test]
+    async fn reconnect_on_unknown_service_is_false() {
+        let store = Store::new(1_000_000);
+        assert!(!store.reconnect_service("missing").await);
     }
 }

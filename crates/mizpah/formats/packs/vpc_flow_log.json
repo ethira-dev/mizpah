@@ -1,0 +1,22 @@
+{
+    "vpc_flow_log": {
+        "title": "AWS VPC Flow Log",
+        "description": "Amazon VPC Flow Logs (space-separated)",
+        "regex": {
+            "std": {
+                "pattern": "^(?<version>\\d+) (?<account_id>\\d+) (?<interface_id>eni-[0-9a-f]+) (?<srcaddr>[\\w.:-]+) (?<dstaddr>[\\w.:-]+) (?<srcport>\\d+|-) (?<dstport>\\d+|-) (?<protocol>\\d+|-) (?<packets>\\d+|-) (?<bytes>\\d+|-) (?<start>\\d+) (?<end>\\d+) (?<action>ACCEPT|REJECT|-) (?<log_status>OK|NODATA|SKIPDATA)$"
+            }
+        },
+        "sample": [
+            {
+                "line": "2 123456789010 eni-abc123de 172.31.16.139 172.31.16.21 20641 22 6 20 4249 1418530010 1418530070 ACCEPT OK"
+            }
+        ],
+        "url": "https://docs.aws.amazon.com/vpc/latest/userguide/flow-logs.html",
+        "level-field": "action",
+        "level": {
+            "error": "REJECT",
+            "info": "ACCEPT"
+        }
+    }
+}

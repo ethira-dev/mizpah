@@ -1,0 +1,32 @@
+{
+    "elixir_logger_log": {
+        "title": "Elixir Logger",
+        "description": "Elixir Logger default console format",
+        "url": "https://hexdocs.pm/logger/Logger.html",
+        "regex": {
+            "std": {
+                "pattern": "^(?<timestamp>\\d{2}:\\d{2}:\\d{2}\\.\\d+)\\s+\\[(?<level>debug|info|notice|warning|warn|error)\\]\\s+(?<body>.*)$"
+            },
+            "bracket": {
+                "pattern": "^\\[(?<level>debug|info|notice|warning|warn|error)\\]\\s+(?<body>.*)$"
+            }
+        },
+        "level-field": "level",
+        "body-field": "body",
+        "timestamp-field": "timestamp",
+        "level": {
+            "debug": "debug",
+            "info": "^(?:info|notice)$",
+            "warn": "^(?:warning|warn)$",
+            "error": "error"
+        },
+        "sample": [
+            {
+                "line": "00:00:00.000 [info] Running MyAppWeb.Endpoint with cowboy"
+            },
+            {
+                "line": "[error] GenServer :foo terminating"
+            }
+        ]
+    }
+}

@@ -1,8 +1,9 @@
-import { ArrowUpCircle, Pause, Play, Radio } from "lucide-react"
+import { ArrowUpCircle, Pause, Play, Radio, Wrench } from "lucide-react"
 import { useCallback, useEffect, useMemo, useState } from "react"
 
 import { CelQueryEditor } from "@/components/cel-query-editor"
 import { LogList } from "@/components/log-list"
+import { PowerToolsSheet } from "@/components/power-tools-sheet"
 import { PropertyFilterDrawer } from "@/components/property-filter-drawer"
 import { ServicesDialog } from "@/components/services-dialog"
 import { TimeActivityStrip } from "@/components/time-activity-strip"
@@ -16,7 +17,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { useMizpah } from "@/hooks/use-mizpah"
-import { fetchUpdateStatus } from "@/lib/api"
+import { fetchTheme, fetchUpdateStatus } from "@/lib/api"
 import { formatBytes } from "@/lib/log-format"
 import type { UpdateStatus } from "@/lib/types"
 import { readQueryFromSession, writeQueryToSession } from "@/lib/filter-storage"
@@ -34,6 +35,9 @@ export function App() {
   const [timeZoomIndex, setTimeZoomIndex] = useState(DEFAULT_TIME_ZOOM_INDEX)
   const [autoScroll, setAutoScroll] = useState(true)
   const [servicesOpen, setServicesOpen] = useState(false)
+  const [powerOpen, setPowerOpen] = useState(false)
+  const [selectedEntryId, setSelectedEntryId] = useState<number | null>(null)
+  const [jumpToId, setJumpToId] = useState<number | null>(null)
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null)
   const [updateOpen, setUpdateOpen] = useState(false)
 
@@ -42,6 +46,24 @@ export function App() {
   useEffect(() => {
     writeQueryToSession(query)
   }, [query])
+
+  useEffect(() => {
+    let cancelled = false
+    void fetchTheme()
+      .then(({ theme }) => {
+        if (cancelled) return
+        const root = document.documentElement
+        root.style.setProperty("--mizpah-accent", theme.accent)
+        root.style.setProperty("--mizpah-error", theme.error)
+        root.style.setProperty("--mizpah-warn", theme.warn)
+      })
+      .catch(() => {
+        /* keep CSS defaults */
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -65,6 +87,17 @@ export function App() {
     setQuery(q)
     if (q.trim()) pushHistory(q)
   }, [])
+
+  useEffect(() => {
+    function onApplyCel(ev: Event) {
+      const detail = (ev as CustomEvent<string>).detail
+      if (typeof detail === "string" && detail.trim()) {
+        onQueryChange(detail)
+      }
+    }
+    window.addEventListener("mizpah:apply-cel", onApplyCel)
+    return () => window.removeEventListener("mizpah:apply-cel", onApplyCel)
+  }, [onQueryChange])
 
   const filterActive = Boolean(query.trim()) || timeRange != null
 
@@ -149,6 +182,16 @@ export function App() {
               </>
             )}
           </Button>
+
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setPowerOpen(true)}
+          >
+            <Wrench className="size-3.5" />
+            Tools
+          </Button>
         </header>
 
         <TimeActivityStrip
@@ -182,10 +225,24 @@ export function App() {
                 hasMore={hasMore}
                 loadingMore={loadingMore}
                 onLoadMore={loadMore}
+                query={query}
+                timeRange={timeRange}
+                onSelectedIdChange={setSelectedEntryId}
+                jumpToId={jumpToId}
+                onJumpToIdConsumed={() => setJumpToId(null)}
               />
             )}
           </main>
         </div>
+
+        <PowerToolsSheet
+          open={powerOpen}
+          onOpenChange={setPowerOpen}
+          query={query}
+          timeRange={timeRange}
+          onJumpToId={setJumpToId}
+          selectedEntryId={selectedEntryId}
+        />
 
         <footer className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t px-4 py-2 text-xs text-muted-foreground">
           <div className="flex items-center gap-2">
@@ -277,6 +334,7 @@ export function App() {
             open={updateOpen}
             onOpenChange={setUpdateOpen}
             expectedLatest={updateStatus.latestVersion}
+            releaseNotes={updateStatus.releaseNotes}
           />
         ) : null}
       </div>

@@ -4,6 +4,9 @@
   "version": "0.0.1",
   "type": "module",
   "scripts": {
+    "sync-formats": "node scripts/sync-format-packs.mjs",
+    "predev": "npm run sync-formats",
+    "prebuild": "npm run sync-formats",
     "dev": "astro dev",
     "build": "astro build",
     "preview": "astro preview"

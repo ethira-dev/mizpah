@@ -131,6 +131,28 @@ mod ffi_tests {
         // Avoid u32::MAX — casts to -1 / kill(-1) on unix.
         assert!(!process_exists(999_999_999));
     }
+
+    #[test]
+    fn signal_term_and_kill_ok_for_missing_pid() {
+        assert!(signal_term(999_999_999).is_ok());
+        assert!(signal_kill(999_999_999).is_ok());
+    }
+
+    #[test]
+    fn apply_pre_exec_setsid_runs_child() {
+        use std::process::Command;
+        let true_bin = ["/usr/bin/true", "/bin/true"]
+            .into_iter()
+            .find(|p| std::path::Path::new(p).is_file())
+            .expect("true binary");
+        let mut cmd = Command::new(true_bin);
+        cmd.stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null());
+        apply_pre_exec_setsid(&mut cmd);
+        let status = cmd.status().unwrap();
+        assert!(status.success());
+    }
 }
 
 #[cfg(test)]

@@ -1,0 +1,34 @@
+{
+    "serilog_compact_log": {
+        "title": "Serilog Compact",
+        "description": "Serilog Compact JSON formatting",
+        "file-type": "json",
+        "json": true,
+        "timestamp-field": "@t",
+        "line-format": [
+            {
+                "field": "@t"
+            },
+            " ",
+            {
+                "field": "@l"
+            },
+            " ",
+            {
+                "field": "@mt"
+            },
+            " ",
+            {
+                "field": "@m"
+            }
+        ],
+        "url": "https://github.com/serilog/serilog-formatting-compact",
+        "level-field": "@l",
+        "body-field": "@mt",
+        "sample": [
+            {
+                "line": "{\"@t\":\"2020-01-01T00:00:00.0000000Z\",\"@mt\":\"Hello, {Name}\",\"@m\":\"Hello, World\",\"@l\":\"Information\",\"Name\":\"World\"}"
+            }
+        ]
+    }
+}

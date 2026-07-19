@@ -1,0 +1,38 @@
+{
+    "nessus_log": {
+        "title": "Nessus",
+        "description": "Nessus / Tenable scan result JSON",
+        "file-type": "json",
+        "json": true,
+        "timestamp-field": "last_found",
+        "line-format": [
+            {
+                "field": "last_found"
+            },
+            " ",
+            {
+                "field": "severity"
+            },
+            " ",
+            {
+                "field": "plugin_id"
+            },
+            " ",
+            {
+                "field": "plugin_name"
+            },
+            " ",
+            {
+                "field": "host"
+            }
+        ],
+        "url": "https://www.tenable.com/products/nessus",
+        "level-field": "severity",
+        "body-field": "plugin_name",
+        "sample": [
+            {
+                "line": "{\"plugin_id\":19506,\"plugin_name\":\"Nessus Scan Information\",\"severity\":\"info\",\"severity_id\":0,\"host\":\"10.0.0.5\",\"port\":\"0\",\"protocol\":\"tcp\",\"synopsis\":\"Information about the Nessus scan.\",\"last_found\":\"2020-01-01T00:00:00Z\",\"cve\":[]}"
+            }
+        ]
+    }
+}

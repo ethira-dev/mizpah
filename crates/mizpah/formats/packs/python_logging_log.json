@@ -1,0 +1,39 @@
+{
+    "python_logging_log": {
+        "title": "Python logging",
+        "description": "Python stdlib logging default / common %-style formats",
+        "url": "https://docs.python.org/3/library/logging.html",
+        "regex": {
+            "default": {
+                "pattern": "^(?<level>DEBUG|INFO|WARNING|WARN|ERROR|CRITICAL):(?<logger>[^:]+):(?<body>.*)$"
+            },
+            "asctime": {
+                "pattern": "^(?<timestamp>\\d{4}-\\d{2}-\\d{2}[ T]\\d{2}:\\d{2}:\\d{2}(?:[,.]\\d+)?)\\s+(?:-\\s+)?(?<level>DEBUG|INFO|WARNING|WARN|ERROR|CRITICAL)\\s+(?:-\\s+)?(?:(?<logger>[\\w.]+)\\s+(?:-\\s+)?)?(?<body>.*)$"
+            },
+            "bracket": {
+                "pattern": "^\\[(?<timestamp>\\d{4}-\\d{2}-\\d{2}[ T]\\d{2}:\\d{2}:\\d{2}(?:[,.]\\d+)?)\\]\\s+(?<level>DEBUG|INFO|WARNING|WARN|ERROR|CRITICAL)\\s+(?:in\\s+(?<logger>[\\w.]+):\\s+)?(?<body>.*)$"
+            }
+        },
+        "level-field": "level",
+        "body-field": "body",
+        "timestamp-field": "timestamp",
+        "level": {
+            "debug": "DEBUG",
+            "info": "INFO",
+            "warn": "^(?:WARNING|WARN)$",
+            "error": "ERROR",
+            "critical": "CRITICAL"
+        },
+        "sample": [
+            {
+                "line": "INFO:myapp.api:request completed"
+            },
+            {
+                "line": "2020-01-01 00:00:00,000 ERROR myapp.api - request failed"
+            },
+            {
+                "line": "[2020-01-01 00:00:00,000] INFO in myapp: hello"
+            }
+        ]
+    }
+}

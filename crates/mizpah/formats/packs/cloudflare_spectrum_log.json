@@ -1,0 +1,25 @@
+{
+    "cloudflare_spectrum_log": {
+        "title": "Cloudflare Spectrum",
+        "description": "Cloudflare Logpush spectrum_events",
+        "file-type": "json",
+        "json": true,
+        "timestamp-field": "Timestamp",
+        "line-format": [
+            {
+                "field": "Timestamp"
+            },
+            " ",
+            {
+                "field": "Application"
+            }
+        ],
+        "url": "https://developers.cloudflare.com/logs/logpush/",
+        "body-field": "Application",
+        "sample": [
+            {
+                "line": "{\"Timestamp\":\"2020-01-01T00:00:00Z\",\"Application\":\"app-id\",\"ClientIP\":\"1.2.3.4\",\"ClientPort\":50000,\"OriginIP\":\"10.0.0.5\",\"OriginPort\":22,\"ConnectTimestamp\":\"2020-01-01T00:00:00Z\",\"Event\":\"connect\"}"
+            }
+        ]
+    }
+}

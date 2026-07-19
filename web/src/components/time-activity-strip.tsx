@@ -62,6 +62,18 @@ function fillClass(count: number, isCurrent: boolean): string {
   return "bg-transparent"
 }
 
+function levelParts(bucket: ActivityBucket): {
+  error: number
+  warn: number
+  other: number
+} {
+  const error = bucket.error ?? 0
+  const warn = bucket.warn ?? 0
+  const other =
+    bucket.other ?? Math.max(0, bucket.count - error - warn)
+  return { error, warn, other }
+}
+
 function isCurrentBucket(bucket: ActivityBucket, nowMs: number): boolean {
   const start = Date.parse(bucket.start)
   const end = Date.parse(bucket.end)
@@ -336,7 +348,7 @@ export function TimeActivityStrip({
                         isCurrent &&
                           "z-10 ring-1 ring-primary/70 shadow-[0_0_10px_2px] shadow-primary/55 animate-pulse"
                       )}
-                      onClick={() => {
+                      onClick={(ev) => {
                         if (isSelected) {
                           onSelect(null)
                           return
@@ -344,26 +356,90 @@ export function TimeActivityStrip({
                         // Current tile: period start → now (open upper bound so live logs keep arriving).
                         if (isCurrent) {
                           onSelect({ from: bucket.start })
-                          return
+                        } else {
+                          onSelect({ from: bucket.start, to: bucket.end })
                         }
-                        onSelect({ from: bucket.start, to: bucket.end })
+                        // Alt/Option+click also filters to errors/warns in the CEL bar via custom event.
+                        if (ev.altKey) {
+                          window.dispatchEvent(
+                            new CustomEvent("mizpah:apply-cel", {
+                              detail: 'level in ["error", "warn"]',
+                            })
+                          )
+                        }
                       }}
                     >
-                      <span
-                        className={cn(
-                          "absolute inset-x-0 bottom-0 transition-[height]",
-                          fillClass(bucket.count, isCurrent)
-                        )}
-                        style={{
-                          height:
-                            bucket.count > 0 && maxCount > 0
-                              ? `${Math.max(18, Math.round((bucket.count / maxCount) * 100))}%`
-                              : isCurrent
-                                ? "35%"
-                                : "0%",
-                        }}
-                        aria-hidden
-                      />
+                      {(() => {
+                        const parts = levelParts(bucket)
+                        const h =
+                          bucket.count > 0 && maxCount > 0
+                            ? Math.max(
+                                18,
+                                Math.round((bucket.count / maxCount) * 100)
+                              )
+                            : isCurrent
+                              ? 35
+                              : 0
+                        if (h === 0) return null
+                        // Stacked level fill when breakdown present; else solid bar.
+                        if (
+                          (bucket.error ?? 0) +
+                            (bucket.warn ?? 0) +
+                            (bucket.other ?? 0) >
+                          0
+                        ) {
+                          const total = Math.max(
+                            1,
+                            parts.error + parts.warn + parts.other
+                          )
+                          return (
+                            <span
+                              className="absolute inset-x-0 bottom-0 flex flex-col-reverse"
+                              style={{ height: `${h}%` }}
+                              aria-hidden
+                            >
+                              {parts.other > 0 ? (
+                                <span
+                                  className={
+                                    isCurrent
+                                      ? "bg-primary/70"
+                                      : "bg-muted-foreground/20"
+                                  }
+                                  style={{
+                                    height: `${(parts.other / total) * 100}%`,
+                                  }}
+                                />
+                              ) : null}
+                              {parts.warn > 0 ? (
+                                <span
+                                  className="bg-amber-500/80"
+                                  style={{
+                                    height: `${(parts.warn / total) * 100}%`,
+                                  }}
+                                />
+                              ) : null}
+                              {parts.error > 0 ? (
+                                <span
+                                  className="bg-red-500/85"
+                                  style={{
+                                    height: `${(parts.error / total) * 100}%`,
+                                  }}
+                                />
+                              ) : null}
+                            </span>
+                          )
+                        }
+                        return (
+                          <span
+                            className={cn(
+                              "absolute inset-x-0 bottom-0 transition-[height]",
+                              fillClass(bucket.count, isCurrent)
+                            )}
+                            style={{ height: `${h}%` }}
+                            aria-hidden
+                          />
+                        )
+                      })()}
                     </button>
                   </TooltipTrigger>
                   <TooltipContent side="bottom" sideOffset={6}>
@@ -380,6 +456,14 @@ export function TimeActivityStrip({
                       <span className="tabular-nums text-muted-foreground">
                         {bucket.count}{" "}
                         {bucket.count === 1 ? "entry" : "entries"}
+                      </span>
+                      {(bucket.error || bucket.warn) ? (
+                        <span className="tabular-nums text-muted-foreground">
+                          {bucket.error ?? 0} err · {bucket.warn ?? 0} warn
+                        </span>
+                      ) : null}
+                      <span className="text-[10px] text-muted-foreground/80">
+                        ⌥-click: filter errors/warns
                       </span>
                     </div>
                   </TooltipContent>

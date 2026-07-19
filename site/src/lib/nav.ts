@@ -4,6 +4,8 @@ export const DOCS_NAV = [
   { slug: "streaming", title: "Streaming logs" },
   { slug: "attach", title: "Attach sources" },
   { slug: "cel", title: "CEL filters" },
+  { slug: "formats", title: "Log formats" },
+  { slug: "sql", title: "SQL & aggregations" },
   { slug: "mcp", title: "MCP & agents" },
   { slug: "cli", title: "CLI reference" },
   { slug: "development", title: "Development" },

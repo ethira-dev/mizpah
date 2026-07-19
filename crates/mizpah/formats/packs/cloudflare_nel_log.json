@@ -1,0 +1,25 @@
+{
+    "cloudflare_nel_log": {
+        "title": "Cloudflare NEL",
+        "description": "Cloudflare Logpush nel_reports",
+        "file-type": "json",
+        "json": true,
+        "timestamp-field": "Timestamp",
+        "line-format": [
+            {
+                "field": "Timestamp"
+            },
+            " ",
+            {
+                "field": "Type"
+            }
+        ],
+        "url": "https://developers.cloudflare.com/logs/logpush/",
+        "body-field": "Type",
+        "sample": [
+            {
+                "line": "{\"Timestamp\":\"2020-01-01T00:00:00Z\",\"Type\":\"network-error\",\"ClientIP\":\"1.2.3.4\",\"ClientRequestHTTPHost\":\"example.com\",\"Phase\":\"connection\",\"ErrorType\":\"tcp.timed_out\"}"
+            }
+        ]
+    }
+}

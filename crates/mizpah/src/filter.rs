@@ -195,9 +195,65 @@ mod tests {
     }
 
     #[test]
+    fn level_as_number_binds_to_cel() {
+        let data = json!({"level": 50, "msg": "hi"});
+        assert!(matches("api", &data, r#"level == "50""#));
+        assert!(!matches("api", &data, r#"level == "info""#));
+    }
+
+    #[test]
+    fn empty_string_level_is_ignored() {
+        let data = json!({"level": "", "severity": "warn"});
+        assert!(matches("api", &data, r#"level == "warn""#));
+    }
+
+    #[test]
     fn non_bool_is_no_match() {
         let data = json!({"msg": "hi", "n": 1});
         assert!(!matches("api", &data, r#"msg"#));
         assert!(!matches("api", &data, r#"1 + 1"#));
+    }
+
+    #[test]
+    fn compile_whitespace_only_is_match_all() {
+        assert!(matches!(
+            compile_query("   ").unwrap(),
+            CompiledQuery::MatchAll
+        ));
+    }
+
+    #[test]
+    fn severity_empty_string_skipped() {
+        let data = json!({"severity": "", "lvl": "debug"});
+        assert!(matches("api", &data, r#"level == "debug""#));
+    }
+
+    #[test]
+    fn non_object_data_still_matches_service() {
+        let data = json!("plain");
+        assert!(matches("billing", &data, r#"service == "billing""#));
+        assert!(!matches("billing", &data, r#"level == "info""#));
+    }
+
+    #[test]
+    fn compiled_match_all_always_matches() {
+        let data = json!({"msg": "hi"});
+        assert!(matches_entry("api", &data, &CompiledQuery::MatchAll));
+    }
+
+    #[test]
+    fn level_non_string_values_are_skipped_or_coerced() {
+        let bool_level = json!({"level": true, "severity": "warn"});
+        assert!(matches("api", &bool_level, r#"level == "warn""#));
+
+        let null_level = json!({"level": null, "lvl": 99});
+        assert!(matches("api", &null_level, r#"level == "99""#));
+    }
+
+    #[test]
+    fn execute_error_counts_as_no_match() {
+        let data = json!({"msg": "hi"});
+        let compiled = compile_query(r#"has(missing.field)"#).unwrap();
+        assert!(!matches_entry("api", &data, &compiled));
     }
 }

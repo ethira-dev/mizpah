@@ -1,0 +1,28 @@
+{
+    "elasticsearch_log": {
+        "title": "Elasticsearch server",
+        "description": "Elasticsearch server process logs (not ECS payloads)",
+        "regex": {
+            "std": {
+                "pattern": "^\\[(?<timestamp>[^\\]]+)\\]\\[(?<level>[A-Z]+)\\s*\\]\\[(?<component>[^\\]]+)\\]\\s+(?<body>.*)$"
+            }
+        },
+        "sample": [
+            {
+                "line": "[2020-01-01T00:00:00,000][INFO ][o.e.n.Node               ] [node-1] initialized"
+            },
+            {
+                "line": "[2020-01-01T00:00:00,000][ERROR][o.e.b.ElasticsearchUncaughtExceptionHandler] [node-1] fatal error"
+            }
+        ],
+        "url": "https://www.elastic.co/guide/en/elasticsearch/reference/current/logging.html",
+        "level-field": "level",
+        "level": {
+            "error": "ERROR|FATAL",
+            "warn": "WARN",
+            "info": "INFO",
+            "debug": "DEBUG|TRACE"
+        },
+        "body-field": "body"
+    }
+}

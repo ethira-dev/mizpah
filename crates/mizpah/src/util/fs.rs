@@ -5,6 +5,12 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
 pub fn home_dir() -> Option<PathBuf> {
+    if let Ok(home) = std::env::var("HOME") {
+        let trimmed = home.trim();
+        if !trimmed.is_empty() {
+            return Some(PathBuf::from(trimmed));
+        }
+    }
     directories::UserDirs::new().map(|u| u.home_dir().to_path_buf())
 }
 
@@ -42,4 +48,68 @@ pub fn atomic_write(path: &Path, content: &str) -> io::Result<()> {
     }
     fs::rename(&tmp, path)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_support::env_lock;
+    #[cfg(unix)]
+    use std::os::unix::fs::PermissionsExt;
+
+    #[test]
+    fn home_dir_returns_some() {
+        assert!(home_dir().is_some());
+    }
+
+    #[test]
+    fn home_dir_skips_empty_env() {
+        let _guard = env_lock();
+        std::env::set_var("HOME", "   ");
+        assert!(home_dir().is_some());
+        std::env::remove_var("HOME");
+    }
+
+    #[test]
+    fn config_dir_honors_env_override() {
+        let _guard = env_lock();
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().to_str().unwrap();
+        std::env::set_var("MIZPAH_CONFIG_DIR", path);
+        let resolved = config_dir().unwrap();
+        assert_eq!(resolved, PathBuf::from(path));
+        std::env::remove_var("MIZPAH_CONFIG_DIR");
+    }
+
+    #[test]
+    fn config_dir_falls_back_when_env_empty() {
+        let _guard = env_lock();
+        std::env::set_var("MIZPAH_CONFIG_DIR", "   ");
+        let resolved = config_dir();
+        std::env::remove_var("MIZPAH_CONFIG_DIR");
+        assert!(resolved.is_ok());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn atomic_write_create_and_overwrite_preserves_mode() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("cfg.toml");
+        atomic_write(&path, "v1\n").unwrap();
+        assert_eq!(fs::read_to_string(&path).unwrap(), "v1\n");
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o640)).unwrap();
+
+        atomic_write(&path, "v2\n").unwrap();
+        assert_eq!(fs::read_to_string(&path).unwrap(), "v2\n");
+        let mode = fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o640);
+    }
+
+    #[test]
+    fn atomic_write_creates_parent_dirs() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("nested/dir/file.txt");
+        atomic_write(&path, "data").unwrap();
+        assert_eq!(fs::read_to_string(&path).unwrap(), "data");
+    }
 }

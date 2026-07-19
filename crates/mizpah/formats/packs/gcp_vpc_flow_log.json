@@ -1,0 +1,29 @@
+{
+    "gcp_vpc_flow_log": {
+        "title": "GCP VPC Flow",
+        "description": "GCP VPC Flow Logs via Cloud Logging",
+        "file-type": "json",
+        "json": true,
+        "timestamp-field": "timestamp",
+        "line-format": [
+            {
+                "field": "timestamp"
+            },
+            " ",
+            {
+                "field": "jsonPayload"
+            },
+            " ",
+            {
+                "field": "resource"
+            }
+        ],
+        "url": "https://cloud.google.com/vpc/docs/using-flow-logs",
+        "body-field": "jsonPayload",
+        "sample": [
+            {
+                "line": "{\"timestamp\":\"2020-01-01T00:00:00.000Z\",\"resource\":{\"type\":\"gce_subnetwork\"},\"jsonPayload\":{\"connection\":{\"src_ip\":\"10.0.0.1\",\"dest_ip\":\"10.0.0.2\",\"protocol\":6,\"src_port\":12345,\"dest_port\":443},\"bytes_sent\":\"100\",\"packets_sent\":\"2\",\"reporter\":\"SRC\"}}"
+            }
+        ]
+    }
+}

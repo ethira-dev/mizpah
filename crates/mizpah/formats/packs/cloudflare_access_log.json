@@ -1,0 +1,30 @@
+{
+    "cloudflare_access_log": {
+        "title": "Cloudflare Access",
+        "description": "Cloudflare Logpush Access requests",
+        "file-type": "json",
+        "json": true,
+        "timestamp-field": "CreatedAt",
+        "line-format": [
+            {
+                "field": "CreatedAt"
+            },
+            " ",
+            {
+                "field": "Action"
+            },
+            " ",
+            {
+                "field": "UserEmail"
+            }
+        ],
+        "url": "https://developers.cloudflare.com/logs/logpush/",
+        "level-field": "Action",
+        "body-field": "UserEmail",
+        "sample": [
+            {
+                "line": "{\"CreatedAt\":\"2020-01-01T00:00:00Z\",\"Action\":\"login\",\"UserEmail\":\"alice@example.com\",\"IPAddress\":\"1.2.3.4\",\"AppUID\":\"app1\",\"AppDomain\":\"app.example.com\",\"Country\":\"US\",\"Success\":true}"
+            }
+        ]
+    }
+}

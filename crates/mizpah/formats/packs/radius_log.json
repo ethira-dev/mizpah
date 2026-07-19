@@ -1,0 +1,21 @@
+{
+    "radius_log": {
+        "title": "FreeRADIUS",
+        "description": "FreeRADIUS Auth-Accept / Reject log lines",
+        "regex": {
+            "std": {
+                "pattern": "^(?:(?<syslog_pri><\\d+>)?(?<syslog_ts>\\w{3}\\s+\\d{1,2}\\s+\\d{2}:\\d{2}:\\d{2})\\s+(?<syslog_host>\\S+)\\s+)?(?:radiusd|freeradius)(?:\\[\\d+\\])?:\\s+(?<body>.*(?:Login (?:OK|incorrect)|Auth:|rlm_).*)$"
+            }
+        },
+        "sample": [
+            {
+                "line": "Jan  1 00:00:00 host radiusd[1234]: Login OK: [alice] (from client wifi port 0 cli aa-bb-cc-dd-ee-ff)"
+            },
+            {
+                "line": "Jan  1 00:00:00 host freeradius[1234]: Auth: Login incorrect: [bob] (from client wifi port 0)"
+            }
+        ],
+        "url": "https://freeradius.org/",
+        "body-field": "body"
+    }
+}

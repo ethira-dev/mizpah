@@ -1,0 +1,33 @@
+{
+    "azure_nsg_flow_log": {
+        "title": "Azure NSG Flow",
+        "description": "Azure Network Security Group flow logs",
+        "file-type": "json",
+        "json": true,
+        "timestamp-field": "time",
+        "line-format": [
+            {
+                "field": "time"
+            },
+            " ",
+            {
+                "field": "systemId"
+            },
+            " ",
+            {
+                "field": "category"
+            },
+            " ",
+            {
+                "field": "resourceId"
+            }
+        ],
+        "url": "https://learn.microsoft.com/en-us/azure/network-watcher/nsg-flow-logs-overview",
+        "body-field": "category",
+        "sample": [
+            {
+                "line": "{\"time\":\"2020-01-01T00:00:00.000Z\",\"systemId\":\"00000000-0000-0000-0000-000000000000\",\"category\":\"NetworkSecurityGroupFlowEvent\",\"resourceId\":\"/SUBSCRIPTIONS/000/RESOURCEGROUPS/RG/PROVIDERS/MICROSOFT.NETWORK/NETWORKSECURITYGROUPS/NSG1\",\"operationName\":\"NetworkSecurityGroupFlowEvents\",\"properties\":{\"Version\":2,\"flows\":[]}}"
+            }
+        ]
+    }
+}

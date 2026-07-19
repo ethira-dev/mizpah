@@ -44,6 +44,195 @@ export async function fetchLogs(opts: {
   return res.json()
 }
 
+export type AggregateRow = {
+  keys: string[]
+  count: number
+  sum?: number
+  avg?: number
+  min?: number
+  max?: number
+}
+
+export async function fetchAggregate(opts: {
+  q?: string
+  service?: string
+  groupBy?: string
+  limit?: number
+}): Promise<AggregateRow[]> {
+  const params = new URLSearchParams()
+  if (opts.q?.trim()) params.set("q", opts.q.trim())
+  if (opts.service) params.set("service", opts.service)
+  if (opts.groupBy) params.set("groupBy", opts.groupBy)
+  if (opts.limit != null) params.set("limit", String(opts.limit))
+  const res = await fetch(`/api/aggregate?${params}`)
+  if (!res.ok) throw new Error(`aggregate: ${res.status}`)
+  const data = (await res.json()) as { rows: AggregateRow[] }
+  return data.rows
+}
+
+export async function fetchTrace(
+  opid: string,
+  limit = 100
+): Promise<LogEntry[]> {
+  const res = await fetch(
+    `/api/trace/${encodeURIComponent(opid)}?limit=${limit}`
+  )
+  if (!res.ok) throw new Error(`trace: ${res.status}`)
+  const data = (await res.json()) as { entries: LogEntry[] }
+  return data.entries
+}
+
+export async function fetchNavLevel(opts: {
+  fromId: number
+  direction: "next" | "prev"
+  levels?: string
+  service?: string
+  q?: string
+  from?: string
+  to?: string
+}): Promise<LogEntry | null> {
+  const params = new URLSearchParams()
+  params.set("fromId", String(opts.fromId))
+  params.set("direction", opts.direction)
+  if (opts.levels) params.set("levels", opts.levels)
+  if (opts.service && opts.service !== "*") params.set("service", opts.service)
+  if (opts.q?.trim()) params.set("q", opts.q.trim())
+  if (opts.from) params.set("from", opts.from)
+  if (opts.to) params.set("to", opts.to)
+  const res = await fetch(`/api/nav/level?${params}`)
+  if (!res.ok) {
+    const body = await res.text().catch(() => "")
+    throw new Error(body || `nav: ${res.status}`)
+  }
+  const data = (await res.json()) as { entry: LogEntry | null }
+  return data.entry
+}
+
+export type AnnotatedEntry = {
+  id: number
+  annotation: {
+    marked: boolean
+    tags: string[]
+    comment?: string
+  }
+}
+
+export async function fetchBookmarks(): Promise<AnnotatedEntry[]> {
+  const res = await fetch("/api/bookmarks")
+  if (!res.ok) throw new Error(`bookmarks: ${res.status}`)
+  const data = (await res.json()) as { bookmarks: AnnotatedEntry[] }
+  return data.bookmarks
+}
+
+export async function setBookmark(opts: {
+  id: number
+  marked?: boolean
+  tags?: string[]
+  comment?: string
+}): Promise<void> {
+  const res = await fetch("/api/bookmarks", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(opts),
+  })
+  if (!res.ok) {
+    const body = await res.text().catch(() => "")
+    throw new Error(body || `bookmark: ${res.status}`)
+  }
+}
+
+export type SqlResult = {
+  columns: string[]
+  rows: unknown[][]
+  rowCount: number
+  truncated: boolean
+}
+
+export async function runSql(sql: string, limit = 100): Promise<SqlResult> {
+  const res = await fetch("/api/sql", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ sql, limit }),
+  })
+  if (!res.ok) {
+    const body = await res.text().catch(() => "")
+    throw new Error(body || `sql: ${res.status}`)
+  }
+  return res.json()
+}
+
+export type SpectrogramResult = {
+  fieldPath: string
+  from: string
+  to: string
+  timeStarts: string[]
+  valueLabels: string[]
+  counts: number[][]
+}
+
+export type Keymap = {
+  nextError: string
+  prevError: string
+  down: string
+  up: string
+  quit: string
+  showTrace: string
+}
+
+export async function fetchKeymap(): Promise<Keymap> {
+  const res = await fetch("/api/keymap")
+  if (!res.ok) throw new Error(`keymap: ${res.status}`)
+  return res.json()
+}
+
+export type Theme = {
+  name: string
+  background: string
+  foreground: string
+  accent: string
+  muted: string
+  error: string
+  warn: string
+}
+
+export async function fetchTheme(name?: string): Promise<{
+  themes: string[]
+  theme: Theme
+}> {
+  const params = new URLSearchParams()
+  if (name) params.set("name", name)
+  const qs = params.toString()
+  const res = await fetch(qs ? `/api/themes?${qs}` : "/api/themes")
+  if (!res.ok) throw new Error(`themes: ${res.status}`)
+  return res.json()
+}
+
+export async function fetchSpectrogram(opts: {
+  field?: string
+  from?: string
+  to?: string
+  timeBuckets?: number
+  valueBuckets?: number
+}): Promise<SpectrogramResult> {
+  const params = new URLSearchParams()
+  if (opts.field) params.set("field", opts.field)
+  if (opts.from) params.set("from", opts.from)
+  if (opts.to) params.set("to", opts.to)
+  if (opts.timeBuckets != null) {
+    params.set("timeBuckets", String(opts.timeBuckets))
+  }
+  if (opts.valueBuckets != null) {
+    params.set("valueBuckets", String(opts.valueBuckets))
+  }
+  const qs = params.toString()
+  const res = await fetch(qs ? `/api/spectrogram?${qs}` : "/api/spectrogram")
+  if (!res.ok) {
+    const body = await res.text().catch(() => "")
+    throw new Error(body || `spectrogram: ${res.status}`)
+  }
+  return res.json()
+}
+
 export async function fetchActivity(opts?: {
   hours?: number
   bucketMinutes?: number

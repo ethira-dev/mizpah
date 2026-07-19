@@ -93,3 +93,86 @@ impl From<FilterError> for ApiError {
         Self::BadRequest(err.to_string())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::response::IntoResponse;
+
+    #[test]
+    fn hub_lifecycle_msg() {
+        let err = HubLifecycleError::msg("boom");
+        assert_eq!(err.to_string(), "boom");
+    }
+
+    #[test]
+    fn api_error_constructors_and_status() {
+        assert!(matches!(ApiError::bad_request("x"), ApiError::BadRequest(_)));
+        assert!(matches!(ApiError::not_found("x"), ApiError::NotFound(_)));
+        assert!(matches!(ApiError::conflict("x"), ApiError::Conflict(_)));
+        assert!(matches!(ApiError::forbidden("x"), ApiError::Forbidden(_)));
+        assert!(matches!(ApiError::bad_gateway("x"), ApiError::BadGateway(_)));
+        assert!(matches!(ApiError::internal("x"), ApiError::Internal(_)));
+
+        assert_eq!(ApiError::BadGateway("x".into()).into_response().status(), StatusCode::BAD_GATEWAY);
+        assert_eq!(
+            ApiError::Internal("x".into()).into_response().status(),
+            StatusCode::INTERNAL_SERVER_ERROR
+        );
+    }
+
+    #[test]
+    fn filter_error_maps_to_bad_request_response() {
+        let api: ApiError = FilterError::Compile("bad cel".into()).into();
+        let resp = api.into_response();
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[test]
+    fn filter_error_bind_and_io() {
+        let bind = FilterError::Bind {
+            key: "x".into(),
+            message: "bad".into(),
+        };
+        assert!(bind.to_string().contains("x"));
+        let io: HubLifecycleError = std::io::Error::new(std::io::ErrorKind::NotFound, "nope").into();
+        assert!(io.to_string().contains("nope"));
+    }
+
+    #[test]
+    fn api_error_into_response_all_statuses() {
+        assert_eq!(
+            ApiError::BadRequest("bad".into()).into_response().status(),
+            StatusCode::BAD_REQUEST
+        );
+        assert_eq!(
+            ApiError::Forbidden("no".into()).into_response().status(),
+            StatusCode::FORBIDDEN
+        );
+        assert_eq!(
+            ApiError::Conflict("c".into()).into_response().status(),
+            StatusCode::CONFLICT
+        );
+        assert_eq!(
+            ApiError::NotFound("n".into()).into_response().status(),
+            StatusCode::NOT_FOUND
+        );
+        assert_eq!(
+            ApiError::BadGateway("gw".into()).into_response().status(),
+            StatusCode::BAD_GATEWAY
+        );
+    }
+
+    #[test]
+    fn filter_error_compile_display() {
+        let err = FilterError::Compile("syntax".into());
+        assert_eq!(err.to_string(), "invalid CEL query: syntax");
+    }
+
+    #[test]
+    fn hub_lifecycle_io_from_error() {
+        let err: HubLifecycleError =
+            std::io::Error::new(std::io::ErrorKind::PermissionDenied, "denied").into();
+        assert!(err.to_string().contains("denied"));
+    }
+}

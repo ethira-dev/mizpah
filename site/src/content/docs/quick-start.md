@@ -49,5 +49,7 @@ Works with Cursor, Claude Code, Codex, and other [Agent Skills](https://agentski
 - [Streaming & hub protocol](../streaming/)
 - [Attach sources](../attach/)
 - [CEL](../cel/)
+- [Log formats](../formats/)
+- [SQL & aggregations](../sql/)
 - [MCP tools](../mcp/)
 - [CLI reference](../cli/)

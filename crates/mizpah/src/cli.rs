@@ -2,13 +2,16 @@
 
 use crate::agent_hooks;
 use crate::browser_attach;
+use crate::file_ingest;
 use crate::hub;
 use crate::mcp;
+use crate::script;
 use crate::shell_attach;
 use crate::shell_forward;
 use crate::store::{DEFAULT_MAX_BYTES, DEFAULT_TTL_HOURS};
+use crate::tui;
 use crate::update;
-use crate::{ensure_bind_allowed, init_tracing_stderr, run_pipe_mode};
+use crate::{init_tracing_stderr, run_pipe_mode};
 use clap::{Args, Parser, Subcommand};
 use std::path::PathBuf;
 use tracing::error;
@@ -76,7 +79,7 @@ impl BrowserAttachArgs {
     }
 }
 
-#[derive(Debug, Parser)]
+#[derive(Debug, Parser, Clone)]
 #[command(
     about = "JSON log viewer — pipe logs and inspect them in a web UI",
     version
@@ -114,7 +117,7 @@ pub struct Cli {
     pub allow_remote: bool,
 }
 
-#[derive(Debug, Subcommand)]
+#[derive(Debug, Subcommand, Clone)]
 pub enum Commands {
     /// MCP server for Cursor / Claude / Codex (queries the live hub)
     Mcp {
@@ -173,6 +176,81 @@ pub enum Commands {
         #[arg(short, long)]
         port: Option<u16>,
     },
+    /// Ingest local (or SSH) log files into a running hub
+    Ingest {
+        /// File paths, globs, or `user@host:path` remotes
+        paths: Vec<String>,
+
+        /// Service name for ingested lines
+        #[arg(short, long)]
+        service: Option<String>,
+
+        /// Follow files for new data (local only)
+        #[arg(long, short = 'f', default_value_t = false)]
+        follow: bool,
+
+        #[command(flatten)]
+        hub: HubArgs,
+    },
+    /// Alias for `ingest` (file paths); does not open the browser
+    Files {
+        /// File paths, globs, or `user@host:path` remotes
+        paths: Vec<String>,
+
+        #[arg(short, long)]
+        service: Option<String>,
+
+        #[arg(long, short = 'f', default_value_t = false)]
+        follow: bool,
+
+        #[command(flatten)]
+        hub: HubArgs,
+    },
+    /// Query the hub with a CEL filter (prints JSON)
+    Query {
+        /// CEL filter expression
+        #[arg(default_value = "")]
+        cel: String,
+
+        /// Group-by field paths (enables aggregate mode)
+        #[arg(long = "group-by", value_delimiter = ',')]
+        group_by: Vec<String>,
+
+        #[arg(short, long, default_value_t = 50)]
+        limit: usize,
+
+        /// Output format: json (default)
+        #[arg(long, default_value = "json")]
+        format: String,
+
+        /// Optional service filter
+        #[arg(short, long)]
+        service: Option<String>,
+
+        #[command(flatten)]
+        hub: HubArgs,
+    },
+    /// Run SQL against a snapshot of the hub buffer
+    Sql {
+        /// SELECT statement
+        statement: String,
+
+        #[command(flatten)]
+        hub: HubArgs,
+    },
+    /// Run a line-oriented script against the hub
+    Script {
+        /// Script file path
+        path: PathBuf,
+
+        #[command(flatten)]
+        hub: HubArgs,
+    },
+    /// Terminal UI against a running hub
+    Tui {
+        #[command(flatten)]
+        hub: HubArgs,
+    },
     /// Print shell init snippet for rc files (internal)
     #[command(name = "__shell-init", hide = true)]
     ShellInit {
@@ -217,7 +295,7 @@ pub enum Commands {
     },
 }
 
-#[derive(Debug, Subcommand)]
+#[derive(Debug, Subcommand, Clone)]
 pub enum AttachTarget {
     /// Capture stdout/stderr from new interactive shells
     Shell {
@@ -265,7 +343,7 @@ pub enum DetachTarget {
     All,
 }
 
-#[derive(Debug, Subcommand)]
+#[derive(Debug, Subcommand, Clone)]
 pub enum McpAction {
     /// Register Mizpah in Cursor, Claude Desktop, Claude Code, and Codex configs
     Install,
@@ -273,7 +351,7 @@ pub enum McpAction {
     Uninstall,
 }
 
-#[derive(Debug, Subcommand)]
+#[derive(Debug, Subcommand, Clone)]
 pub enum HubAction {
     /// Start a detached hub if one is not already healthy
     Start,
@@ -283,7 +361,7 @@ pub enum HubAction {
     Restart,
 }
 
-#[derive(Debug, Subcommand)]
+#[derive(Debug, Subcommand, Clone)]
 pub enum BrowserAction {
     /// Attach to Chrome/Edge DevTools and forward console + network into the hub
     Attach {
@@ -292,77 +370,428 @@ pub enum BrowserAction {
     },
 }
 
-pub async fn run() {
-    crate::util::ensure_rustls_crypto_provider();
-    let cli = Cli::parse();
+/// Default service name for file ingest when `--service` is omitted.
+pub(crate) fn default_ingest_service() -> String {
+    std::env::current_dir()
+        .ok()
+        .and_then(|d| d.canonicalize().ok())
+        .map(|d| d.display().to_string())
+        .unwrap_or_else(|| "default".into())
+}
 
+/// Apply config.toml defaults when CLI still has clap defaults.
+pub(crate) fn apply_config_defaults(cli: &mut Cli) {
+    let host_default = cli.hub.host == "127.0.0.1";
+    let port_default = cli.hub.port == hub::DEFAULT_PORT;
+    let max_default = cli.max_bytes == DEFAULT_MAX_BYTES;
+    let ttl_default = cli.ttl_hours == DEFAULT_TTL_HOURS;
+    let (host, port, max_bytes, ttl_hours) = crate::config::apply_hub_defaults(
+        cli.hub.host.clone(),
+        cli.hub.port,
+        cli.max_bytes,
+        cli.ttl_hours,
+        host_default,
+        port_default,
+        max_default,
+        ttl_default,
+    );
+    cli.hub.host = host;
+    cli.hub.port = port;
+    cli.max_bytes = max_bytes;
+    cli.ttl_hours = ttl_hours;
+    let _ = crate::config::ensure_default_config_file();
+}
+
+fn hub_http_base(host: &str, port: u16) -> String {
+    format!("http://{host}:{port}")
+}
+
+/// Injectable side effects for CLI dispatch (real impl in production, overrides in tests).
+#[derive(Default, Clone)]
+pub struct CliDeps {
+    skip_tracing_init: bool,
+    bind_check: Option<Result<(), String>>,
+    mcp_stdio: Option<Result<(), String>>,
+    mcp_install: Option<i32>,
+    mcp_uninstall: Option<i32>,
+    shell_attach: Option<Result<(), String>>,
+    browser_attach: Option<Result<(), String>>,
+    attach_cursor: Option<Result<(), String>>,
+    attach_claude: Option<Result<(), String>>,
+    detach_shell: Option<Result<(), String>>,
+    detach_cursor: Option<Result<(), String>>,
+    detach_claude: Option<Result<(), String>>,
+    detach_all: Option<Result<(), String>>,
+    hub_start: Option<Result<(), String>>,
+    hub_stop: Option<Result<(), String>>,
+    hub_restart: Option<Result<(), String>>,
+    resolve_open: Option<Result<(String, u16), String>>,
+    run_open: Option<Result<(), String>>,
+    file_ingest: Option<Result<(), String>>,
+    query: Option<Result<String, String>>,
+    sql: Option<Result<String, String>>,
+    run_script: Option<Result<(), String>>,
+    run_tui: Option<Result<(), String>>,
+    shell_init: Option<Result<(), String>>,
+    shell_forward: Option<Result<(), String>>,
+    hook_forward: Option<Result<(), String>>,
+    update_resume: Option<Result<(), String>>,
+    run_pipe: Option<i32>,
+}
+
+impl CliDeps {
+    pub fn real() -> Self {
+        Self::default()
+    }
+
+    fn maybe_init_tracing(&self) {
+        if !self.skip_tracing_init {
+            init_tracing_stderr();
+        }
+    }
+
+    async fn mcp_stdio(&self, base_url: String) -> Result<(), String> {
+        if let Some(r) = &self.mcp_stdio {
+            return r.clone();
+        }
+        mcp::run_stdio(base_url)
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    fn mcp_install(&self) -> i32 {
+        self.mcp_install.unwrap_or_else(mcp::run_install)
+    }
+
+    fn mcp_uninstall(&self) -> i32 {
+        self.mcp_uninstall.unwrap_or_else(mcp::run_uninstall)
+    }
+
+    async fn shell_attach(
+        &self,
+        service: Option<String>,
+        host: String,
+        port: u16,
+    ) -> Result<(), String> {
+        if let Some(r) = &self.shell_attach {
+            return r.clone();
+        }
+        shell_attach::run_attach(service, host, port).await
+    }
+
+    async fn browser_attach(&self, opts: browser_attach::BrowserAttachOpts) -> Result<(), String> {
+        if let Some(r) = &self.browser_attach {
+            return r.clone();
+        }
+        browser_attach::run_browser_attach(opts).await
+    }
+
+    async fn attach_cursor(
+        &self,
+        service: Option<String>,
+        host: String,
+        port: u16,
+    ) -> Result<(), String> {
+        if let Some(r) = &self.attach_cursor {
+            return r.clone();
+        }
+        agent_hooks::run_attach_cursor(service, host, port).await
+    }
+
+    async fn attach_claude(
+        &self,
+        service: Option<String>,
+        host: String,
+        port: u16,
+    ) -> Result<(), String> {
+        if let Some(r) = &self.attach_claude {
+            return r.clone();
+        }
+        agent_hooks::run_attach_claude(service, host, port).await
+    }
+
+    fn detach_shell(&self) -> Result<(), String> {
+        self.detach_shell
+            .clone()
+            .unwrap_or_else(shell_attach::run_detach)
+    }
+
+    fn detach_cursor(&self) -> Result<(), String> {
+        self.detach_cursor
+            .clone()
+            .unwrap_or_else(agent_hooks::run_detach_cursor)
+    }
+
+    fn detach_claude(&self) -> Result<(), String> {
+        self.detach_claude
+            .clone()
+            .unwrap_or_else(agent_hooks::run_detach_claude)
+    }
+
+    fn detach_all(&self) -> Result<(), String> {
+        self.detach_all
+            .clone()
+            .unwrap_or_else(agent_hooks::run_detach_all)
+    }
+
+    async fn hub_start(
+        &self,
+        host: String,
+        port: u16,
+        project: Option<PathBuf>,
+        allow_remote: bool,
+    ) -> Result<(), String> {
+        if let Some(r) = &self.hub_start {
+            return r.clone();
+        }
+        hub::run_hub_start(host, port, project, allow_remote)
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    async fn hub_stop(&self, host: String, port: u16) -> Result<(), String> {
+        if let Some(r) = &self.hub_stop {
+            return r.clone();
+        }
+        hub::run_hub_stop(host, port)
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    async fn hub_restart(
+        &self,
+        host: String,
+        port: u16,
+        project: Option<PathBuf>,
+        allow_remote: bool,
+    ) -> Result<(), String> {
+        if let Some(r) = &self.hub_restart {
+            return r.clone();
+        }
+        hub::run_hub_restart(host, port, project, allow_remote)
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    fn bind_check(&self, host: &str, allow_remote: bool) -> Result<(), String> {
+        if let Some(r) = &self.bind_check {
+            return r.clone();
+        }
+        crate::check_bind_allowed(host, allow_remote)
+    }
+
+    fn resolve_open_target(
+        &self,
+        host: Option<String>,
+        port: Option<u16>,
+    ) -> Result<(String, u16), String> {
+        if let Some(r) = &self.resolve_open {
+            return r.clone();
+        }
+        shell_attach::resolve_open_target(host, port)
+    }
+
+    async fn run_open(&self, host: String, port: u16) -> Result<(), String> {
+        if let Some(r) = &self.run_open {
+            return r.clone();
+        }
+        shell_attach::run_open(host, port).await
+    }
+
+    async fn file_ingest(
+        &self,
+        paths: Vec<String>,
+        service: String,
+        follow: bool,
+        host: &str,
+        port: u16,
+    ) -> Result<(), String> {
+        if let Some(r) = &self.file_ingest {
+            return r.clone();
+        }
+        file_ingest::run_ingest(paths, service, follow, host, port)
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    async fn query_logs(
+        &self,
+        base: &str,
+        cel: &str,
+        group_by: &[String],
+        limit: usize,
+        service: Option<&str>,
+    ) -> Result<String, String> {
+        if let Some(r) = &self.query {
+            return r.clone();
+        }
+        let client = mcp::HubClient::new(base);
+        if group_by.is_empty() {
+            client
+                .search_logs(service, Some(cel), Some(limit), None)
+                .await
+                .map(|r| serde_json::to_string_pretty(&r).unwrap_or_default())
+                .map_err(|e| e.to_string())
+        } else {
+            client
+                .aggregate_logs(service, Some(cel), group_by, Some(limit))
+                .await
+                .map(|r| serde_json::to_string_pretty(&r).unwrap_or_default())
+                .map_err(|e| e.to_string())
+        }
+    }
+
+    async fn query_sql(&self, base: &str, statement: &str) -> Result<String, String> {
+        if let Some(r) = &self.sql {
+            return r.clone();
+        }
+        let client = mcp::HubClient::new(base);
+        client
+            .query_sql(statement, Some(200))
+            .await
+            .map(|v| serde_json::to_string_pretty(&v).unwrap_or_default())
+            .map_err(|e| e.to_string())
+    }
+
+    async fn run_script(&self, path: &PathBuf, base: &str) -> Result<(), String> {
+        if let Some(r) = &self.run_script {
+            return r.clone();
+        }
+        script::run_script(path, base)
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    async fn run_tui(&self, host: &str, port: u16) -> Result<(), String> {
+        if let Some(r) = &self.run_tui {
+            return r.clone();
+        }
+        let _ = crate::keymap::Keymap::ensure_default_file();
+        let _ = crate::keymap::themes::ensure_default_themes();
+        tui::run_tui(host, port).await.map_err(|e| e.to_string())
+    }
+
+    fn shell_init(&self, shell: &str) -> Result<(), String> {
+        if let Some(r) = &self.shell_init {
+            return r.clone();
+        }
+        shell_attach::run_shell_init(shell)
+    }
+
+    async fn shell_forward(&self, tty_service: String) -> Result<(), String> {
+        if let Some(r) = &self.shell_forward {
+            return r.clone();
+        }
+        shell_forward::run_shell_forward(tty_service).await
+    }
+
+    async fn hook_forward(&self, source: agent_hooks::HookSource) -> Result<(), String> {
+        if let Some(r) = &self.hook_forward {
+            return r.clone();
+        }
+        agent_hooks::run_hook_forward(source).await;
+        Ok(())
+    }
+
+    async fn update_resume(
+        &self,
+        wait_pid: u32,
+        host: String,
+        port: u16,
+        project: PathBuf,
+        max_bytes: u64,
+        ttl_hours: u64,
+    ) -> Result<(), String> {
+        if let Some(r) = &self.update_resume {
+            return r.clone();
+        }
+        update::run_update_resume(wait_pid, host, port, project, max_bytes, ttl_hours).await
+    }
+
+    async fn run_pipe_mode(&self, cli: Cli) -> i32 {
+        if let Some(code) = self.run_pipe {
+            return code;
+        }
+        match run_pipe_mode(cli).await {
+            Ok(()) => 0,
+            Err(code) => code,
+        }
+    }
+}
+
+/// Dispatch parsed CLI. Returns process exit code (0 = success).
+pub async fn run_parsed(cli: Cli, deps: &CliDeps) -> i32 {
     match cli.command {
         Some(Commands::Mcp { action, hub }) => match action {
             None => {
-                init_tracing_stderr();
-
+                deps.maybe_init_tracing();
                 let base_url = mcp::hub_base_url(&hub.host, hub.port);
-                if let Err(err) = mcp::run_stdio(base_url).await {
-                    error!(error = %err, "MCP server failed");
-                    std::process::exit(1);
+                match deps.mcp_stdio(base_url).await {
+                    Ok(()) => 0,
+                    Err(err) => {
+                        error!(error = %err, "MCP server failed");
+                        1
+                    }
                 }
             }
-            Some(McpAction::Install) => {
-                std::process::exit(mcp::run_install());
-            }
-            Some(McpAction::Uninstall) => {
-                std::process::exit(mcp::run_uninstall());
-            }
+            Some(McpAction::Install) => deps.mcp_install(),
+            Some(McpAction::Uninstall) => deps.mcp_uninstall(),
         },
         Some(Commands::Attach {
             target,
             service,
             hub,
         }) => {
-            init_tracing_stderr();
+            deps.maybe_init_tracing();
             let result = match target {
-                None => shell_attach::run_attach(service, hub.host, hub.port).await,
+                None => deps.shell_attach(service, hub.host, hub.port).await,
                 Some(AttachTarget::Shell { service, hub }) => {
-                    shell_attach::run_attach(service, hub.host, hub.port).await
+                    deps.shell_attach(service, hub.host, hub.port).await
                 }
                 Some(AttachTarget::Browser { args }) => {
-                    browser_attach::run_browser_attach(args.into_opts()).await
+                    deps.browser_attach(args.into_opts()).await
                 }
                 Some(AttachTarget::Cursor { service, hub }) => {
-                    agent_hooks::run_attach_cursor(service, hub.host, hub.port).await
+                    deps.attach_cursor(service, hub.host, hub.port).await
                 }
                 Some(AttachTarget::Claude { service, hub }) => {
-                    agent_hooks::run_attach_claude(service, hub.host, hub.port).await
+                    deps.attach_claude(service, hub.host, hub.port).await
                 }
             };
-            if let Err(err) = result {
-                eprintln!("error: {err}");
-                std::process::exit(1);
+            match result {
+                Ok(()) => 0,
+                Err(err) => {
+                    eprintln!("error: {err}");
+                    1
+                }
             }
         }
         Some(Commands::Detach { target }) => {
-            init_tracing_stderr();
+            deps.maybe_init_tracing();
             let result = match target {
-                DetachTarget::Shell => shell_attach::run_detach(),
-                DetachTarget::Cursor => agent_hooks::run_detach_cursor(),
-                DetachTarget::Claude => agent_hooks::run_detach_claude(),
-                DetachTarget::All => agent_hooks::run_detach_all(),
+                DetachTarget::Shell => deps.detach_shell(),
+                DetachTarget::Cursor => deps.detach_cursor(),
+                DetachTarget::Claude => deps.detach_claude(),
+                DetachTarget::All => deps.detach_all(),
             };
-            if let Err(err) = result {
-                eprintln!("error: {err}");
-                std::process::exit(1);
+            match result {
+                Ok(()) => 0,
+                Err(err) => {
+                    eprintln!("error: {err}");
+                    1
+                }
             }
         }
         Some(Commands::Browser { action }) => {
-            // Alias for `mzp attach browser`
-            init_tracing_stderr();
+            deps.maybe_init_tracing();
             match action {
-                BrowserAction::Attach { args } => {
-                    if let Err(err) = browser_attach::run_browser_attach(args.into_opts()).await {
+                BrowserAction::Attach { args } => match deps.browser_attach(args.into_opts()).await {
+                    Ok(()) => 0,
+                    Err(err) => {
                         eprintln!("error: {err}");
-                        std::process::exit(1);
+                        1
                     }
-                }
+                },
             }
         }
         Some(Commands::Hub {
@@ -371,61 +800,170 @@ pub async fn run() {
             project,
             allow_remote,
         }) => {
-            init_tracing_stderr();
+            deps.maybe_init_tracing();
             if matches!(action, HubAction::Start | HubAction::Restart) {
-                ensure_bind_allowed(&hub.host, allow_remote);
+                if let Err(msg) = deps.bind_check(&hub.host, allow_remote) {
+                    eprintln!("{msg}");
+                    return 2;
+                }
             }
             let result = match action {
                 HubAction::Start => {
-                    hub::run_hub_start(hub.host, hub.port, project, allow_remote).await
+                    deps.hub_start(hub.host, hub.port, project, allow_remote)
+                        .await
                 }
-                HubAction::Stop => hub::run_hub_stop(hub.host, hub.port).await,
+                HubAction::Stop => deps.hub_stop(hub.host, hub.port).await,
                 HubAction::Restart => {
-                    hub::run_hub_restart(hub.host, hub.port, project, allow_remote).await
+                    deps.hub_restart(hub.host, hub.port, project, allow_remote)
+                        .await
                 }
             };
-            if let Err(err) = result {
-                eprintln!("error: {err}");
-                std::process::exit(1);
+            match result {
+                Ok(()) => 0,
+                Err(err) => {
+                    eprintln!("error: {err}");
+                    1
+                }
             }
         }
         Some(Commands::Open { host, port }) => {
-            init_tracing_stderr();
-            let (host, port) = match shell_attach::resolve_open_target(host, port) {
+            deps.maybe_init_tracing();
+            let (host, port) = match deps.resolve_open_target(host, port) {
                 Ok(t) => t,
                 Err(err) => {
                     eprintln!("error: {err}");
-                    std::process::exit(1);
+                    return 1;
                 }
             };
-            if let Err(err) = shell_attach::run_open(host, port).await {
-                eprintln!("error: {err}");
-                std::process::exit(1);
+            match deps.run_open(host, port).await {
+                Ok(()) => 0,
+                Err(err) => {
+                    eprintln!("error: {err}");
+                    1
+                }
             }
         }
-        Some(Commands::ShellInit { shell }) => {
-            // stdout is evaluated by the shell — keep quiet on stderr unless error
-            if let Err(err) = shell_attach::run_shell_init(&shell) {
-                eprintln!("error: {err}");
-                std::process::exit(1);
+        Some(Commands::Ingest {
+            paths,
+            service,
+            follow,
+            hub,
+        })
+        | Some(Commands::Files {
+            paths,
+            service,
+            follow,
+            hub,
+        }) => {
+            deps.maybe_init_tracing();
+            if paths.is_empty() {
+                eprintln!("error: provide at least one file path");
+                return 2;
+            }
+            let service = service.unwrap_or_else(default_ingest_service);
+            match deps
+                .file_ingest(paths, service, follow, &hub.host, hub.port)
+                .await
+            {
+                Ok(()) => 0,
+                Err(err) => {
+                    eprintln!("error: {err}");
+                    1
+                }
             }
         }
+        Some(Commands::Query {
+            cel,
+            group_by,
+            limit,
+            format,
+            service,
+            hub,
+        }) => {
+            deps.maybe_init_tracing();
+            let base = hub_http_base(&hub.host, hub.port);
+            match deps
+                .query_logs(
+                    &base,
+                    &cel,
+                    &group_by,
+                    limit,
+                    service.as_deref(),
+                )
+                .await
+            {
+                Ok(text) => {
+                    if format != "json" {
+                        eprintln!("warning: only json format is supported; printing json");
+                    }
+                    println!("{text}");
+                    0
+                }
+                Err(err) => {
+                    eprintln!("error: {err}");
+                    1
+                }
+            }
+        }
+        Some(Commands::Sql { statement, hub }) => {
+            deps.maybe_init_tracing();
+            let base = hub_http_base(&hub.host, hub.port);
+            match deps.query_sql(&base, &statement).await {
+                Ok(text) => {
+                    println!("{text}");
+                    0
+                }
+                Err(err) => {
+                    eprintln!("error: {err}");
+                    1
+                }
+            }
+        }
+        Some(Commands::Script { path, hub }) => {
+            deps.maybe_init_tracing();
+            let base = hub_http_base(&hub.host, hub.port);
+            match deps.run_script(&path, &base).await {
+                Ok(()) => 0,
+                Err(err) => {
+                    eprintln!("error: {err}");
+                    1
+                }
+            }
+        }
+        Some(Commands::Tui { hub }) => {
+            deps.maybe_init_tracing();
+            match deps.run_tui(&hub.host, hub.port).await {
+                Ok(()) => 0,
+                Err(err) => {
+                    eprintln!("error: {err}");
+                    1
+                }
+            }
+        }
+        Some(Commands::ShellInit { shell }) => match deps.shell_init(&shell) {
+            Ok(()) => 0,
+            Err(err) => {
+                eprintln!("error: {err}");
+                1
+            }
+        },
         Some(Commands::ShellForward { tty_service }) => {
-            init_tracing_stderr();
-            if let Err(err) = shell_forward::run_shell_forward(tty_service).await {
-                eprintln!("error: {err}");
-                std::process::exit(1);
+            deps.maybe_init_tracing();
+            match deps.shell_forward(tty_service).await {
+                Ok(()) => 0,
+                Err(err) => {
+                    eprintln!("error: {err}");
+                    1
+                }
             }
         }
         Some(Commands::HookForward { source }) => {
-            // stdout must stay empty (Claude injects SessionStart/UserPromptSubmit stdout)
-            init_tracing_stderr();
+            deps.maybe_init_tracing();
             let Some(src) = agent_hooks::HookSource::parse(&source) else {
-                // Fail-open for the agent loop
-                std::process::exit(0);
+                return 0;
             };
-            agent_hooks::run_hook_forward(src).await;
-            std::process::exit(0);
+            let _ = deps.hook_forward(src).await;
+            0
         }
         Some(Commands::UpdateResume {
             wait_pid,
@@ -434,21 +972,37 @@ pub async fn run() {
             max_bytes,
             ttl_hours,
         }) => {
-            init_tracing_stderr();
-            if let Err(err) = update::run_update_resume(
-                wait_pid, hub.host, hub.port, project, max_bytes, ttl_hours,
-            )
-            .await
+            deps.maybe_init_tracing();
+            match deps
+                .update_resume(wait_pid, hub.host, hub.port, project, max_bytes, ttl_hours)
+                .await
             {
-                eprintln!("error: {err}");
-                std::process::exit(1);
+                Ok(()) => 0,
+                Err(err) => {
+                    eprintln!("error: {err}");
+                    1
+                }
             }
         }
         None => {
-            init_tracing_stderr();
-            run_pipe_mode(cli).await;
+            deps.maybe_init_tracing();
+            deps.run_pipe_mode(cli).await
         }
     }
+}
+
+pub async fn run() {
+    let code = run_with_cli(Cli::parse(), &CliDeps::real()).await;
+    if code != 0 {
+        std::process::exit(code);
+    }
+}
+
+/// Parse-free entry for tests and `run()`.
+pub(crate) async fn run_with_cli(mut cli: Cli, deps: &CliDeps) -> i32 {
+    crate::util::ensure_rustls_crypto_provider();
+    apply_config_defaults(&mut cli);
+    run_parsed(cli, deps).await
 }
 
 #[cfg(test)]
@@ -505,6 +1059,49 @@ mod tests {
         assert!(help.contains("browser"));
         assert!(help.contains("hub"));
         assert!(help.contains("open"));
+        assert!(help.contains("ingest"));
+        assert!(help.contains("query"));
+        assert!(help.contains("sql"));
+        assert!(help.contains("tui"));
+    }
+
+    #[test]
+    fn clap_accepts_ingest_and_query() {
+        let ingest = Cli::try_parse_from([
+            "mizpah",
+            "ingest",
+            "/tmp/a.log",
+            "--service",
+            "api",
+            "--follow",
+        ])
+        .unwrap();
+        assert!(matches!(
+            ingest.command,
+            Some(Commands::Ingest {
+                follow: true,
+                ..
+            })
+        ));
+
+        let q = Cli::try_parse_from([
+            "mizpah",
+            "query",
+            r#"level == "error""#,
+            "--group-by",
+            "level",
+            "--limit",
+            "10",
+        ])
+        .unwrap();
+        match q.command {
+            Some(Commands::Query {
+                group_by,
+                limit: 10,
+                ..
+            }) => assert_eq!(group_by, vec!["level".to_string()]),
+            other => panic!("unexpected: {other:?}"),
+        }
     }
 
     #[test]
@@ -766,5 +1363,613 @@ mod tests {
     #[test]
     fn clap_rejects_invalid_shell_init_arity() {
         assert!(Cli::try_parse_from(["mizpah", "__shell-init"]).is_err());
+    }
+
+    fn test_deps() -> CliDeps {
+        CliDeps {
+            skip_tracing_init: true,
+            ..CliDeps::real()
+        }
+    }
+
+    fn parse(args: &[&str]) -> Cli {
+        Cli::try_parse_from(args).expect("parse")
+    }
+
+    #[test]
+    fn browser_attach_args_into_opts() {
+        let args = BrowserAttachArgs {
+            service: Some("web".into()),
+            hub: HubArgs {
+                host: "127.0.0.1".into(),
+                port: 3149,
+            },
+            cdp_port: 9223,
+            cdp_url: Some("ws://x".into()),
+            launch: true,
+            all_network: true,
+        };
+        let opts = args.into_opts();
+        assert_eq!(opts.service.as_deref(), Some("web"));
+        assert_eq!(opts.host, "127.0.0.1");
+        assert_eq!(opts.port, 3149);
+        assert_eq!(opts.cdp_port, 9223);
+        assert_eq!(opts.cdp_url.as_deref(), Some("ws://x"));
+        assert!(opts.launch);
+        assert!(opts.all_network);
+    }
+
+    #[test]
+    fn default_ingest_service_non_empty() {
+        let s = default_ingest_service();
+        assert!(!s.is_empty());
+    }
+
+    #[test]
+    fn apply_config_defaults_smoke() {
+        let _guard = crate::test_support::env_lock();
+        let dir = tempfile::tempdir().unwrap();
+        std::env::set_var("MIZPAH_CONFIG_DIR", dir.path());
+        let mut cli = parse(&["mizpah", "--no-open"]);
+        apply_config_defaults(&mut cli);
+        assert_eq!(cli.hub.host, "127.0.0.1");
+    }
+
+    #[tokio::test]
+    async fn run_parsed_mcp_stdio_ok_and_err() {
+        let deps = CliDeps {
+            skip_tracing_init: true,
+            mcp_stdio: Some(Ok(())),
+            ..test_deps()
+        };
+        let cli = parse(&["mizpah", "mcp"]);
+        assert_eq!(run_parsed(cli, &deps).await, 0);
+
+        let deps = CliDeps {
+            mcp_stdio: Some(Err("boom".into())),
+            ..test_deps()
+        };
+        assert_eq!(run_parsed(parse(&["mizpah", "mcp"]), &deps).await, 1);
+    }
+
+    #[tokio::test]
+    async fn run_parsed_mcp_install_uninstall() {
+        let deps = CliDeps {
+            mcp_install: Some(42),
+            ..test_deps()
+        };
+        assert_eq!(run_parsed(parse(&["mizpah", "mcp", "install"]), &deps).await, 42);
+
+        let deps = CliDeps {
+            mcp_uninstall: Some(7),
+            ..test_deps()
+        };
+        assert_eq!(run_parsed(parse(&["mizpah", "mcp", "uninstall"]), &deps).await, 7);
+    }
+
+    #[tokio::test]
+    async fn run_parsed_attach_all_targets() {
+        let ok = CliDeps {
+            shell_attach: Some(Ok(())),
+            browser_attach: Some(Ok(())),
+            attach_cursor: Some(Ok(())),
+            attach_claude: Some(Ok(())),
+            ..test_deps()
+        };
+        assert_eq!(
+            run_parsed(parse(&["mizpah", "attach"]), &ok).await,
+            0
+        );
+        assert_eq!(
+            run_parsed(parse(&["mizpah", "attach", "shell"]), &ok).await,
+            0
+        );
+        assert_eq!(
+            run_parsed(parse(&["mizpah", "attach", "browser"]), &ok).await,
+            0
+        );
+        assert_eq!(
+            run_parsed(parse(&["mizpah", "attach", "cursor"]), &ok).await,
+            0
+        );
+        assert_eq!(
+            run_parsed(parse(&["mizpah", "attach", "claude"]), &ok).await,
+            0
+        );
+
+        let err = CliDeps {
+            shell_attach: Some(Err("attach fail".into())),
+            ..test_deps()
+        };
+        assert_eq!(run_parsed(parse(&["mizpah", "attach"]), &err).await, 1);
+    }
+
+    #[tokio::test]
+    async fn run_parsed_detach_all_targets() {
+        let ok = CliDeps {
+            detach_shell: Some(Ok(())),
+            detach_cursor: Some(Ok(())),
+            detach_claude: Some(Ok(())),
+            detach_all: Some(Ok(())),
+            ..test_deps()
+        };
+        for args in [
+            vec!["mizpah", "detach"],
+            vec!["mizpah", "detach", "shell"],
+            vec!["mizpah", "detach", "cursor"],
+            vec!["mizpah", "detach", "claude"],
+            vec!["mizpah", "detach", "all"],
+        ] {
+            assert_eq!(run_parsed(parse(&args), &ok).await, 0, "{args:?}");
+        }
+
+        let err = CliDeps {
+            detach_all: Some(Err("detach fail".into())),
+            ..test_deps()
+        };
+        assert_eq!(run_parsed(parse(&["mizpah", "detach", "all"]), &err).await, 1);
+    }
+
+    #[tokio::test]
+    async fn run_parsed_browser_attach() {
+        let ok = CliDeps {
+            browser_attach: Some(Ok(())),
+            ..test_deps()
+        };
+        assert_eq!(
+            run_parsed(parse(&["mizpah", "browser", "attach"]), &ok).await,
+            0
+        );
+
+        let err = CliDeps {
+            browser_attach: Some(Err("browser fail".into())),
+            ..test_deps()
+        };
+        assert_eq!(
+            run_parsed(parse(&["mizpah", "browser", "attach"]), &err).await,
+            1
+        );
+    }
+
+    #[tokio::test]
+    async fn run_parsed_hub_actions() {
+        let ok = CliDeps {
+            hub_start: Some(Ok(())),
+            hub_stop: Some(Ok(())),
+            hub_restart: Some(Ok(())),
+            ..test_deps()
+        };
+        assert_eq!(run_parsed(parse(&["mizpah", "hub", "start"]), &ok).await, 0);
+        assert_eq!(run_parsed(parse(&["mizpah", "hub", "stop"]), &ok).await, 0);
+        assert_eq!(
+            run_parsed(parse(&["mizpah", "hub", "restart"]), &ok).await,
+            0
+        );
+
+        let err = CliDeps {
+            hub_stop: Some(Err("stop fail".into())),
+            ..test_deps()
+        };
+        assert_eq!(run_parsed(parse(&["mizpah", "hub", "stop"]), &err).await, 1);
+
+        let bind_err = CliDeps {
+            bind_check: Some(Err("bind denied".into())),
+            hub_stop: Some(Ok(())),
+            ..test_deps()
+        };
+        assert_eq!(
+            run_parsed(parse(&["mizpah", "hub", "start"]), &bind_err).await,
+            2
+        );
+        assert_eq!(
+            run_parsed(parse(&["mizpah", "hub", "restart"]), &bind_err).await,
+            2
+        );
+        // Stop does not run bind check.
+        assert_eq!(
+            run_parsed(parse(&["mizpah", "hub", "stop"]), &bind_err).await,
+            0
+        );
+    }
+
+    #[tokio::test]
+    async fn run_parsed_open() {
+        let ok = CliDeps {
+            resolve_open: Some(Ok(("127.0.0.1".into(), 3149))),
+            run_open: Some(Ok(())),
+            ..test_deps()
+        };
+        assert_eq!(run_parsed(parse(&["mizpah", "open"]), &ok).await, 0);
+
+        let resolve_err = CliDeps {
+            resolve_open: Some(Err("no state".into())),
+            ..test_deps()
+        };
+        assert_eq!(run_parsed(parse(&["mizpah", "open"]), &resolve_err).await, 1);
+
+        let open_err = CliDeps {
+            resolve_open: Some(Ok(("127.0.0.1".into(), 3149))),
+            run_open: Some(Err("hub down".into())),
+            ..test_deps()
+        };
+        assert_eq!(run_parsed(parse(&["mizpah", "open"]), &open_err).await, 1);
+    }
+
+    #[tokio::test]
+    async fn run_parsed_ingest_and_files() {
+        let ok = CliDeps {
+            file_ingest: Some(Ok(())),
+            ..test_deps()
+        };
+        assert_eq!(
+            run_parsed(parse(&["mizpah", "ingest", "/tmp/a.log"]), &ok).await,
+            0
+        );
+        assert_eq!(
+            run_parsed(parse(&["mizpah", "files", "/tmp/a.log"]), &ok).await,
+            0
+        );
+
+        let empty = test_deps();
+        assert_eq!(run_parsed(parse(&["mizpah", "ingest"]), &empty).await, 2);
+        assert_eq!(run_parsed(parse(&["mizpah", "files"]), &empty).await, 2);
+
+        let err = CliDeps {
+            file_ingest: Some(Err("ingest fail".into())),
+            ..test_deps()
+        };
+        assert_eq!(
+            run_parsed(parse(&["mizpah", "ingest", "/tmp/a.log"]), &err).await,
+            1
+        );
+    }
+
+    #[tokio::test]
+    async fn run_parsed_query_and_sql() {
+        let deps = CliDeps {
+            query: Some(Ok(r#"{"entries":[]}"#.into())),
+            sql: Some(Ok(r#"{"columns":[]}"#.into())),
+            ..test_deps()
+        };
+        assert_eq!(
+            run_parsed(parse(&["mizpah", "query", "true"]), &deps).await,
+            0
+        );
+        assert_eq!(
+            run_parsed(
+                parse(&[
+                    "mizpah",
+                    "query",
+                    "true",
+                    "--group-by",
+                    "level",
+                    "--format",
+                    "text"
+                ]),
+                &deps
+            )
+            .await,
+            0
+        );
+        assert_eq!(
+            run_parsed(parse(&["mizpah", "sql", "SELECT 1"]), &deps).await,
+            0
+        );
+
+        let err = CliDeps {
+            query: Some(Err("query fail".into())),
+            ..test_deps()
+        };
+        assert_eq!(
+            run_parsed(parse(&["mizpah", "query", "true"]), &err).await,
+            1
+        );
+    }
+
+    #[tokio::test]
+    async fn run_parsed_query_sql_live_hub() {
+        let (base, _store) = crate::test_support::spawn_test_hub().await;
+        let port: u16 = base
+            .rsplit(':')
+            .next()
+            .unwrap()
+            .parse()
+            .unwrap();
+        let deps = test_deps();
+        assert_eq!(
+            run_parsed(
+                parse(&["mizpah", "query", "true", "--host", "127.0.0.1", "-p", &port.to_string()]),
+                &deps
+            )
+            .await,
+            0
+        );
+        assert_eq!(
+            run_parsed(
+                parse(&[
+                    "mizpah",
+                    "query",
+                    "true",
+                    "--group-by",
+                    "level",
+                    "--host",
+                    "127.0.0.1",
+                    "-p",
+                    &port.to_string()
+                ]),
+                &deps
+            )
+            .await,
+            0
+        );
+        assert_eq!(
+            run_parsed(
+                parse(&["mizpah", "sql", "SELECT 1", "--host", "127.0.0.1", "-p", &port.to_string()]),
+                &deps
+            )
+            .await,
+            0
+        );
+    }
+
+    #[tokio::test]
+    async fn run_parsed_script_tui_and_internal() {
+        let ok = CliDeps {
+            run_script: Some(Ok(())),
+            run_tui: Some(Ok(())),
+            shell_init: Some(Ok(())),
+            shell_forward: Some(Ok(())),
+            hook_forward: Some(Ok(())),
+            update_resume: Some(Ok(())),
+            ..test_deps()
+        };
+        assert_eq!(
+            run_parsed(parse(&["mizpah", "script", "/tmp/x.mzp"]), &ok).await,
+            0
+        );
+        assert_eq!(run_parsed(parse(&["mizpah", "tui"]), &ok).await, 0);
+        assert_eq!(
+            run_parsed(parse(&["mizpah", "__shell-init", "zsh"]), &ok).await,
+            0
+        );
+        assert_eq!(
+            run_parsed(
+                parse(&["mizpah", "__shell-forward", "--tty-service", "ttys001"]),
+                &ok
+            )
+            .await,
+            0
+        );
+        assert_eq!(
+            run_parsed(
+                parse(&["mizpah", "__hook-forward", "--source", "cursor"]),
+                &ok
+            )
+            .await,
+            0
+        );
+        assert_eq!(
+            run_parsed(
+                parse(&[
+                    "mizpah",
+                    "update-resume",
+                    "--wait-pid",
+                    "1",
+                    "--project",
+                    "/tmp/p"
+                ]),
+                &ok
+            )
+            .await,
+            0
+        );
+
+        let hook_bad = test_deps();
+        assert_eq!(
+            run_parsed(
+                parse(&["mizpah", "__hook-forward", "--source", "unknown"]),
+                &hook_bad
+            )
+            .await,
+            0
+        );
+
+        let err = CliDeps {
+            run_script: Some(Err("script fail".into())),
+            run_tui: Some(Err("tui fail".into())),
+            shell_init: Some(Err("init fail".into())),
+            shell_forward: Some(Err("fwd fail".into())),
+            update_resume: Some(Err("resume fail".into())),
+            ..test_deps()
+        };
+        assert_eq!(
+            run_parsed(parse(&["mizpah", "script", "/tmp/x.mzp"]), &err).await,
+            1
+        );
+        assert_eq!(run_parsed(parse(&["mizpah", "tui"]), &err).await, 1);
+        assert_eq!(
+            run_parsed(parse(&["mizpah", "__shell-init", "zsh"]), &err).await,
+            1
+        );
+        assert_eq!(
+            run_parsed(
+                parse(&["mizpah", "__shell-forward", "--tty-service", "ttys001"]),
+                &err
+            )
+            .await,
+            1
+        );
+        assert_eq!(
+            run_parsed(
+                parse(&[
+                    "mizpah",
+                    "update-resume",
+                    "--wait-pid",
+                    "1",
+                    "--project",
+                    "/tmp/p"
+                ]),
+                &err
+            )
+            .await,
+            1
+        );
+    }
+
+    #[tokio::test]
+    async fn run_parsed_pipe_mode_delegates() {
+        let deps = CliDeps {
+            run_pipe: Some(0),
+            ..test_deps()
+        };
+        assert_eq!(run_parsed(parse(&["mizpah", "--no-open"]), &deps).await, 0);
+
+        let deps = CliDeps {
+            run_pipe: Some(3),
+            ..test_deps()
+        };
+        assert_eq!(run_parsed(parse(&["mizpah", "--no-open"]), &deps).await, 3);
+    }
+
+    #[tokio::test]
+    async fn run_parsed_real_deps_fast_failures() {
+        let _guard = crate::test_support::env_lock();
+        let dir = tempfile::tempdir().unwrap();
+        std::env::set_var("MIZPAH_CONFIG_DIR", dir.path());
+        std::env::set_var("HOME", dir.path());
+
+        let deps = CliDeps {
+            skip_tracing_init: true,
+            ..CliDeps::real()
+        };
+
+        // Hit real CliDeps delegations that fail quickly without hanging.
+        for args in [
+            vec!["mizpah", "detach"],
+            vec!["mizpah", "detach", "shell"],
+            vec!["mizpah", "detach", "cursor"],
+            vec!["mizpah", "detach", "claude"],
+            vec!["mizpah", "detach", "all"],
+        ] {
+            assert!(run_parsed(parse(&args), &deps).await <= 1, "{args:?}");
+        }
+        assert_eq!(
+            run_parsed(parse(&["mizpah", "__shell-init", "zsh"]), &deps).await,
+            0
+        );
+        assert_eq!(
+            run_parsed(parse(&["mizpah", "__shell-init", "bash"]), &deps).await,
+            0
+        );
+        assert!(
+            run_parsed(parse(&["mizpah", "hub", "stop", "-p", "1"]), &deps)
+                .await
+                <= 1
+        );
+        assert_eq!(
+            run_parsed(parse(&["mizpah", "ingest", "/nonexistent/file.log"]), &deps).await,
+            1
+        );
+        assert_eq!(
+            run_parsed(parse(&["mizpah", "query", "true", "-p", "1"]), &deps).await,
+            1
+        );
+        assert_eq!(
+            run_parsed(parse(&["mizpah", "sql", "SELECT 1", "-p", "1"]), &deps).await,
+            1
+        );
+        assert_eq!(
+            run_parsed(parse(&["mizpah", "script", "/nonexistent.mzp"]), &deps).await,
+            1
+        );
+        assert!(
+            run_parsed(parse(&["mizpah", "open", "-p", "1"]), &deps)
+                .await
+                <= 1
+        );
+        assert!(
+            run_parsed(parse(&["mizpah", "attach", "-p", "59999"]), &deps)
+                .await
+                <= 1
+        );
+        assert!(
+            run_parsed(parse(&["mizpah", "attach", "cursor", "-p", "59999"]), &deps)
+                .await
+                <= 1
+        );
+        assert!(
+            run_parsed(parse(&["mizpah", "attach", "claude", "-p", "59999"]), &deps)
+                .await
+                <= 1
+        );
+        assert!(
+            run_parsed(parse(&["mizpah", "attach", "browser", "-p", "59999"]), &deps)
+                .await
+                <= 1
+        );
+        assert!(
+            run_parsed(parse(&["mizpah", "browser", "attach", "-p", "59999"]), &deps)
+                .await
+                <= 1
+        );
+        assert_eq!(
+            run_parsed(
+                parse(&["mizpah", "__hook-forward", "--source", "cursor"]),
+                &deps
+            )
+            .await,
+            0
+        );
+        assert_eq!(
+            run_parsed(
+                parse(&["mizpah", "__hook-forward", "--source", "claude"]),
+                &deps
+            )
+            .await,
+            0
+        );
+        // Real installer entry points (temp HOME — no user config mutation).
+        assert!(run_parsed(parse(&["mizpah", "mcp", "install"]), &deps).await <= 1);
+        assert!(run_parsed(parse(&["mizpah", "mcp", "uninstall"]), &deps).await <= 1);
+    }
+
+    #[tokio::test]
+    async fn run_parsed_sql_error_mock() {
+        let deps = CliDeps {
+            sql: Some(Err("sql fail".into())),
+            ..test_deps()
+        };
+        assert_eq!(
+            run_parsed(parse(&["mizpah", "sql", "SELECT 1"]), &deps).await,
+            1
+        );
+    }
+
+    #[tokio::test]
+    async fn run_parsed_hub_start_restart_errors() {
+        let err = CliDeps {
+            hub_start: Some(Err("start fail".into())),
+            hub_restart: Some(Err("restart fail".into())),
+            ..test_deps()
+        };
+        assert_eq!(run_parsed(parse(&["mizpah", "hub", "start"]), &err).await, 1);
+        assert_eq!(
+            run_parsed(parse(&["mizpah", "hub", "restart"]), &err).await,
+            1
+        );
+    }
+
+    #[tokio::test]
+    async fn run_with_cli_applies_config_and_dispatches() {
+        let _guard = crate::test_support::env_lock();
+        let dir = tempfile::tempdir().unwrap();
+        std::env::set_var("MIZPAH_CONFIG_DIR", dir.path());
+        let deps = CliDeps {
+            run_pipe: Some(0),
+            skip_tracing_init: true,
+            ..CliDeps::real()
+        };
+        let cli = parse(&["mizpah", "--no-open"]);
+        assert_eq!(run_with_cli(cli, &deps).await, 0);
     }
 }

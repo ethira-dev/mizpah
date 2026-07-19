@@ -1,0 +1,33 @@
+{
+    "traefik_log": {
+        "title": "Traefik",
+        "description": "Traefik access JSON logs",
+        "file-type": "json",
+        "json": true,
+        "timestamp-field": "time",
+        "line-format": [
+            {
+                "field": "time"
+            },
+            " ",
+            {
+                "field": "RequestMethod"
+            },
+            " ",
+            {
+                "field": "RequestPath"
+            },
+            " ",
+            {
+                "field": "DownstreamStatus"
+            }
+        ],
+        "url": "https://doc.traefik.io/traefik/observability/access-logs/",
+        "body-field": "RequestPath",
+        "sample": [
+            {
+                "line": "{\"ClientAddr\":\"1.2.3.4:50000\",\"ClientHost\":\"1.2.3.4\",\"DownstreamStatus\":200,\"Duration\":1234567,\"OriginStatus\":200,\"RequestHost\":\"example.com\",\"RequestMethod\":\"GET\",\"RequestPath\":\"/\",\"RequestProtocol\":\"HTTP/1.1\",\"RouterName\":\"web@file\",\"ServiceName\":\"svc@file\",\"StartUTC\":\"2020-01-01T00:00:00Z\",\"time\":\"2020-01-01T00:00:00Z\"}"
+            }
+        ]
+    }
+}

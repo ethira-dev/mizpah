@@ -1,0 +1,33 @@
+{
+    "carbon_black_log": {
+        "title": "Carbon Black",
+        "description": "VMware Carbon Black Cloud / CBC events",
+        "file-type": "json",
+        "json": true,
+        "timestamp-field": "device_timestamp",
+        "line-format": [
+            {
+                "field": "device_timestamp"
+            },
+            " ",
+            {
+                "field": "type"
+            },
+            " ",
+            {
+                "field": "device_name"
+            },
+            " ",
+            {
+                "field": "process_name"
+            }
+        ],
+        "url": "https://www.vmware.com/products/carbon-black-cloud.html",
+        "body-field": "type",
+        "sample": [
+            {
+                "line": "{\"type\":\"endpoint.event.procstart\",\"device_timestamp\":\"2020-01-01T00:00:00.000Z\",\"device_name\":\"WORKSTATION01\",\"device_id\":\"12345\",\"process_name\":\"powershell.exe\",\"process_guid\":\"ABC123\",\"alert_id\":null,\"severity\":\"INFO\",\"org_key\":\"ABCD1234\"}"
+            }
+        ]
+    }
+}

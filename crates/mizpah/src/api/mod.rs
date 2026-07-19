@@ -31,6 +31,22 @@ pub fn router(state: AppState) -> Router {
         .route("/api/properties", get(routes::list_properties))
         .route("/api/stats", get(routes::stats))
         .route("/api/activity", get(routes::activity))
+        .route(
+            "/api/aggregate",
+            get(routes::aggregate).post(routes::aggregate_post),
+        )
+        .route("/api/nav/level", get(routes::nav_level))
+        .route("/api/traces", get(routes::list_traces))
+        .route("/api/trace/{opid}", get(routes::get_trace))
+        .route(
+            "/api/bookmarks",
+            get(routes::list_bookmarks).post(routes::set_bookmark),
+        )
+        .route("/api/bookmarks/tag", post(routes::tag_logs))
+        .route("/api/spectrogram", get(routes::spectrogram))
+        .route("/api/sql", post(routes::run_sql))
+        .route("/api/keymap", get(routes::get_keymap))
+        .route("/api/themes", get(routes::get_themes))
         .route("/api/investigate", post(routes::investigate))
         .route(
             "/api/update",
@@ -405,5 +421,119 @@ mod tests {
             .unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
         assert_eq!(store.stats().await.count, 1);
+    }
+
+    #[tokio::test]
+    async fn aggregate_nav_bookmarks_spectrogram() {
+        let store = Arc::new(Store::new(1_000_000));
+        store
+            .push_line("api", r#"{"level":"error","msg":"a","traceId":"t1"}"#)
+            .await;
+        store
+            .push_line("api", r#"{"level":"info","msg":"b","traceId":"t1"}"#)
+            .await;
+        store
+            .push_line("web", r#"{"level":"warn","msg":"c"}"#)
+            .await;
+        let entries = {
+            let (e, _) = store
+                .query_logs(None, None, 10, &CompiledQuery::MatchAll, None, None)
+                .await;
+            e
+        };
+        let err_id = entries
+            .iter()
+            .find(|e| e.data.get("level") == Some(&json!("error")))
+            .map(|e| e.id)
+            .unwrap();
+        store
+            .set_bookmark(err_id, Some(true), None, None)
+            .await
+            .unwrap();
+
+        let app = router(test_state(Arc::clone(&store)));
+
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/api/aggregate?groupBy=level&limit=10")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let parsed: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert!(parsed["rows"].as_array().unwrap().len() >= 2);
+
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/aggregate")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({"groupBy":["service"],"limit":10}).to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri(format!("/api/nav/level?fromId={err_id}&direction=next&levels=error,warn"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/api/bookmarks")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let parsed: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(parsed["bookmarks"].as_array().unwrap().len(), 1);
+
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/api/spectrogram?field=level&timeBuckets=6")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let parsed: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert!(parsed["valueLabels"].as_array().is_some());
+        assert!(parsed["counts"].as_array().is_some());
     }
 }

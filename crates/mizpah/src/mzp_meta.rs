@@ -54,3 +54,37 @@ fn exe_string() -> String {
         .map(|p| p.display().to_string())
         .unwrap_or_default()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn capture_and_with_cwd() {
+        let meta = MzpMeta::capture();
+        assert!(!meta.exe.is_empty());
+        assert!(meta.pid > 0);
+        let overridden = meta.with_cwd("/tmp/test-cwd");
+        assert_eq!(overridden.cwd, "/tmp/test-cwd");
+    }
+
+    #[test]
+    fn user_falls_back_to_logname() {
+        let _guard = crate::test_support::env_lock();
+        let old_user = std::env::var_os("USER");
+        let old_logname = std::env::var_os("LOGNAME");
+        std::env::remove_var("USER");
+        std::env::set_var("LOGNAME", "logname-user");
+        assert_eq!(user_string(), "logname-user");
+        std::env::remove_var("LOGNAME");
+        assert_eq!(user_string(), "");
+        match old_user {
+            Some(v) => std::env::set_var("USER", v),
+            None => std::env::remove_var("USER"),
+        }
+        match old_logname {
+            Some(v) => std::env::set_var("LOGNAME", v),
+            None => std::env::remove_var("LOGNAME"),
+        }
+    }
+}

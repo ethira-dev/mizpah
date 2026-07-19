@@ -1,0 +1,33 @@
+{
+    "wazuh_log": {
+        "title": "Wazuh",
+        "description": "Wazuh / OSSEC alert JSON",
+        "file-type": "json",
+        "json": true,
+        "timestamp-field": "timestamp",
+        "line-format": [
+            {
+                "field": "timestamp"
+            },
+            " ",
+            {
+                "field": "agent"
+            },
+            " ",
+            {
+                "field": "rule"
+            },
+            " ",
+            {
+                "field": "full_log"
+            }
+        ],
+        "url": "https://documentation.wazuh.com/",
+        "body-field": "full_log",
+        "sample": [
+            {
+                "line": "{\"timestamp\":\"2020-01-01T00:00:00.000+0000\",\"rule\":{\"level\":5,\"description\":\"SSHD authentication success\",\"id\":\"5715\"},\"agent\":{\"id\":\"001\",\"name\":\"web-01\"},\"manager\":{\"name\":\"wazuh-manager\"},\"full_log\":\"Jan 1 00:00:00 web-01 sshd[1]: Accepted password for alice\",\"decoder\":{\"name\":\"sshd\"},\"location\":\"/var/log/auth.log\"}"
+            }
+        ]
+    }
+}

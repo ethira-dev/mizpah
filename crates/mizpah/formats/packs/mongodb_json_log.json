@@ -1,0 +1,363 @@
+{
+    "mongodb_json_log": {
+        "title": "MongoDB log",
+        "url": "https://www.mongodb.com/docs/manual/reference/log-messages/",
+        "description": "MongoDB structured JSON log format (4.4+)",
+        "file-type": "json",
+        "level-field": "s",
+        "body-field": "msg",
+        "timestamp-field": "t/$date",
+        "duration-field": "attr/durationMillis",
+        "duration-divisor": 1000,
+        "line-format": [
+            {
+                "field": "__timestamp__"
+            },
+            " ",
+            {
+                "field": "s",
+                "min-width": 1
+            },
+            " ",
+            {
+                "field": "c",
+                "min-width": 8,
+                "auto-width": true
+            },
+            " [",
+            {
+                "field": "ctx",
+                "min-width": 12,
+                "align": "right"
+            },
+            {
+                "prefix": "@",
+                "field": "attr/remote",
+                "default-value": "",
+                "auto-width": true
+            },
+            "] ",
+            {
+                "field": "msg"
+            },
+            {
+                "prefix": " \u2014 ",
+                "field": "attr/ns",
+                "default-value": ""
+            },
+            {
+                "prefix": ".",
+                "field": "attr/queryHash",
+                "default-value": ""
+            },
+            {
+                "prefix": " deleted ",
+                "field": "attr/ndeleted",
+                "default-value": "",
+                "suffix": " doc(s) using"
+            },
+            {
+                "prefix": " inserted ",
+                "field": "attr/ninserted",
+                "default-value": "",
+                "suffix": " doc(s) using"
+            },
+            {
+                "prefix": " got ",
+                "field": "attr/nreturned",
+                "default-value": "",
+                "suffix": " doc(s)"
+            },
+            {
+                "prefix": " in ",
+                "field": "__duration__",
+                "default-value": ""
+            },
+            {
+                "prefix": " (",
+                "field": "attr/planSummary",
+                "default-value": ""
+            },
+            {
+                "prefix": " examined ",
+                "field": "attr/keysExamined",
+                "default-value": ""
+            },
+            {
+                "prefix": "/",
+                "field": "attr/docsExamined",
+                "suffix": " keys/docs matching",
+                "default-value": ""
+            },
+            {
+                "prefix": " ",
+                "field": "attr/command/query",
+                "default-value": "",
+                "suffix": ")"
+            },
+            {
+                "prefix": " ",
+                "field": "attr/command/filter",
+                "default-value": "",
+                "suffix": ")"
+            },
+            {
+                "prefix": " \u2190 ",
+                "field": "attr/originatingCommand/filter",
+                "default-value": "",
+                "suffix": ")"
+            },
+            {
+                "prefix": " (",
+                "field": "attr/principalName",
+                "default-value": "",
+                "suffix": "@"
+            },
+            {
+                "field": "attr/authenticationDatabase",
+                "suffix": ")",
+                "default-value": ""
+            },
+            {
+                "prefix": "  ",
+                "field": "attr/doc",
+                "default-value": ""
+            },
+            {
+                "prefix": "  \u2014 ",
+                "field": "attr/message/msg",
+                "default-value": ""
+            },
+            {
+                "prefix": " UPDATE.",
+                "field": "attr/command/update",
+                "default-value": ""
+            },
+            {
+                "prefix": " INSERT.",
+                "field": "attr/command/insert",
+                "default-value": ""
+            },
+            {
+                "prefix": " DELETE.",
+                "field": "attr/command/delete",
+                "default-value": ""
+            },
+            {
+                "prefix": " deleted ",
+                "field": "attr/numDeleted",
+                "default-value": "",
+                "suffix": " docs from"
+            },
+            {
+                "prefix": " ",
+                "field": "attr/namespace",
+                "default-value": ""
+            }
+        ],
+        "level": {
+            "fatal": "F",
+            "error": "E",
+            "warning": "W",
+            "info": "I",
+            "debug": "D1",
+            "debug2": "D2",
+            "debug3": "D3",
+            "debug4": "D4",
+            "debug5": "D5"
+        },
+        "opid": {
+            "source": "from-whole-msg",
+            "description": {
+                "find": {
+                    "format": [
+                        {
+                            "field": "attr/ns"
+                        }
+                    ]
+                }
+            }
+        },
+        "value": {
+            "s": {
+                "kind": "string",
+                "identifier": true,
+                "foreign-key": true
+            },
+            "c": {
+                "kind": "string",
+                "identifier": true,
+                "description": "The component category of the log message"
+            },
+            "id": {
+                "kind": "integer",
+                "identifier": true,
+                "description": "The stable numeric identifier for the log statement",
+                "hidden": true
+            },
+            "ctx": {
+                "kind": "string",
+                "identifier": true,
+                "description": "The thread or connection context"
+            },
+            "msg": {
+                "kind": "string",
+                "description": "The log message body"
+            },
+            "attr": {
+                "kind": "json",
+                "hidden": true,
+                "description": "Additional attributes for the log message"
+            },
+            "attr/authenticationDatabase": {
+                "kind": "string",
+                "description": "The authenticating database for a connection"
+            },
+            "attr/command/delete": {
+                "kind": "string",
+                "description": "The collection for a delete command",
+                "highlights": {
+                    "delete": {
+                        "base-style": {
+                            "color": "Red"
+                        }
+                    }
+                }
+            },
+            "attr/command/filter": {
+                "kind": "json",
+                "description": "The filter of the command for a query"
+            },
+            "attr/command/insert": {
+                "kind": "string",
+                "description": "The collection for an insert command",
+                "highlights": {
+                    "insert": {
+                        "base-style": {
+                            "color": "yellow"
+                        }
+                    }
+                }
+            },
+            "attr/command/query": {
+                "kind": "json"
+            },
+            "attr/command/update": {
+                "kind": "string",
+                "description": "The collection for an update command",
+                "highlights": {
+                    "update": {
+                        "base-style": {
+                            "color": "yellow"
+                        }
+                    }
+                }
+            },
+            "attr/doc": {
+                "kind": "json",
+                "description": "The document for a command"
+            },
+            "attr/docsExamined": {
+                "kind": "integer"
+            },
+            "attr/errMsg": {
+                "kind": "string",
+                "highlights": {
+                    "error": {
+                        "base-style": {
+                            "color": "Red"
+                        }
+                    }
+                }
+            },
+            "attr/errName": {
+                "kind": "string",
+                "highlights": {
+                    "error": {
+                        "base-style": {
+                            "color": "Red"
+                        }
+                    }
+                }
+            },
+            "attr/error": {
+                "kind": "any",
+                "highlights": {
+                    "error": {
+                        "base-style": {
+                            "color": "Red"
+                        }
+                    }
+                }
+            },
+            "attr/durationMillis": {
+                "kind": "integer",
+                "description": "The duration of the operation in milliseconds"
+            },
+            "attr/keysExamined": {
+                "kind": "integer"
+            },
+            "attr/message/msg": {
+                "kind": "string",
+                "description": "The wrapped log message"
+            },
+            "attr/namespace": {
+                "kind": "string",
+                "description": "The namespace for a query",
+                "identifier": true
+            },
+            "attr/ndeleted": {
+                "kind": "integer",
+                "description": "The number of documents deleted"
+            },
+            "attr/ninserted": {
+                "kind": "integer",
+                "description": "The number of documents inserted"
+            },
+            "attr/ns" : {
+                "kind": "string",
+                "description": "The namespace for a query"
+            },
+            "attr/numDeleted": {
+                "kind": "integer",
+                "description": "The number of documents deleted"
+            },
+            "attr/nreturned": {
+                "kind": "integer",
+                "description": "The number of documents returned by the query"
+            },
+            "attr/originatingCommand/filter": {
+                "kind": "json",
+                "description": "The filter of the originating command for a query"
+            },
+            "attr/planSummary": {
+                "kind": "string",
+                "description": "The plan summary for a query"
+            },
+            "attr/principalName": {
+                "kind": "string",
+                "description": "The principal name for a connection"
+            },
+            "attr/storage/data/bytesRead": {
+                "kind": "integer"
+            },
+            "attr/storage/data/timeReadingMicros": {
+                "kind": "integer"
+            },
+            "attr/queryHash": {
+                "kind": "string",
+                "description": "The hash for a query",
+                "identifier": true
+            },
+            "attr/remote": {
+                "kind": "string",
+                "description": "The remote address for a connection",
+                "identifier": true
+            },
+            "t": {
+                "kind": "json",
+                "hidden": true
+            }
+        }
+    }
+}

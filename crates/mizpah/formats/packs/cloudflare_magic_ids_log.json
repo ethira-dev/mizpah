@@ -1,0 +1,30 @@
+{
+    "cloudflare_magic_ids_log": {
+        "title": "Cloudflare Magic IDS",
+        "description": "Cloudflare Logpush Magic IDS",
+        "file-type": "json",
+        "json": true,
+        "timestamp-field": "Timestamp",
+        "line-format": [
+            {
+                "field": "Timestamp"
+            },
+            " ",
+            {
+                "field": "Action"
+            },
+            " ",
+            {
+                "field": "SignatureID"
+            }
+        ],
+        "url": "https://developers.cloudflare.com/logs/logpush/",
+        "level-field": "Action",
+        "body-field": "SignatureID",
+        "sample": [
+            {
+                "line": "{\"Timestamp\":\"2020-01-01T00:00:00Z\",\"Action\":\"block\",\"SignatureID\":\"1000001\",\"SignatureMessage\":\"ET SCAN\",\"SourceIP\":\"1.2.3.4\",\"DestinationIP\":\"10.0.0.5\",\"SourcePort\":12345,\"DestinationPort\":22}"
+            }
+        ]
+    }
+}

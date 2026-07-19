@@ -1,0 +1,35 @@
+{
+    "zerolog_log": {
+        "title": "Zerolog console",
+        "description": "rs/zerolog ConsoleWriter lines (timestamp LEVEL message)",
+        "url": "https://github.com/rs/zerolog",
+        "regex": {
+            "clock": {
+                "pattern": "^(?<timestamp>\\d{1,2}:\\d{2}(?:AM|PM))\\s+(?<level>TRC|DBG|INF|WRN|ERR|FTL|PAN)\\s+(?<body>.+)$"
+            },
+            "iso": {
+                "pattern": "^(?<timestamp>\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{2}:\\d{2})?)\\s+(?<level>TRC|DBG|INF|WRN|ERR|FTL|PAN)\\s+(?<body>.+)$"
+            }
+        },
+        "level-field": "level",
+        "body-field": "body",
+        "timestamp-field": "timestamp",
+        "level": {
+            "trace": "^(?:TRC|trace)$",
+            "debug": "^(?:DBG|debug)$",
+            "info": "^(?:INF|info)$",
+            "warn": "^(?:WRN|warn)$",
+            "error": "^(?:ERR|error)$",
+            "fatal": "^(?:FTL|fatal)$",
+            "critical": "^(?:PAN|panic)$"
+        },
+        "sample": [
+            {
+                "line": "3:04PM INF server listening"
+            },
+            {
+                "line": "2020-01-01T00:00:00Z ERR request failed"
+            }
+        ]
+    }
+}

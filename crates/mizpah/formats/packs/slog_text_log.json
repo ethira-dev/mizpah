@@ -1,0 +1,29 @@
+{
+    "slog_text_log": {
+        "title": "Go slog text",
+        "description": "Go log/slog TextHandler lines (time= level=INFO msg=…)",
+        "url": "https://pkg.go.dev/log/slog",
+        "regex": {
+            "std": {
+                "pattern": "^time=(?<timestamp>\\S+)\\s+level=(?<level>DEBUG|INFO|WARN|ERROR)\\s+(?:source=(?<source>\\S+)\\s+)?msg=\"(?<body>(?:\\\\.|[^\"\\\\])*)\".*$"
+            }
+        },
+        "level-field": "level",
+        "body-field": "body",
+        "timestamp-field": "timestamp",
+        "level": {
+            "debug": "DEBUG",
+            "info": "INFO",
+            "warn": "WARN",
+            "error": "ERROR"
+        },
+        "sample": [
+            {
+                "line": "time=2020-01-01T00:00:00.000Z level=INFO msg=\"server listening\""
+            },
+            {
+                "line": "time=2020-01-01T00:00:00.000Z level=ERROR source=/app/main.go:42 msg=\"request failed\""
+            }
+        ]
+    }
+}

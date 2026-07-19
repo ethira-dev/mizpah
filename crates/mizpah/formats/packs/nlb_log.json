@@ -1,0 +1,17 @@
+{
+    "nlb_log": {
+        "title": "AWS NLB",
+        "description": "Network Load Balancer TLS access logs",
+        "regex": {
+            "std": {
+                "pattern": "^(?<type>tls) (?<timestamp>\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z) (?<elb>\\S+) (?<client_ip>[\\w.:-]+):(?<client_port>\\d+) (?<destination_ip>[\\w.:-]+):(?<destination_port>\\d+) (?<connection_time>[\\d.-]+) (?<tls_handshake_time>[\\d.-]+) (?<received_bytes>\\d+) (?<sent_bytes>\\d+) (?<incoming_tls_alert>-|\\d+) (?<chosen_cert_arn>\\S+) (?<chosen_cert_serial>\\S+) (?<tls_cipher>\\S+) (?<tls_protocol_version>\\S+) (?<tls_named_group>-|\\S+) (?<domain_name>-|\\S+) (?<alpn_fe_protocol>-|\\S+) (?<alpn_be_protocol>-|\\S+) (?<alpn_client_preference_list>-|\\S+) (?<tls_connection_creation_time>\\S+)$"
+            }
+        },
+        "sample": [
+            {
+                "line": "tls 2020-01-01T00:00:00Z net/prod/abc 192.0.2.1:50000 192.0.2.2:443 10.0 1.0 100 200 - arn:aws:acm:us-east-1:123:certificate/abc - ECDHE-RSA-AES128-GCM-SHA256 tlsv12 - example.com - - - 2020-01-01T00:00:00"
+            }
+        ],
+        "url": "https://docs.aws.amazon.com/elasticloadbalancing/latest/network/load-balancer-access-logs.html"
+    }
+}

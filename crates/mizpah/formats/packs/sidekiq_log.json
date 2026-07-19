@@ -1,0 +1,33 @@
+{
+    "sidekiq_log": {
+        "title": "Sidekiq",
+        "description": "Sidekiq worker log lines",
+        "url": "https://github.com/sidekiq/sidekiq",
+        "regex": {
+            "legacy": {
+                "pattern": "^(?<timestamp>\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d+Z)\\s+(?<pid>\\d+)\\s+TID-(?<tid>\\S+)\\s+(?<class>\\S+)\\s+JID-(?<jid>\\S+)\\s+(?<level>DEBUG|INFO|WARN|ERROR|FATAL):\\s+(?<body>.*)$"
+            },
+            "kv": {
+                "pattern": "^(?<timestamp>\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d+Z)\\s+pid=(?<pid>\\d+)\\s+tid=(?<tid>\\S+)\\s+(?:class=(?<class>\\S+)\\s+)?(?:jid=(?<jid>\\S+)\\s+)?(?<level>DEBUG|INFO|WARN|ERROR|FATAL):?\\s+(?<body>.*)$"
+            }
+        },
+        "level-field": "level",
+        "body-field": "body",
+        "timestamp-field": "timestamp",
+        "level": {
+            "debug": "DEBUG",
+            "info": "INFO",
+            "warn": "WARN",
+            "error": "ERROR",
+            "fatal": "FATAL"
+        },
+        "sample": [
+            {
+                "line": "2020-01-01T00:00:00.000Z 12345 TID-abc123 HardWorker JID-xyz789 INFO: start"
+            },
+            {
+                "line": "2020-01-01T00:00:00.000Z pid=12345 tid=abc123 class=HardWorker jid=xyz789 INFO: done"
+            }
+        ]
+    }
+}

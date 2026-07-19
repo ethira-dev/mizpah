@@ -1,0 +1,33 @@
+{
+    "windows_security_log": {
+        "title": "Windows Security",
+        "description": "Windows Security channel via Winlogbeat/Elastic JSON",
+        "file-type": "json",
+        "json": true,
+        "timestamp-field": "@timestamp",
+        "line-format": [
+            {
+                "field": "@timestamp"
+            },
+            " ",
+            {
+                "field": "winlog.channel"
+            },
+            " ",
+            {
+                "field": "event.code"
+            },
+            " ",
+            {
+                "field": "message"
+            }
+        ],
+        "url": "https://learn.microsoft.com/en-us/windows/security/threat-protection/auditing/security-auditing-overview",
+        "body-field": "message",
+        "sample": [
+            {
+                "line": "{\"@timestamp\":\"2020-01-01T00:00:00.000Z\",\"event\":{\"code\":\"4624\",\"action\":\"logged-in\",\"provider\":\"Microsoft-Windows-Security-Auditing\"},\"winlog\":{\"channel\":\"Security\",\"event_id\":4624,\"computer_name\":\"DC01\",\"event_data\":{\"TargetUserName\":\"alice\",\"IpAddress\":\"10.0.0.1\",\"LogonType\":\"3\"}},\"message\":\"An account was successfully logged on\",\"host\":{\"hostname\":\"DC01\"}}"
+            }
+        ]
+    }
+}

@@ -1,0 +1,112 @@
+{
+    "debug_log": {
+        "title": "debug log",
+        "description": "Log format for debug logs",
+        "regex": {
+            "std": {
+                "pattern": "^(?<timestamp>\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3,6}(-|\\+)\\d{2}:\\d{2}) (?<level>\\w) (?<thread>\\w+)(?: \\[(?<opid>[^\\]]+)\\])? (?<srcfile>[^:]+):(?<srcline>\\d+) (?<body>.*)"
+            }
+        },
+        "opid-field": "opid",
+        "src-file-field": "srcfile",
+        "src-line-field": "srcline",
+        "thread-id-field": "thread",
+        "value": {
+            "srcfile": {
+                "kind": "string",
+                "identifier": true
+            },
+            "level": {
+                "kind": "string"
+            },
+            "srcline": {
+                "kind": "integer",
+                "identifier": true
+            },
+            "opid": {
+                "kind": "string",
+                "identifier": true
+            },
+            "thread": {
+                "kind": "string",
+                "identifier": true
+            },
+            "timestamp": {
+                "kind": "string"
+            }
+        },
+        "opid": {
+            "description": {
+                "new_input": {
+                    "format": [
+                        {
+                            "field": "body",
+                            "extractor": "^(new input .*)"
+                        }
+                    ]
+                },
+                "watch_file": {
+                    "format": [
+                        {
+                            "field": "body",
+                            "extractor": "^watching new file: (.+)"
+                        }
+                    ]
+                },
+                "grep": {
+                    "format": [
+                        {
+                            "field": "body",
+                            "extractor": "^(?:\\w+): start search for: (.+)"
+                        }
+                    ]
+                },
+                "piper_loop": {
+                    "format": [
+                        {
+                            "field": "body",
+                            "extractor": "^starting loop to capture: (.+)"
+                        }
+                    ]
+                },
+                "execute_prql": {
+                    "format": [
+                        {
+                            "field": "body",
+                            "extractor": "^compiling PRQL: (.+)"
+                        }
+                    ]
+                },
+                "execute_cmd": {
+                    "format": [
+                        {
+                            "field": "body",
+                            "extractor": "^Executing command: (.+)"
+                        }
+                    ]
+                },
+                "execute_file": {
+                    "format": [
+                        {
+                            "field": "body",
+                            "extractor": "^Executing file: (.+)"
+                        }
+                    ]
+                },
+                "execute_sql": {
+                    "format": [
+                        {
+                            "field": "body",
+                            "extractor": "^Executing SQL: (.+)"
+                        }
+                    ]
+                }
+            }
+        },
+        "sample": [
+            {
+                "line": "2024-05-22T14:55:40.160-07:00 D t0 pollable.cc:47 pollable detach 0x146605550 from 0x6000008c82d8"
+            }
+        ]
+    }
+}

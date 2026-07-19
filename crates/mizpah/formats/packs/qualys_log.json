@@ -1,0 +1,38 @@
+{
+    "qualys_log": {
+        "title": "Qualys",
+        "description": "Qualys vulnerability / detection findings JSON",
+        "file-type": "json",
+        "json": true,
+        "timestamp-field": "LAST_FOUND_DATETIME",
+        "line-format": [
+            {
+                "field": "LAST_FOUND_DATETIME"
+            },
+            " ",
+            {
+                "field": "SEVERITY"
+            },
+            " ",
+            {
+                "field": "QID"
+            },
+            " ",
+            {
+                "field": "TITLE"
+            },
+            " ",
+            {
+                "field": "IP"
+            }
+        ],
+        "url": "https://www.qualys.com/",
+        "level-field": "SEVERITY",
+        "body-field": "TITLE",
+        "sample": [
+            {
+                "line": "{\"QID\":\"150001\",\"TITLE\":\"SSL Certificate - Signature Verification Failed Vulnerability\",\"SEVERITY\":\"3\",\"TYPE\":\"Vuln\",\"IP\":\"10.0.0.5\",\"DNS\":\"app.example.com\",\"FIRST_FOUND_DATETIME\":\"2020-01-01T00:00:00Z\",\"LAST_FOUND_DATETIME\":\"2020-01-01T00:00:00Z\",\"STATUS\":\"Active\"}"
+            }
+        ]
+    }
+}

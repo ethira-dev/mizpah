@@ -24,6 +24,7 @@ type UpdateDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   expectedLatest: string
+  releaseNotes?: string
 }
 
 type Phase = "confirm" | "running" | "waiting" | "error" | "done"
@@ -32,6 +33,7 @@ export function UpdateDialog({
   open,
   onOpenChange,
   expectedLatest,
+  releaseNotes,
 }: UpdateDialogProps) {
   const [step, setStep] = useState("Starting update…")
   const [progress, setProgress] = useState(0)
@@ -142,7 +144,7 @@ export function UpdateDialog({
     >
       <DialogContent
         showCloseButton={canDismiss}
-        className="sm:max-w-md"
+        className="sm:max-w-lg"
         onPointerDownOutside={(e) => {
           if (!canDismiss) e.preventDefault()
         }}
@@ -163,6 +165,19 @@ export function UpdateDialog({
               : `Installing v${expectedLatest}. Your log buffer is saved across the restart.`}
           </DialogDescription>
         </DialogHeader>
+
+        {phase === "confirm" && releaseNotes ? (
+          <div className="space-y-1.5 px-1">
+            <p className="text-xs font-medium text-muted-foreground">
+              What&apos;s new
+            </p>
+            <div className="max-h-48 overflow-y-auto rounded-md border border-border bg-muted/40 px-3 py-2">
+              <pre className="font-sans text-xs leading-relaxed whitespace-pre-wrap text-muted-foreground">
+                {releaseNotes}
+              </pre>
+            </div>
+          </div>
+        ) : null}
 
         {phase !== "confirm" ? (
           <div className="space-y-3 px-1 py-2">

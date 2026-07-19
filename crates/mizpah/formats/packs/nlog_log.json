@@ -1,0 +1,28 @@
+{
+    "nlog_log": {
+        "title": "NLog",
+        "description": "NLog default / common layouts",
+        "regex": {
+            "std": {
+                "pattern": "^(?<timestamp>\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}\\.\\d+)\\s+(?<level>\\w+)\\s+(?<logger>\\S+)\\s+(?<body>.*)$"
+            }
+        },
+        "sample": [
+            {
+                "line": "2020-01-01 00:00:00.0000 INFO MyApp.Program Application started"
+            },
+            {
+                "line": "2020-01-01 00:00:00.0000 ERROR MyApp.Api Unhandled exception"
+            }
+        ],
+        "url": "https://nlog-project.org/",
+        "level-field": "level",
+        "level": {
+            "error": "ERROR|FATAL",
+            "warn": "WARN|WARNING",
+            "info": "INFO",
+            "debug": "DEBUG|TRACE"
+        },
+        "body-field": "body"
+    }
+}

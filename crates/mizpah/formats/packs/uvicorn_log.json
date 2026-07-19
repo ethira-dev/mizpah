@@ -1,0 +1,37 @@
+{
+    "uvicorn_log": {
+        "title": "Uvicorn",
+        "description": "Uvicorn ASGI server access and error log lines",
+        "url": "https://www.uvicorn.org/",
+        "regex": {
+            "access": {
+                "pattern": "^(?<level>INFO|WARNING|ERROR|DEBUG):\\s+(?<client>[\\d.:a-fA-F]+):(?<client_port>\\d+)\\s+-\\s+\"(?<method>\\w+)\\s+(?<path>[^\"]+)\\s+(?<proto>HTTP/[^\"]+)\"\\s+(?<status>\\d{3})$"
+            },
+            "server": {
+                "pattern": "^(?<level>INFO|WARNING|ERROR|DEBUG):\\s+(?<body>(?:Started server process|Waiting for application startup|Application startup complete|Uvicorn running on|Shutting down|Finished server process|ERROR:\\s+).+)$"
+            },
+            "plain_access": {
+                "pattern": "^(?<client>[\\d.:a-fA-F]+):(?<client_port>\\d+)\\s+-\\s+\"(?<method>\\w+)\\s+(?<path>[^ ]+)\\s+(?<proto>HTTP/[^ ]+)\"\\s+(?<status>\\d{3})$"
+            }
+        },
+        "level-field": "level",
+        "body-field": "body",
+        "level": {
+            "debug": "DEBUG",
+            "info": "INFO",
+            "warn": "WARNING",
+            "error": "ERROR"
+        },
+        "sample": [
+            {
+                "line": "INFO:     127.0.0.1:54321 - \"GET /health HTTP/1.1\" 200"
+            },
+            {
+                "line": "INFO:     Started server process [1234]"
+            },
+            {
+                "line": "127.0.0.1:54321 - \"GET / HTTP/1.1\" 200"
+            }
+        ]
+    }
+}

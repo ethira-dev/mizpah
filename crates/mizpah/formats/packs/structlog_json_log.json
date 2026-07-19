@@ -1,0 +1,26 @@
+{
+    "structlog_json_log": {
+        "title": "structlog JSON",
+        "description": "Python structlog JSONRenderer objects (event, level)",
+        "url": "https://www.structlog.org/",
+        "file-type": "json",
+        "timestamp-field": "timestamp",
+        "level-field": "level",
+        "body-field": "event",
+        "line-format": [
+            { "field": "timestamp" },
+            " ",
+            { "field": "level" },
+            " ",
+            { "field": "event" }
+        ],
+        "sample": [
+            {
+                "line": "{\"event\":\"request completed\",\"level\":\"info\",\"timestamp\":\"2020-01-01T00:00:00Z\"}"
+            },
+            {
+                "line": "{\"event\":\"boom\",\"level\":\"error\",\"logger\":\"myapp.api\",\"timestamp\":\"2020-01-01T00:00:00Z\"}"
+            }
+        ]
+    }
+}

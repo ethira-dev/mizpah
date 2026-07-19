@@ -1,0 +1,38 @@
+{
+    "wiz_issue_log": {
+        "title": "Wiz Issue",
+        "description": "Wiz security issue JSON",
+        "file-type": "json",
+        "json": true,
+        "timestamp-field": "createdAt",
+        "line-format": [
+            {
+                "field": "createdAt"
+            },
+            " ",
+            {
+                "field": "severity"
+            },
+            " ",
+            {
+                "field": "status"
+            },
+            " ",
+            {
+                "field": "type"
+            },
+            " ",
+            {
+                "field": "entity"
+            }
+        ],
+        "url": "https://www.wiz.io/",
+        "level-field": "severity",
+        "body-field": "type",
+        "sample": [
+            {
+                "line": "{\"id\":\"issue-1\",\"createdAt\":\"2020-01-01T00:00:00Z\",\"updatedAt\":\"2020-01-01T00:00:00Z\",\"severity\":\"HIGH\",\"status\":\"OPEN\",\"type\":\"TOXIC_COMBINATION\",\"entity\":{\"id\":\"res-1\",\"name\":\"prod-db\",\"type\":\"VIRTUAL_MACHINE\"},\"projects\":[{\"id\":\"p1\",\"name\":\"Production\"}]}"
+            }
+        ]
+    }
+}

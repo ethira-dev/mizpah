@@ -1,0 +1,33 @@
+{
+    "osquery_log": {
+        "title": "osquery",
+        "description": "osquery JSON result / differential logs",
+        "file-type": "json",
+        "json": true,
+        "timestamp-field": "unixTime",
+        "line-format": [
+            {
+                "field": "unixTime"
+            },
+            " ",
+            {
+                "field": "name"
+            },
+            " ",
+            {
+                "field": "hostIdentifier"
+            },
+            " ",
+            {
+                "field": "action"
+            }
+        ],
+        "url": "https://osquery.readthedocs.io/",
+        "body-field": "name",
+        "sample": [
+            {
+                "line": "{\"name\":\"pack_incident-response_process_open_sockets\",\"hostIdentifier\":\"host-1\",\"calendarTime\":\"Wed Jan 1 00:00:00 2020 UTC\",\"unixTime\":1577836800,\"severity\":0,\"action\":\"added\",\"columns\":{\"pid\":\"1234\",\"remote_address\":\"1.2.3.4\",\"remote_port\":\"443\"},\"decorations\":{\"host_uuid\":\"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee\"}}"
+            }
+        ]
+    }
+}

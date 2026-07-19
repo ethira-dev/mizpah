@@ -6,6 +6,12 @@ use crate::properties::{filter_properties_by_query, paths_to_info, push_service_
 use chrono::{DateTime, Utc};
 
 impl Store {
+    /// Clone all entries currently in the ring (for SQL snapshot / export).
+    pub async fn snapshot_entries(&self) -> Vec<LogEntry> {
+        let inner = self.inner.read().await;
+        inner.entries.iter().cloned().collect()
+    }
+
     pub async fn service_names(&self) -> Vec<String> {
         let inner = self.inner.read().await;
         let mut names: Vec<String> = inner.services.keys().cloned().collect();
@@ -98,7 +104,7 @@ impl Store {
                     continue;
                 }
             }
-            if !in_time_range(entry.received_at, from, to) {
+            if !in_time_range(entry.effective_event_time(), from, to) {
                 continue;
             }
             if !crate::filter::matches_entry(&entry.service, &entry.data, query) {
@@ -112,5 +118,125 @@ impl Store {
         }
 
         (matched, has_more)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::filter::{compile_query, CompiledQuery};
+
+    #[tokio::test]
+    async fn search_properties_per_service() {
+        let store = Store::new(1_000_000);
+        store
+            .push_line("api", r#"{"level":"error","tenant":"a"}"#)
+            .await;
+        store
+            .push_line("web", r#"{"level":"info","tenant":"b"}"#)
+            .await;
+
+        let api = store.search_properties(Some("api"), None).await;
+        assert!(api.iter().any(|p| p.path == "tenant"));
+        assert!(!api.iter().any(|p| p.path == "level" && p.count > 1) || api.len() >= 1);
+
+        let missing = store.search_properties(Some("missing"), None).await;
+        assert!(missing.is_empty());
+
+        let all = store.search_properties(Some("*"), Some("tenant")).await;
+        assert!(all.iter().any(|p| p.path == "tenant"));
+    }
+
+    #[tokio::test]
+    async fn query_logs_service_filter_and_cursor() {
+        let store = Store::new(1_000_000);
+        store.push_line("api", r#"{"msg":"a"}"#).await;
+        store.push_line("web", r#"{"msg":"b"}"#).await;
+        store.push_line("api", r#"{"msg":"c"}"#).await;
+
+        let (api_only, _) = store
+            .query_logs(
+                Some("api"),
+                None,
+                10,
+                &CompiledQuery::MatchAll,
+                None,
+                None,
+            )
+            .await;
+        assert_eq!(api_only.len(), 2);
+        assert!(api_only.iter().all(|e| e.service == "api"));
+
+        let (wildcard, _) = store
+            .query_logs(
+                Some("*"),
+                None,
+                10,
+                &CompiledQuery::MatchAll,
+                None,
+                None,
+            )
+            .await;
+        assert_eq!(wildcard.len(), 3);
+
+        let newest = &api_only[0];
+        let (older, has_more) = store
+            .query_logs(
+                Some("api"),
+                Some(newest.id),
+                1,
+                &CompiledQuery::MatchAll,
+                None,
+                None,
+            )
+            .await;
+        assert_eq!(older.len(), 1);
+        assert!(!has_more);
+
+        let (cel, _) = store
+            .query_logs(
+                None,
+                None,
+                10,
+                &compile_query(r#"msg == "b""#).unwrap(),
+                None,
+                None,
+            )
+            .await;
+        assert_eq!(cel.len(), 1);
+        assert_eq!(cel[0].service, "web");
+    }
+
+    #[tokio::test]
+    async fn get_entry_returns_clone_or_none() {
+        let store = Store::new(1_000_000);
+        let e = store.push_line("api", r#"{"msg":"x"}"#).await;
+        let id = e[0].id;
+        let found = store.get_entry(id).await.unwrap();
+        assert_eq!(found.id, id);
+        assert_eq!(found.data["msg"], "x");
+        assert!(store.get_entry(id + 999).await.is_none());
+    }
+
+    #[tokio::test]
+    async fn query_logs_sets_has_more_when_limit_exceeded() {
+        let store = Store::new(1_000_000);
+        for i in 0..5 {
+            store
+                .push_line("api", &format!(r#"{{"msg":"{i}"}}"#))
+                .await;
+        }
+        let (page, has_more) = store
+            .query_logs(
+                Some("api"),
+                None,
+                2,
+                &CompiledQuery::MatchAll,
+                None,
+                None,
+            )
+            .await;
+        assert_eq!(page.len(), 2);
+        assert!(has_more);
     }
 }

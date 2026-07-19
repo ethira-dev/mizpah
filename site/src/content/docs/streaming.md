@@ -32,7 +32,13 @@ Useful flags: `--no-open`, `--max-bytes` (default `1073741824`), `--ttl-hours` (
 | `GET` | `/api/services` | Active / blocked services |
 | `POST` | `/api/services/disconnect` · `/reconnect` | Pause / resume a service tag |
 | `GET` | `/api/stats` | Entry count, bytes, per-service counts |
-| `GET` | `/api/activity` | Time buckets for the activity strip |
+| `GET` | `/api/activity` | Time buckets for the activity strip (includes error/warn/other) |
+| `GET`/`POST` | `/api/aggregate` | Group-by counts (+ optional sum/avg/min/max) |
+| `GET` | `/api/nav/level` | Next/prev error or warn relative to an id |
+| `GET` | `/api/trace/{opid}` · `/api/traces` | Trace correlation |
+| `GET`/`POST` | `/api/bookmarks` | Annotations (mark/tags/comment) |
+| `GET` | `/api/spectrogram` | Time × value heat-map for a field |
+| `POST` | `/api/sql` | `SELECT` against a snapshot of `all_logs` |
 | `POST` | `/api/investigate` | Launch local Claude / Cursor seeded on an entry id |
 | `GET` | `/ws` | Live push of new entries |
 
@@ -46,24 +52,38 @@ Each stored entry is roughly:
 {
   "id": 1842,
   "receivedAt": "2026-07-16T22:01:00.000Z",
+  "eventTime": "2026-07-16T22:00:58.100Z",
+  "formatId": "json",
   "service": "api",
   "data": {
     "level": "error",
     "msg": "timeout waiting for redis",
+    "timestamp": "2026-07-16T22:00:58.100Z",
     "_mzp": { "cwd": "/Users/you/dev/api", "user": "you", "pid": 1234, "exe": "…" }
   }
 }
 ```
 
 - `service`: stream tag from `--service` or attach source defaults.
+- `receivedAt`: ingest time (used for ring TTL / max-bytes eviction).
+- `eventTime`: parsed from common payload fields (`timestamp`, `@timestamp`, `time`, `ts`, …), falling back to `receivedAt`. Activity strip and `from`/`to` filters use this.
+- `formatId`: detected format (`json`, `logfmt`, `raw`, …).
 - `data`: parsed JSON object, or `{ "_raw": "…" }` for non-JSON.
 - `_mzp`: receiver metadata (always present; client may supply it on ingest).
+
+Config lives under the Mizpah config dir (`MIZPAH_CONFIG_DIR` or the platform project config path): `config.toml`, plus `formats/`, `themes/`, `scripts/`.
 
 ## Normalization
 
 1. Prefer **NDJSON** (one JSON object per line).
 2. Multi-line pretty dumps (Nest / Node `util.inspect` style) are buffered and reassembled when the parser can close the object.
-3. Everything else is stored as `_raw`.
+3. Otherwise try built-in formats (**logfmt**, syslog, access_log, generic), then store as `_raw`.
+4. `eventTime` is taken from common payload fields (`timestamp`, `@timestamp`, `time`, `ts`, …); TTL eviction still uses `receivedAt`.
+
+## Formats & SQL
+
+- Format id is stored on each entry (`formatId`) and as `_format` inside `data` when a non-JSON parser wins.
+- `POST /api/sql` snapshots the ring into an in-memory SQLite table `all_logs` (`id`, `received_at`, `event_time`, `service`, `format_id`, `level`, `msg`, `data`) and runs a single `SELECT` (multi-statement / DDL rejected).
 
 ## UI behavior
 
@@ -71,4 +91,4 @@ Each stored entry is roughly:
 - CEL filter bar with autocomplete from discovered properties.
 - Row click opens detail: JSON tree/raw, neighbor context, Check with Claude / Cursor.
 
-See [CEL](../cel/) for query bindings and [MCP](../mcp/) for agent access to the same APIs.
+See [CEL](../cel/) for query bindings, [Log formats](../formats/) for detection and packs, [SQL & aggregations](../sql/) for analytics, and [MCP](../mcp/) for agent access to the same APIs.

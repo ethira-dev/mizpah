@@ -1,0 +1,21 @@
+{
+    "fail2ban_log": {
+        "title": "Fail2ban",
+        "description": "Fail2ban jail ban/unban events",
+        "regex": {
+            "std": {
+                "pattern": "^(?<timestamp>\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}(?:,\\d+)?)(?:\\s+(?<component>fail2ban\\.\\w+))?\\s+(?:(?<level>\\w+)\\s+)?\\[(?<jail>[^\\]]+)\\]\\s+(?<body>(?:Ban|Unban|Found|Restore Ban).*)$"
+            }
+        },
+        "sample": [
+            {
+                "line": "2020-01-01 00:00:00,000 fail2ban.actions [sshd] Ban 1.2.3.4"
+            },
+            {
+                "line": "2020-01-01 00:00:00,000 WARNING [sshd] Ban 1.2.3.4"
+            }
+        ],
+        "url": "https://www.fail2ban.org/",
+        "body-field": "body"
+    }
+}

@@ -256,4 +256,41 @@ mod tests {
         assert!(!text.contains("_mzp"), "got:\n{text}");
         assert!(text.contains("hasMore:"), "got:\n{text}");
     }
+
+    #[test]
+    fn slim_skips_non_object_rows() {
+        let logs = LogsResponse {
+            entries: vec![json!("not-an-object"), json!(42)],
+            has_more: false,
+        };
+        assert_eq!(slim_logs(logs).entries.len(), 2);
+
+        let props = PropertiesResponse {
+            properties: vec![json!("scalar"), json!({"path": "x", "count": 1})],
+        };
+        let slimmed = slim_properties(props);
+        assert_eq!(slimmed.properties.len(), 2);
+        assert!(slimmed.properties[1].get("path").is_some());
+    }
+
+    #[test]
+    fn encode_mcp_value_falls_back_to_json_on_toon_failure() {
+        #[derive(Serialize)]
+        struct BadToon {
+            nan: f64,
+        }
+        let text = encode_mcp_value(&BadToon { nan: f64::NAN });
+        assert!(!text.is_empty());
+
+        struct FailSerialize;
+        impl Serialize for FailSerialize {
+            fn serialize<S>(&self, _: S) -> Result<S::Ok, S::Error>
+            where
+                S: serde::Serializer,
+            {
+                Err(serde::ser::Error::custom("fail"))
+            }
+        }
+        assert_eq!(encode_mcp_value(&FailSerialize), "{}");
+    }
 }

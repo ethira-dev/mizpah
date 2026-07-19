@@ -1,0 +1,36 @@
+{
+    "dotnet_console_log": {
+        "title": ".NET console",
+        "description": "Microsoft.Extensions.Logging SimpleConsole / default console formatter",
+        "url": "https://learn.microsoft.com/dotnet/core/extensions/console-log-formatter",
+        "regex": {
+            "simple": {
+                "pattern": "^(?<level>trce|dbug|info|warn|fail|crit|trace|debug|information|warning|error|critical):\\s+(?<category>[\\w.]+)\\[(?<event_id>\\d+)\\]\\s*(?<body>.*)$"
+            },
+            "systemd": {
+                "pattern": "^(?<level>trce|dbug|info|warn|fail|crit):\\s+(?<body>.+)$"
+            }
+        },
+        "level-field": "level",
+        "body-field": "body",
+        "level": {
+            "trace": "^(?:trce|trace)$",
+            "debug": "^(?:dbug|debug)$",
+            "info": "^(?:info|information)$",
+            "warn": "^(?:warn|warning)$",
+            "error": "^(?:fail|error)$",
+            "critical": "^(?:crit|critical)$"
+        },
+        "sample": [
+            {
+                "line": "info: Microsoft.Hosting.Lifetime[0] Application started. Press Ctrl+C to shut down."
+            },
+            {
+                "line": "fail: MyApp.Controllers.HomeController[1] Something went wrong"
+            },
+            {
+                "line": "dbug: Microsoft.AspNetCore.Hosting.Diagnostics[0]"
+            }
+        ]
+    }
+}

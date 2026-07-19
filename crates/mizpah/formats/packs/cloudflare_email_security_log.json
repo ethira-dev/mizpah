@@ -1,0 +1,30 @@
+{
+    "cloudflare_email_security_log": {
+        "title": "Cloudflare Email Security",
+        "description": "Cloudflare Logpush Email Security alerts",
+        "file-type": "json",
+        "json": true,
+        "timestamp-field": "Timestamp",
+        "line-format": [
+            {
+                "field": "Timestamp"
+            },
+            " ",
+            {
+                "field": "Verdict"
+            },
+            " ",
+            {
+                "field": "Subject"
+            }
+        ],
+        "url": "https://developers.cloudflare.com/logs/logpush/",
+        "level-field": "Verdict",
+        "body-field": "Subject",
+        "sample": [
+            {
+                "line": "{\"Timestamp\":\"2020-01-01T00:00:00Z\",\"Verdict\":\"malicious\",\"Subject\":\"Invoice attached\",\"From\":\"phish@evil.example\",\"To\":[\"alice@example.com\"],\"MessageID\":\"<abc@evil.example>\",\"AlertID\":\"a1\"}"
+            }
+        ]
+    }
+}

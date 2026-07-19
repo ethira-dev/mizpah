@@ -1,0 +1,30 @@
+{
+    "cloudflare_workers_trace_log": {
+        "title": "Cloudflare Workers Trace",
+        "description": "Cloudflare Logpush workers_trace",
+        "file-type": "json",
+        "json": true,
+        "timestamp-field": "EventTimestampMs",
+        "line-format": [
+            {
+                "field": "EventTimestampMs"
+            },
+            " ",
+            {
+                "field": "Outcome"
+            },
+            " ",
+            {
+                "field": "ScriptName"
+            }
+        ],
+        "url": "https://developers.cloudflare.com/logs/logpush/",
+        "level-field": "Outcome",
+        "body-field": "ScriptName",
+        "sample": [
+            {
+                "line": "{\"EventTimestampMs\":1577836800000,\"ScriptName\":\"my-worker\",\"Outcome\":\"ok\",\"EventType\":\"fetch\",\"Logs\":[{\"Level\":\"info\",\"Message\":[\"hello\"]}],\"Exceptions\":[]}"
+            }
+        ]
+    }
+}

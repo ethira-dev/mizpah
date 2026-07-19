@@ -1,0 +1,24 @@
+{
+    "cef_log": {
+        "title": "CEF",
+        "description": "ArcSight Common Event Format",
+        "regex": {
+            "std": {
+                "pattern": "^(?:(?<syslog_pri><\\d+>)?(?<syslog_ts>\\w{3}\\s+\\d{1,2}\\s+\\d{2}:\\d{2}:\\d{2})\\s+(?<syslog_host>\\S+)\\s+)?CEF:(?<cef_version>\\d+)\\|(?<device_vendor>[^|]*)\\|(?<device_product>[^|]*)\\|(?<device_version>[^|]*)\\|(?<device_event_class_id>[^|]*)\\|(?<name>[^|]*)\\|(?<severity>[^|]*)\\|(?<body>.*)$"
+            }
+        },
+        "sample": [
+            {
+                "line": "CEF:0|Security|threatmanager|1.0|100|worm successfully stopped|10|src=10.0.0.1 dst=2.1.2.2 spt=1232"
+            }
+        ],
+        "url": "https://www.microfocus.com/documentation/arcsight/arcsight-smartconnectors/",
+        "level-field": "severity",
+        "level": {
+            "error": "^([8-9]|10)$",
+            "warn": "^[5-7]$",
+            "info": "^[0-4]$"
+        },
+        "body-field": "body"
+    }
+}

@@ -1,0 +1,19 @@
+{
+    "docker_log": {
+        "title": "Docker daemon",
+        "description": "Docker daemon time= level= msg= logs",
+        "regex": {
+            "std": {
+                "pattern": "^time=\"(?<timestamp>[^\"]+)\" level=(?<level>\\w+) msg=\"(?<body>(?:\\\\.|[^\"\\\\])*)\""
+            }
+        },
+        "sample": [
+            {
+                "line": "time=\"2020-01-01T00:00:00.000000000Z\" level=info msg=\"loading plugin\" id=foobar"
+            }
+        ],
+        "url": "https://docs.docker.com/config/daemon/",
+        "level-field": "level",
+        "body-field": "body"
+    }
+}

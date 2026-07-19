@@ -1,0 +1,38 @@
+{
+    "sentinelone_log": {
+        "title": "SentinelOne",
+        "description": "SentinelOne Deep Visibility / threat events",
+        "file-type": "json",
+        "json": true,
+        "timestamp-field": "createdAt",
+        "line-format": [
+            {
+                "field": "createdAt"
+            },
+            " ",
+            {
+                "field": "severity"
+            },
+            " ",
+            {
+                "field": "threatName"
+            },
+            " ",
+            {
+                "field": "agentComputerName"
+            },
+            " ",
+            {
+                "field": "classification"
+            }
+        ],
+        "url": "https://www.sentinelone.com/",
+        "level-field": "severity",
+        "body-field": "threatName",
+        "sample": [
+            {
+                "line": "{\"createdAt\":\"2020-01-01T00:00:00.000Z\",\"id\":\"1234567890\",\"threatName\":\"Malware detected\",\"severity\":\"High\",\"classification\":\"Malware\",\"agentComputerName\":\"workstation01\",\"agentUuid\":\"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee\",\"filePath\":\"C:\\\\\\\\Users\\\\\\\\alice\\\\\\\\malware.exe\",\"mitigationStatus\":\"mitigated\"}"
+            }
+        ]
+    }
+}

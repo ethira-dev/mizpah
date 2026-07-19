@@ -1,0 +1,37 @@
+{
+    "sysmon_log": {
+        "title": "Windows Sysmon",
+        "description": "Sysmon events via Winlogbeat/Fluent JSON",
+        "file-type": "json",
+        "json": true,
+        "timestamp-field": "@timestamp",
+        "line-format": [
+            {
+                "field": "@timestamp"
+            },
+            " ",
+            {
+                "field": "event.code"
+            },
+            " ",
+            {
+                "field": "winlog.event_id"
+            },
+            " ",
+            {
+                "field": "process.name"
+            },
+            " ",
+            {
+                "field": "message"
+            }
+        ],
+        "url": "https://learn.microsoft.com/en-us/sysinternals/downloads/sysmon",
+        "body-field": "message",
+        "sample": [
+            {
+                "line": "{\"@timestamp\":\"2020-01-01T00:00:00.000Z\",\"event\":{\"code\":\"1\",\"provider\":\"Microsoft-Windows-Sysmon\",\"module\":\"sysmon\"},\"winlog\":{\"event_id\":1,\"channel\":\"Microsoft-Windows-Sysmon/Operational\",\"event_data\":{\"Image\":\"C\\\\\\\\Windows\\\\\\\\System32\\\\\\\\cmd.exe\",\"CommandLine\":\"cmd.exe /c whoami\",\"User\":\"HOST\\\\\\\\alice\"}},\"process\":{\"name\":\"cmd.exe\",\"pid\":1234},\"message\":\"Process Create\",\"log\":{\"level\":\"information\"}}"
+            }
+        ]
+    }
+}

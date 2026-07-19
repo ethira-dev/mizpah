@@ -1,0 +1,29 @@
+{
+    "waf_log": {
+        "title": "AWS WAF",
+        "description": "AWS WAF web ACL logs",
+        "file-type": "json",
+        "json": true,
+        "timestamp-field": "timestamp",
+        "line-format": [
+            {
+                "field": "timestamp"
+            },
+            " ",
+            {
+                "field": "action"
+            },
+            " ",
+            {
+                "field": "httpRequest"
+            }
+        ],
+        "url": "https://docs.aws.amazon.com/waf/latest/developerguide/logging.html",
+        "body-field": "action",
+        "sample": [
+            {
+                "line": "{\"timestamp\":1577836800000,\"formatVersion\":1,\"webaclId\":\"arn:aws:wafv2:us-east-1:123:regional/webacl/Example/abc\",\"terminatingRuleId\":\"Default_Action\",\"terminatingRuleType\":\"REGULAR\",\"action\":\"ALLOW\",\"httpSourceName\":\"ALB\",\"httpSourceId\":\"123-app/my-load-balancer/50dc6c495c0c9188\",\"httpRequest\":{\"clientIp\":\"192.0.2.1\",\"country\":\"US\",\"uri\":\"/\",\"method\":\"GET\"}}"
+            }
+        ]
+    }
+}

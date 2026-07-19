@@ -1,0 +1,24 @@
+{
+    "compose_log": {
+        "title": "Docker Compose",
+        "description": "Docker Compose / docker logs service-prefixed lines (service-1  | message)",
+        "url": "https://docs.docker.com/compose/",
+        "regex": {
+            "std": {
+                "pattern": "^(?<service>[a-zA-Z0-9][a-zA-Z0-9_.-]*)\\s+\\|\\s+(?<body>.*)$"
+            }
+        },
+        "body-field": "body",
+        "sample": [
+            {
+                "line": "api-1  | listening on :8080"
+            },
+            {
+                "line": "db-1  | database system is ready to accept connections"
+            },
+            {
+                "line": "web    | GET / 200"
+            }
+        ]
+    }
+}

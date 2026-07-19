@@ -1,0 +1,18 @@
+{
+    "selinux_log": {
+        "title": "SELinux",
+        "description": "SELinux AVC denial / granted lines",
+        "regex": {
+            "std": {
+                "pattern": "^(?:(?<syslog_pri><\\d+>)?(?<syslog_ts>\\w{3}\\s+\\d{1,2}\\s+\\d{2}:\\d{2}:\\d{2})\\s+(?<syslog_host>\\S+)\\s+)?(?<body>type=AVC msg=audit\\(.*\\): avc: (?:denied|granted) \\{.*\\} for .*)"
+            }
+        },
+        "sample": [
+            {
+                "line": "Jan  1 00:00:00 host type=AVC msg=audit(1577836800.000:123): avc: denied { read } for pid=1234 comm=\"httpd\" name=\"shadow\" dev=\"sda1\" ino=123 scontext=system_u:system_r:httpd_t:s0 tcontext=system_u:object_r:shadow_t:s0 tclass=file"
+            }
+        ],
+        "url": "https://selinuxproject.org/",
+        "body-field": "body"
+    }
+}

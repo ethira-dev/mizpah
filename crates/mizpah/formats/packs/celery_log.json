@@ -1,0 +1,36 @@
+{
+    "celery_log": {
+        "title": "Celery",
+        "description": "Celery worker log lines",
+        "url": "https://docs.celeryq.dev/",
+        "regex": {
+            "task": {
+                "pattern": "^\\[(?<timestamp>\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}(?:[.,]\\d+)?)(?:[+-]\\d{4})?:\\s+(?<level>DEBUG|INFO|WARNING|ERROR|CRITICAL)/(?<process>[^\\]]+)\\]\\s+(?<body>.*)$"
+            },
+            "banner": {
+                "pattern": "^(?<body>-------------- celery@\\S+ v[\\d.]+.*)$"
+            }
+        },
+        "level-field": "level",
+        "body-field": "body",
+        "timestamp-field": "timestamp",
+        "level": {
+            "debug": "DEBUG",
+            "info": "INFO",
+            "warn": "WARNING",
+            "error": "ERROR",
+            "critical": "CRITICAL"
+        },
+        "sample": [
+            {
+                "line": "[2020-01-01 00:00:00,000: INFO/MainProcess] Task myapp.tasks.add[abc-123] received"
+            },
+            {
+                "line": "[2020-01-01 00:00:00,000: INFO/ForkPoolWorker-1] Task myapp.tasks.add[abc-123] succeeded in 0.01s: 3"
+            },
+            {
+                "line": "-------------- celery@worker v5.3.0 (emerald-rush)"
+            }
+        ]
+    }
+}

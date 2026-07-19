@@ -221,4 +221,61 @@ mod tests {
         assert!(!CLAUDE_EVENTS.contains(&"MessageDisplay"));
         assert!(CLAUDE_EVENTS.contains(&"WorktreeRemove"));
     }
+
+    #[test]
+    fn merge_claude_invalid_json_errors() {
+        let err = merge_claude_hooks("{", "/bin/mzp __hook-forward --source claude").unwrap_err();
+        assert!(err.contains("invalid Claude settings.json"));
+    }
+
+    #[test]
+    fn merge_claude_refreshes_existing_handler() {
+        let cmd = managed_command(Path::new("/new/mzp"), HookSource::Claude);
+        let existing = r#"{
+          "hooks": {
+            "Stop": [{ "hooks": [{ "type": "command", "command": "/old/mzp __hook-forward --source claude" }] }]
+          }
+        }"#;
+        let (out, changed) = merge_claude_hooks(existing, &cmd).unwrap();
+        assert!(changed);
+        assert!(out.contains("/new/mzp"));
+    }
+
+    #[test]
+    fn remove_claude_empty_hooks() {
+        let (out, changed) = remove_claude_hooks("").unwrap();
+        assert!(!changed);
+        assert!(out.is_empty());
+    }
+
+    #[test]
+    fn merge_claude_root_not_object_errors() {
+        let err = merge_claude_hooks("[]", "cmd").unwrap_err();
+        assert!(err.contains("root must be an object"));
+    }
+
+    #[test]
+    fn merge_claude_event_not_array_errors() {
+        let err = merge_claude_hooks(r#"{"hooks":{"Stop":{}}}"#, "cmd").unwrap_err();
+        assert!(err.contains("must be an array"));
+    }
+
+    #[test]
+    fn merge_claude_no_change_when_command_current() {
+        let cmd = managed_command(Path::new("/bin/mzp"), HookSource::Claude);
+        let (once, _) = merge_claude_hooks("", &cmd).unwrap();
+        let (_, changed) = merge_claude_hooks(&once, &cmd).unwrap();
+        assert!(!changed);
+    }
+
+    #[test]
+    fn merge_claude_hooks_field_not_object_errors() {
+        let err = merge_claude_hooks(r#"{"hooks":"nope"}"#, "cmd").unwrap_err();
+        assert!(err.contains("`hooks` must be an object"));
+    }
+
+    #[test]
+    fn remove_claude_invalid_json_errors() {
+        assert!(remove_claude_hooks("not-json").is_err());
+    }
 }

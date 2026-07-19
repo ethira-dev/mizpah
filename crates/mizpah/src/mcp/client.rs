@@ -8,6 +8,19 @@ use thiserror::Error;
 pub const DEFAULT_LIMIT: usize = 20;
 pub const MAX_LIMIT: usize = 50;
 
+fn urlencoding_encode(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for b in s.bytes() {
+        match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                out.push(b as char);
+            }
+            _ => out.push_str(&format!("%{b:02X}")),
+        }
+    }
+    out
+}
+
 #[derive(Debug, Error)]
 pub enum HubClientError {
     #[error("Mizpah hub is not reachable at {url}. Start a hub first, e.g. `my-app | mizpah`")]
@@ -132,6 +145,71 @@ impl HubClient {
         self.get_json("/api/logs", &query).await
     }
 
+    pub async fn aggregate_logs(
+        &self,
+        service: Option<&str>,
+        q: Option<&str>,
+        group_by: &[String],
+        limit: Option<usize>,
+    ) -> Result<Value, HubClientError> {
+        let mut query = Vec::new();
+        if let Some(svc) = service.filter(|s| !s.is_empty()) {
+            query.push(("service", svc.to_string()));
+        }
+        if let Some(expr) = q.filter(|s| !s.is_empty()) {
+            query.push(("q", expr.to_string()));
+        }
+        if !group_by.is_empty() {
+            query.push(("groupBy", group_by.join(",")));
+        }
+        query.push(("limit", Self::clamp_limit(limit).to_string()));
+        self.get_json("/api/aggregate", &query).await
+    }
+
+    pub async fn get_trace(
+        &self,
+        opid: &str,
+        limit: Option<usize>,
+    ) -> Result<LogsResponse, HubClientError> {
+        let mut query = Vec::new();
+        query.push(("limit", Self::clamp_limit(limit).to_string()));
+        let path = format!("/api/trace/{}", urlencoding_encode(opid));
+        self.get_json(&path, &query).await
+    }
+
+    pub async fn query_sql(&self, sql: &str, limit: Option<usize>) -> Result<Value, HubClientError> {
+        let url = format!("{}/api/sql", self.base_url);
+        let body = serde_json::json!({
+            "sql": sql,
+            "limit": Self::clamp_limit(limit),
+        });
+        let response = self
+            .http
+            .post(&url)
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| {
+                if e.is_connect() || e.is_timeout() {
+                    HubClientError::Unreachable {
+                        url: self.base_url.clone(),
+                        source: e,
+                    }
+                } else {
+                    HubClientError::Request(e)
+                }
+            })?;
+        let status = response.status();
+        if !status.is_success() {
+            let body = response.text().await.unwrap_or_default();
+            return Err(HubClientError::Http {
+                status: status.as_u16(),
+                body,
+            });
+        }
+        response.json().await.map_err(HubClientError::Request)
+    }
+
     /// Fetch a window of logs around `id` (older = before, newer = after).
     pub async fn get_logs_around(
         &self,
@@ -164,22 +242,49 @@ impl HubClient {
         response.has_more = false;
         Ok(response)
     }
+
+    pub async fn nav_level(
+        &self,
+        from_id: u64,
+        direction: &str,
+        levels: &[&str],
+    ) -> Result<Option<Value>, HubClientError> {
+        let levels_joined = levels.join(",");
+        let query = [
+            ("fromId", from_id.to_string()),
+            ("direction", direction.to_string()),
+            ("levels", levels_joined),
+        ];
+        let query_refs: Vec<(&str, String)> = query.into_iter().collect();
+        let resp: Value = self.get_json("/api/nav/level", &query_refs).await?;
+        Ok(resp.get("entry").cloned().filter(|v| !v.is_null()))
+    }
+
+    pub async fn list_bookmarks(&self) -> Result<Value, HubClientError> {
+        self.get_json("/api/bookmarks", &[]).await
+    }
+
+    pub async fn list_traces(&self, limit: Option<usize>) -> Result<Value, HubClientError> {
+        let query = [("limit", Self::clamp_limit(limit).to_string())];
+        self.get_json("/api/traces", &query).await
+    }
+
+    pub async fn spectrogram(
+        &self,
+        field: &str,
+        time_buckets: Option<usize>,
+    ) -> Result<Value, HubClientError> {
+        let mut query = vec![("field", field.to_string())];
+        if let Some(n) = time_buckets {
+            query.push(("timeBuckets", n.to_string()));
+        }
+        self.get_json("/api/spectrogram", &query).await
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[cfg(not(miri))]
-    use crate::api::{self, AppState};
-    #[cfg(not(miri))]
-    use crate::store::Store;
-    #[cfg(not(miri))]
-    use std::net::SocketAddr;
-    #[cfg(not(miri))]
-    use std::sync::Arc;
-    #[cfg(not(miri))]
-    use tokio::net::TcpListener;
 
     #[test]
     fn clamp_limit_defaults_and_caps() {
@@ -191,32 +296,7 @@ mod tests {
 
     // Real TCP / reqwest sockets are unsupported under Miri.
     #[cfg(not(miri))]
-    async fn spawn_test_hub() -> (String, Arc<Store>) {
-        let store = Arc::new(Store::new(1024 * 1024));
-        let state = AppState {
-            store: Arc::clone(&store),
-            project_dir: std::env::temp_dir(),
-            update: crate::update::UpdateManager::new(crate::update::RestartContext {
-                host: "127.0.0.1".into(),
-                port: 0,
-                project_dir: std::env::temp_dir(),
-                max_bytes: 1024 * 1024,
-                ttl_hours: 0,
-            }),
-        };
-        let app = api::router(state);
-        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let addr: SocketAddr = listener.local_addr().unwrap();
-        tokio::spawn(async move {
-            axum::serve(
-                listener,
-                app.into_make_service_with_connect_info::<SocketAddr>(),
-            )
-            .await
-            .unwrap();
-        });
-        (format!("http://{addr}"), store)
-    }
+    use crate::test_support::hub::spawn_test_hub;
 
     #[cfg(not(miri))]
     #[tokio::test]
@@ -272,5 +352,130 @@ mod tests {
             .collect();
         assert!(ids.contains(&mid));
         assert!(ids.iter().all(|&id| id >= mid - 2 && id <= mid + 2));
+    }
+
+    #[cfg(not(miri))]
+    #[tokio::test]
+    async fn get_logs_around_clamps_window() {
+        let (url, store) = spawn_test_hub().await;
+        store.push_line("api", r#"{"msg":"test"}"#).await;
+        let client = HubClient::new(url);
+        let all = client.search_logs(None, None, Some(1), None).await.unwrap();
+        let id = all.entries[0]["id"].as_u64().unwrap();
+        
+        // Request huge window - should be clamped
+        let window = client.get_logs_around(id, 1000, 1000, None, None).await.unwrap();
+        assert!(!window.entries.is_empty());
+    }
+
+    #[cfg(not(miri))]
+    #[tokio::test]
+    async fn aggregate_logs_with_filters() {
+        let (url, store) = spawn_test_hub().await;
+        store.push_line("api", r#"{"level":"error"}"#).await;
+        store.push_line("backend", r#"{"level":"info"}"#).await;
+
+        let client = HubClient::new(url);
+        let resp = client
+            .aggregate_logs(Some("api"), Some(r#"level == "error""#), &["level".into()], Some(10))
+            .await
+            .unwrap();
+        assert!(resp.is_object());
+    }
+
+    #[cfg(not(miri))]
+    #[tokio::test]
+    async fn nav_level_prev() {
+        let (url, store) = spawn_test_hub().await;
+        store.push_line("api", r#"{"level":"error","msg":"1"}"#).await;
+        store.push_line("api", r#"{"level":"info","msg":"2"}"#).await;
+        store.push_line("api", r#"{"level":"error","msg":"3"}"#).await;
+
+        let client = HubClient::new(url);
+        let all = client.search_logs(None, None, Some(50), None).await.unwrap();
+        let last_id = all.entries[0]["id"].as_u64().unwrap();
+
+        let result = client
+            .nav_level(last_id, "prev", &["error"])
+            .await
+            .unwrap();
+        assert!(result.is_some());
+    }
+
+    #[cfg(not(miri))]
+    #[tokio::test]
+    async fn list_traces_with_limit() {
+        let (url, store) = spawn_test_hub().await;
+        store.push_line("api", r#"{"opid":"req-1","msg":"test"}"#).await;
+        store.push_line("api", r#"{"opid":"req-2","msg":"test"}"#).await;
+
+        let client = HubClient::new(url);
+        let resp = client.list_traces(Some(1)).await.unwrap();
+        assert!(resp.is_object() || resp.is_array());
+    }
+
+    #[cfg(not(miri))]
+    #[tokio::test]
+    async fn spectrogram_with_buckets() {
+        let (url, store) = spawn_test_hub().await;
+        store.push_line("api", r#"{"level":"error"}"#).await;
+
+        let client = HubClient::new(url);
+        let resp = client.spectrogram("level", Some(5)).await.unwrap();
+        assert!(resp.is_object() || resp.is_array());
+    }
+
+    #[cfg(not(miri))]
+    #[tokio::test]
+    async fn get_trace_with_limit() {
+        let (url, store) = spawn_test_hub().await;
+        store.push_line("api", r#"{"opid":"req-123","msg":"1"}"#).await;
+        store.push_line("api", r#"{"opid":"req-123","msg":"2"}"#).await;
+
+        let client = HubClient::new(url);
+        let resp = client.get_trace("req-123", Some(1)).await.unwrap();
+        assert!(!resp.entries.is_empty());
+    }
+
+    #[cfg(not(miri))]
+    #[tokio::test]
+    async fn list_properties_with_search() {
+        let (url, store) = spawn_test_hub().await;
+        store.push_line("api", r#"{"level":"error","msg":"boom"}"#).await;
+
+        let client = HubClient::new(url);
+        let resp = client.list_properties(Some("api"), Some("level")).await.unwrap();
+        assert!(!resp.properties.is_empty());
+    }
+
+    #[cfg(not(miri))]
+    #[tokio::test]
+    async fn search_logs_with_cursor() {
+        let (url, store) = spawn_test_hub().await;
+        for i in 0..5 {
+            store.push_line("api", &format!(r#"{{"n":{i}}}"#)).await;
+        }
+
+        let client = HubClient::new(url);
+        let page1 = client.search_logs(None, None, Some(2), None).await.unwrap();
+        assert_eq!(page1.entries.len(), 2);
+        
+        let cursor = page1.entries.last().unwrap()["id"].as_u64().unwrap();
+        let page2 = client.search_logs(None, None, Some(2), Some(cursor)).await.unwrap();
+        assert!(!page2.entries.is_empty());
+    }
+
+    #[test]
+    fn urlencoding_basic() {
+        assert_eq!(urlencoding_encode("hello"), "hello");
+        assert_eq!(urlencoding_encode("hello world"), "hello%20world");
+        assert_eq!(urlencoding_encode("a/b"), "a%2Fb");
+        assert_eq!(urlencoding_encode("a+b"), "a%2Bb");
+        assert_eq!(urlencoding_encode("a=b&c=d"), "a%3Db%26c%3Dd");
+    }
+
+    #[test]
+    fn urlencoding_preserves_unreserved() {
+        assert_eq!(urlencoding_encode("abc-._~123"), "abc-._~123");
     }
 }

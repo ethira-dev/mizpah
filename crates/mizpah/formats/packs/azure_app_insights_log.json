@@ -1,0 +1,34 @@
+{
+    "azure_app_insights_log": {
+        "title": "Azure Application Insights",
+        "description": "Application Insights telemetry",
+        "file-type": "json",
+        "json": true,
+        "timestamp-field": "time",
+        "line-format": [
+            {
+                "field": "time"
+            },
+            " ",
+            {
+                "field": "name"
+            },
+            " ",
+            {
+                "field": "message"
+            },
+            " ",
+            {
+                "field": "severityLevel"
+            }
+        ],
+        "url": "https://learn.microsoft.com/en-us/azure/azure-monitor/app/data-model",
+        "level-field": "severityLevel",
+        "body-field": "message",
+        "sample": [
+            {
+                "line": "{\"time\":\"2020-01-01T00:00:00.000Z\",\"iKey\":\"00000000-0000-0000-0000-000000000000\",\"name\":\"AppTraces\",\"severityLevel\":3,\"message\":\"Request failed\",\"data\":{\"baseType\":\"MessageData\",\"baseData\":{\"message\":\"Request failed\",\"severityLevel\":3}}}"
+            }
+        ]
+    }
+}

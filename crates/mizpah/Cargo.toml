@@ -14,6 +14,7 @@ readme = "../../README.md"
 include = [
   "src/**/*",
   "static/**/*",
+  "formats/**/*",
   "build.rs",
   "Cargo.toml",
 ]
@@ -64,8 +65,17 @@ tokio = { version = "1", features = [
   "process",
 ] }
 tokio-tungstenite = "0.29"
+toml = "0.8"
 toml_edit = "0.25"
 toon-format = { version = "0.5.0", default-features = false }
+bzip2 = "0.5"
+notify = "7"
+ratatui = "0.29"
+crossterm = "0.28"
+rusqlite = { version = "0.32", features = ["bundled"] }
+regex = "1"
+pcre2 = "0.2"
+include_dir = "0.7"
 tower-http = { version = "0.7", features = ["cors"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
@@ -73,3 +83,4 @@ url = "2"
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }
+tokio = { version = "1", features = ["test-util"] }

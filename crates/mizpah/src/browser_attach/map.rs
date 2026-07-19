@@ -590,4 +590,292 @@ mod tests {
         assert_eq!(groups.get("a.com").unwrap().len(), 2);
         assert_eq!(groups.get("b.com").unwrap().len(), 1);
     }
+
+    #[test]
+    fn map_log_entry_converts_levels() {
+        let params = json!({
+            "entry": {
+                "level": "error",
+                "text": "failed to load",
+                "url": "https://app.example/",
+                "timestamp": 2.0
+            }
+        });
+        let item = map_log_entry(&params, "https://app.example/", "app.example").unwrap();
+        let v: Value = serde_json::from_str(&item.line).unwrap();
+        assert_eq!(v["level"], "error");
+        assert_eq!(v["msg"], "failed to load");
+        assert_eq!(v["kind"], "console");
+    }
+
+    #[test]
+    fn map_log_entry_warning_to_warn() {
+        let params = json!({
+            "entry": {
+                "level": "warning",
+                "text": "slow query",
+                "timestamp": 1.5
+            }
+        });
+        let item = map_log_entry(&params, "http://localhost/", "localhost").unwrap();
+        let v: Value = serde_json::from_str(&item.line).unwrap();
+        assert_eq!(v["level"], "warn");
+    }
+
+    #[test]
+    fn map_log_entry_verbose_to_debug() {
+        let params = json!({
+            "entry": {
+                "level": "verbose",
+                "text": "debug info",
+                "timestamp": 1.0
+            }
+        });
+        let item = map_log_entry(&params, "http://localhost/", "localhost").unwrap();
+        let v: Value = serde_json::from_str(&item.line).unwrap();
+        assert_eq!(v["level"], "debug");
+    }
+
+    #[test]
+    fn map_exception_from_details() {
+        let params = json!({
+            "exceptionDetails": {
+                "text": "TypeError: x is undefined",
+                "exception": {
+                    "description": "TypeError"
+                }
+            },
+            "timestamp": 3.0
+        });
+        let item = map_exception(&params, "http://localhost:5173/", "localhost:5173").unwrap();
+        let v: Value = serde_json::from_str(&item.line).unwrap();
+        assert_eq!(v["level"], "error");
+        assert_eq!(v["msg"], "TypeError: x is undefined");
+        assert_eq!(v["kind"], "console");
+        assert!(v.get("exception").is_some());
+    }
+
+    #[test]
+    fn map_exception_fallback_to_description() {
+        let params = json!({
+            "exceptionDetails": {
+                "exception": {
+                    "description": "ReferenceError: foo is not defined"
+                }
+            },
+            "timestamp": 2.5
+        });
+        let item = map_exception(&params, "http://localhost/", "localhost").unwrap();
+        let v: Value = serde_json::from_str(&item.line).unwrap();
+        assert_eq!(v["msg"], "ReferenceError: foo is not defined");
+    }
+
+    #[test]
+    fn map_network_failed_with_error() {
+        let pending = PendingNetwork {
+            session_id: "s1".into(),
+            request_id: "r1".into(),
+            method: "GET".into(),
+            url: "https://api.example.com/v1".into(),
+            resource_type: "Fetch".into(),
+            request_headers: json!({"accept": "application/json"}),
+            request_body: None,
+            status: None,
+            mime_type: None,
+            response_headers: None,
+            started_at: 1.0,
+        };
+        let item = map_network_failed(
+            &pending,
+            "net::ERR_CONNECTION_REFUSED",
+            false,
+            "https://app.example.com/",
+            "app.example.com",
+        )
+        .unwrap();
+        let v: Value = serde_json::from_str(&item.line).unwrap();
+        assert_eq!(v["kind"], "network");
+        assert_eq!(v["errorText"], "net::ERR_CONNECTION_REFUSED");
+        assert_eq!(v["canceled"], false);
+        assert_eq!(v["url"], "https://api.example.com/v1");
+    }
+
+    #[test]
+    fn map_network_failed_canceled() {
+        let pending = PendingNetwork {
+            session_id: "s1".into(),
+            request_id: "r2".into(),
+            method: "POST".into(),
+            url: "https://api.example.com/upload".into(),
+            resource_type: "XHR".into(),
+            request_headers: json!({}),
+            request_body: Some(encode_body_str("data")),
+            status: None,
+            mime_type: None,
+            response_headers: None,
+            started_at: 1.0,
+        };
+        let item = map_network_failed(
+            &pending,
+            "canceled",
+            true,
+            "https://app.example.com/",
+            "app.example.com",
+        )
+        .unwrap();
+        let v: Value = serde_json::from_str(&item.line).unwrap();
+        assert_eq!(v["canceled"], true);
+        assert_eq!(v["requestBody"], "data");
+        assert_eq!(v["requestBodyEncoding"], "utf8");
+    }
+
+    #[test]
+    fn decode_cdp_body_utf8() {
+        let body = json!({
+            "body": "hello world",
+            "base64Encoded": false
+        });
+        let enc = decode_cdp_body(&body).unwrap();
+        assert_eq!(enc.encoding, "utf8");
+        assert_eq!(enc.data, "hello world");
+        assert!(!enc.truncated);
+    }
+
+    #[test]
+    fn decode_cdp_body_base64() {
+        let raw = "hello";
+        let b64 = base64::engine::general_purpose::STANDARD.encode(raw.as_bytes());
+        let body = json!({
+            "body": b64,
+            "base64Encoded": true
+        });
+        let enc = decode_cdp_body(&body).unwrap();
+        assert_eq!(enc.encoding, "utf8");
+        assert_eq!(enc.data, "hello");
+    }
+
+    #[test]
+    fn decode_cdp_body_base64_binary() {
+        let raw = vec![0u8, 1, 2, 255];
+        let b64 = base64::engine::general_purpose::STANDARD.encode(&raw);
+        let body = json!({
+            "body": b64,
+            "base64Encoded": true
+        });
+        let enc = decode_cdp_body(&body).unwrap();
+        assert_eq!(enc.encoding, "base64");
+        let decoded = base64::engine::general_purpose::STANDARD
+            .decode(&enc.data)
+            .unwrap();
+        assert_eq!(decoded, raw);
+    }
+
+    #[test]
+    fn extract_request_body_from_post_data() {
+        let request = json!({
+            "postData": r#"{"a":1}"#
+        });
+        let enc = extract_request_body(&request).unwrap();
+        assert_eq!(enc.data, r#"{"a":1}"#);
+        assert_eq!(enc.encoding, "utf8");
+    }
+
+    #[test]
+    fn extract_request_body_from_post_data_entries() {
+        let b64 = base64::engine::general_purpose::STANDARD.encode(b"part1");
+        let request = json!({
+            "postDataEntries": [
+                {"bytes": b64}
+            ]
+        });
+        let enc = extract_request_body(&request).unwrap();
+        assert_eq!(enc.data, "part1");
+    }
+
+    #[test]
+    fn extract_request_body_from_post_data_entries_multiple() {
+        let b64_1 = base64::engine::general_purpose::STANDARD.encode(b"part1");
+        let b64_2 = base64::engine::general_purpose::STANDARD.encode(b"part2");
+        let request = json!({
+            "postDataEntries": [
+                {"bytes": b64_1},
+                {"bytes": b64_2}
+            ]
+        });
+        let enc = extract_request_body(&request).unwrap();
+        assert_eq!(enc.data, "part1part2");
+    }
+
+    #[test]
+    fn extract_request_body_fallback_non_base64() {
+        let request = json!({
+            "postDataEntries": [
+                {"bytes": "raw-text"}
+            ]
+        });
+        let enc = extract_request_body(&request).unwrap();
+        assert!(enc.data.contains("raw-text"));
+    }
+
+    #[test]
+    fn remote_object_to_json_value() {
+        let obj = json!({"value": 42});
+        assert_eq!(remote_object_to_json(&obj), json!(42));
+    }
+
+    #[test]
+    fn remote_object_to_json_unserializable() {
+        let obj = json!({"unserializableValue": "NaN"});
+        assert_eq!(remote_object_to_json(&obj), json!("NaN"));
+    }
+
+    #[test]
+    fn remote_object_to_json_preview() {
+        let obj = json!({
+            "preview": {
+                "properties": [
+                    {"name": "x", "value": 1},
+                    {"name": "y", "value": 2}
+                ]
+            }
+        });
+        let result = remote_object_to_json(&obj);
+        assert_eq!(result.get("x"), Some(&json!(1)));
+        assert_eq!(result.get("y"), Some(&json!(2)));
+    }
+
+    #[test]
+    fn remote_object_to_json_preview_with_value_preview() {
+        let obj = json!({
+            "preview": {
+                "properties": [
+                    {"name": "obj", "valuePreview": {"description": "Object"}}
+                ]
+            }
+        });
+        let result = remote_object_to_json(&obj);
+        assert_eq!(result.get("obj"), Some(&json!("Object")));
+    }
+
+    #[test]
+    fn remote_object_to_json_fallback() {
+        let obj = json!({
+            "type": "function",
+            "description": "function foo() {}"
+        });
+        let result = remote_object_to_json(&obj);
+        assert_eq!(result.get("_type"), Some(&json!("function")));
+        assert_eq!(result.get("description"), Some(&json!("function foo() {}")));
+    }
+
+    #[test]
+    fn remote_object_to_json_class_name() {
+        let obj = json!({
+            "className": "Error",
+            "description": "Error: something went wrong"
+        });
+        let result = remote_object_to_json(&obj);
+        assert_eq!(result.get("_type"), Some(&json!("Error")));
+        assert_eq!(result.get("description"), Some(&json!("Error: something went wrong")));
+    }
 }

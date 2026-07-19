@@ -26,7 +26,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { startInvestigate } from "@/lib/api"
+import { fetchTrace, setBookmark, startInvestigate } from "@/lib/api"
 import {
   copyText,
   formatRelativeTime,
@@ -39,6 +39,37 @@ import type { InvestigateTarget, LogEntry } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
 const CONTEXT_RADIUS = 8
+
+const TRACE_FIELDS = [
+  "trace_id",
+  "traceId",
+  "request_id",
+  "requestId",
+  "correlation_id",
+  "correlationId",
+  "span_id",
+  "spanId",
+  "opid",
+] as const
+
+function resolveOpid(
+  data: Record<string, unknown>
+): { field: string; value: string } | null {
+  for (const field of TRACE_FIELDS) {
+    const v = data[field]
+    if (typeof v === "string" && v.trim()) {
+      return { field, value: v.trim() }
+    }
+    if (typeof v === "number") {
+      return { field, value: String(v) }
+    }
+  }
+  return null
+}
+
+function celQuote(s: string): string {
+  return `"${s.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`
+}
 
 type LogDetailDialogProps = {
   entry: LogEntry | null
@@ -63,6 +94,8 @@ export function LogDetailDialog({
   const [mode, setMode] = useState<JsonViewMode>("tree")
   const [investigatePending, setInvestigatePending] = useState(false)
   const [investigateError, setInvestigateError] = useState<string | null>(null)
+  const [tracePending, setTracePending] = useState(false)
+  const [bookmarkPending, setBookmarkPending] = useState(false)
   const [copiedWhat, setCopiedWhat] = useState<"json" | "id" | null>(null)
   const [now, setNow] = useState(() => Date.now())
   const searchRef = useRef<HTMLInputElement>(null)
@@ -81,6 +114,7 @@ export function LogDetailDialog({
   }, [entries, selectedIndex])
 
   const level = entry ? levelOf(entry.data) : null
+  const opid = entry ? resolveOpid(entry.data) : null
   const canPrev = selectedIndex > 0
   const canNext = selectedIndex >= 0 && selectedIndex < entries.length - 1
 
@@ -227,11 +261,16 @@ export function LogDetailDialog({
                   <DialogDescription asChild>
                     <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1.5 text-xs">
                       <span className="tabular-nums text-muted-foreground">
-                        {new Date(entry.receivedAt).toLocaleString()}
+                        {new Date(
+                          entry.eventTime ?? entry.receivedAt
+                        ).toLocaleString()}
                       </span>
                       <span className="text-muted-foreground/40">·</span>
                       <span className="tabular-nums text-muted-foreground">
-                        {formatRelativeTime(entry.receivedAt, now)}
+                        {formatRelativeTime(
+                          entry.eventTime ?? entry.receivedAt,
+                          now
+                        )}
                       </span>
                       <Badge
                         variant="secondary"
@@ -409,6 +448,70 @@ export function LogDetailDialog({
                     : "↑↓ navigate · / search · t/r view · click value to filter"}
                 </p>
                 <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                  {entry ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={bookmarkPending}
+                      onClick={() => {
+                        void (async () => {
+                          setBookmarkPending(true)
+                          try {
+                            await setBookmark({ id: entry.id, marked: true })
+                          } catch (err) {
+                            setInvestigateError(
+                              err instanceof Error
+                                ? err.message
+                                : "Failed to bookmark"
+                            )
+                          } finally {
+                            setBookmarkPending(false)
+                          }
+                        })()
+                      }}
+                    >
+                      {bookmarkPending ? (
+                        <Loader2 className="size-3.5 animate-spin" />
+                      ) : null}
+                      Bookmark
+                    </Button>
+                  ) : null}
+                  {opid ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={tracePending}
+                      onClick={() => {
+                        void (async () => {
+                          setTracePending(true)
+                          try {
+                            // Buffer-wide correlation (any configured trace field).
+                            await fetchTrace(opid.value)
+                            const fields = TRACE_FIELDS.map(
+                              (f) => `${f} == ${celQuote(opid.value)}`
+                            )
+                            onApplyFilter(fields.join(" || "))
+                            close()
+                          } catch (err) {
+                            setInvestigateError(
+                              err instanceof Error
+                                ? err.message
+                                : "Failed to load trace"
+                            )
+                          } finally {
+                            setTracePending(false)
+                          }
+                        })()
+                      }}
+                    >
+                      {tracePending ? (
+                        <Loader2 className="size-3.5 animate-spin" />
+                      ) : null}
+                      Show related
+                    </Button>
+                  ) : null}
                   <Button
                     type="button"
                     variant="outline"

@@ -1,0 +1,25 @@
+{
+    "kubelet_log": {
+        "title": "Kubelet",
+        "description": "Kubelet / klog-style text logs",
+        "regex": {
+            "std": {
+                "pattern": "^(?<level>[IWEF])(?<mmdd>\\d{4}) (?<timestamp>\\d{2}:\\d{2}:\\d{2}\\.\\d+)\\s+(?<thread>\\d+) (?<file>[^:]+):(?<line>\\d+)\\] (?<body>.*)$"
+            }
+        },
+        "sample": [
+            {
+                "line": "I0101 00:00:00.000000       1 kubelet.go:100] Starting kubelet"
+            }
+        ],
+        "url": "https://kubernetes.io/docs/reference/command-line-tools-reference/kubelet/",
+        "level-field": "level",
+        "level": {
+            "info": "^I$",
+            "warn": "^W$",
+            "error": "^E$",
+            "fatal": "^F$"
+        },
+        "body-field": "body"
+    }
+}

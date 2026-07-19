@@ -115,11 +115,16 @@ pub fn strip_service_prefix(line: &str, service: &str) -> String {
 }
 
 /// Strip one leading `[token]` tag (non-empty, no spaces, ≤ 64 chars).
+///
+/// Preserves NestJS ConsoleLogger's `[Nest]` marker so format packs can match it.
 fn strip_process_manager_tag(s: &str) -> Option<&str> {
     let rest = s.strip_prefix('[')?;
     let end = rest.find(']')?;
     let tag = &rest[..end];
     if tag.is_empty() || tag.contains(' ') || tag.len() > 64 {
+        return None;
+    }
+    if tag.eq_ignore_ascii_case("Nest") {
         return None;
     }
     Some(&rest[end + 1..])
@@ -442,6 +447,21 @@ mod tests {
         assert_eq!(strip_service_prefix("{", "api"), "{");
         // Bracket tags that contain spaces are not process-manager style.
         assert_eq!(strip_service_prefix("[my app] {", "api"), "[my app] {");
+        // NestJS ConsoleLogger marker must stay for nestjs_log pack detection.
+        assert_eq!(
+            strip_service_prefix(
+                "[Nest] 1  - 15/08/2024, 23:30:49     LOG [App] hi",
+                "api"
+            ),
+            "[Nest] 1  - 15/08/2024, 23:30:49     LOG [App] hi"
+        );
+        assert_eq!(
+            strip_service_prefix(
+                "[api] [Nest] 1  - 15/08/2024, 23:30:49     LOG hi",
+                "api"
+            ),
+            "[Nest] 1  - 15/08/2024, 23:30:49     LOG hi"
+        );
     }
 
     #[test]
@@ -453,5 +473,82 @@ mod tests {
         let value = parse_pretty_block(block).expect("should parse");
         assert_eq!(value["level"], json!("info"));
         assert_eq!(value["ms"], json!("+0ms"));
+    }
+
+    #[test]
+    fn strip_ansi_osc_and_truncated() {
+        assert_eq!(strip_ansi("\x1b]0;title\x07{"), "{");
+        assert_eq!(strip_ansi("\x1b]0;title\x1b\\{"), "{");
+        assert_eq!(strip_ansi("\x1b"), "");
+        assert_eq!(strip_ansi("\x1bX{"), "X{");
+    }
+
+    #[test]
+    fn js_literal_comments_trailing_commas_and_bare_values() {
+        let jsonish = js_literal_to_json("{ // comment\n a: 1, b: undefined, c: bare, }").unwrap();
+        assert!(jsonish.contains("\"a\": 1"));
+        assert!(jsonish.contains("\"b\": null"));
+        assert!(jsonish.contains("\"c\": \"bare\""));
+        assert!(!jsonish.contains(",}"));
+    }
+
+    #[test]
+    fn single_quote_escape_sequences() {
+        let input = "{ s: 'it\\'s ok' }";
+        let jsonish = js_literal_to_json(input).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&jsonish).unwrap();
+        assert_eq!(v["s"], "it's ok");
+    }
+
+    #[test]
+    fn buffer_helpers_and_invalid_block() {
+        let mut buf = PrettyBuffer::start("{".into());
+        assert_eq!(buf.into_lines(), vec!["{"]);
+        let mut big = PrettyBuffer::start("{".into());
+        for _ in 0..MAX_BUFFER_LINES {
+            big.push("  x: 1,".into());
+        }
+        assert!(big.is_oversized());
+        assert!(is_pretty_block_start("  {  "));
+        assert!(parse_pretty_block("[1,2]").is_none());
+        assert!(js_literal_to_json("{ bad: 'unclosed").is_none());
+    }
+
+    #[test]
+    fn strip_service_prefix_exact_only_when_matching() {
+        assert_eq!(strip_service_prefix("[api] {", "web"), "{");
+        assert_eq!(strip_service_prefix("no prefix", ""), "no prefix");
+        assert_eq!(strip_service_prefix("  [svc] x", "svc"), "x");
+    }
+
+    #[test]
+    fn js_literal_newline_tab_carriage_escape() {
+        let jsonish = js_literal_to_json("{ s: 'a\\nb\\tc' }").unwrap();
+        assert!(jsonish.contains("a") && jsonish.contains("b") && jsonish.contains("c"));
+    }
+
+    #[test]
+    fn double_quoted_escape_in_js_literal() {
+        let jsonish = js_literal_to_json(r#"{ s: "a \"b\"" }"#).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&jsonish).unwrap();
+        assert_eq!(v["s"], r#"a "b""#);
+    }
+
+    #[test]
+    fn single_quoted_unknown_escape_and_bare_undefined() {
+        let jsonish = js_literal_to_json("{ s: 'a\\z' }").unwrap();
+        assert!(jsonish.contains('a'));
+        let jsonish = js_literal_to_json("{ x: undefined, y: bare }").unwrap();
+        let v: serde_json::Value = serde_json::from_str(&jsonish).unwrap();
+        assert_eq!(v["x"], serde_json::Value::Null);
+        assert_eq!(v["y"], "bare");
+    }
+
+    #[test]
+    fn brace_depth_ignores_escaped_quotes() {
+        let mut buf = PrettyBuffer::start("{".into());
+        buf.push(r#"  key: 'a\'b',"#.into());
+        buf.push("}".into());
+        assert!(buf.is_complete());
     }
 }

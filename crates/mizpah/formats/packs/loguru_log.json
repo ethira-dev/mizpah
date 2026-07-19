@@ -1,0 +1,33 @@
+{
+    "loguru_log": {
+        "title": "Loguru",
+        "description": "Loguru default sink format (timestamp | LEVEL | module:func:line - message)",
+        "url": "https://loguru.readthedocs.io/",
+        "regex": {
+            "std": {
+                "pattern": "^(?<timestamp>\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}(?:[.,]\\d+)?)\\s+\\|\\s+(?<level>TRACE|DEBUG|INFO|SUCCESS|WARNING|ERROR|CRITICAL)\\s+\\|\\s+(?<module>[^:]+):(?<func>[^:]+):(?<line>\\d+)\\s+-\\s+(?<body>.*)$"
+            }
+        },
+        "level-field": "level",
+        "body-field": "body",
+        "timestamp-field": "timestamp",
+        "src-file-field": "module",
+        "src-line-field": "line",
+        "level": {
+            "trace": "TRACE",
+            "debug": "DEBUG",
+            "info": "^(?:INFO|SUCCESS)$",
+            "warn": "WARNING",
+            "error": "ERROR",
+            "critical": "CRITICAL"
+        },
+        "sample": [
+            {
+                "line": "2020-01-01 00:00:00.000 | INFO     | myapp:main:10 - server listening"
+            },
+            {
+                "line": "2020-01-01 00:00:00.000 | ERROR    | myapp:handle:42 - request failed"
+            }
+        ]
+    }
+}

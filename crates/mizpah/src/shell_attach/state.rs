@@ -182,4 +182,41 @@ mod tests {
         assert!(load_state_from(&path).is_err());
         let _ = fs::remove_dir_all(&dir);
     }
+
+    #[test]
+    fn load_empty_file_returns_default() {
+        let dir = std::env::temp_dir().join(format!(
+            "mizpah-empty-attach-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("attach.json");
+        fs::write(&path, "   \n").unwrap();
+        assert_eq!(load_state_from(&path).unwrap(), AttachState::default());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn shell_kind_as_str() {
+        assert_eq!(ShellKind::Zsh.as_str(), "zsh");
+        assert_eq!(ShellKind::Bash.as_str(), "bash");
+    }
+
+    #[test]
+    fn save_load_via_config_dir() {
+        use crate::test_support::env_lock;
+        let _guard = env_lock();
+        let dir = tempfile::tempdir().unwrap();
+        std::env::set_var("MIZPAH_CONFIG_DIR", dir.path());
+        let state = AttachState {
+            enabled: true,
+            service: Some("svc".into()),
+            host: "127.0.0.1".into(),
+            port: 3149,
+        };
+        save_state(&state).unwrap();
+        assert_eq!(load_state().unwrap(), state);
+        std::env::remove_var("MIZPAH_CONFIG_DIR");
+    }
 }

@@ -32,5 +32,7 @@ export default defineConfig({
   build: {
     outDir: path.resolve(__dirname, "../crates/mizpah/static"),
     emptyOutDir: true,
+    // Single embedded UI bundle; intentional rather than code-split.
+    chunkSizeWarningLimit: 1000,
   },
 })

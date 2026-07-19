@@ -5,7 +5,7 @@ import SiteNav from "../components/SiteNav.astro"
 interface Props {
   title: string
   description?: string
-  current?: "home" | "docs"
+  current?: "home" | "docs" | "formats"
 }
 
 const {
@@ -32,7 +32,10 @@ const pageTitle = title === "mizpah" ? title : `${title} · mizpah`
     <SiteNav base={base} current={current} />
     <slot />
     <footer
-      class="mx-auto mt-20 max-w-6xl border-t border-border px-4 py-10 sm:px-6"
+      class:list={[
+        "mx-auto max-w-6xl border-t border-border px-4 sm:px-6",
+        current === "formats" ? "mt-8 py-6" : "mt-20 py-10",
+      ]}
     >
       <div
         class="flex flex-col gap-3 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between"

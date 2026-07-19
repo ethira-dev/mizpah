@@ -1,0 +1,25 @@
+{
+    "cloudflare_zt_session_log": {
+        "title": "Cloudflare ZT Session",
+        "description": "Cloudflare Logpush Zero Trust network sessions",
+        "file-type": "json",
+        "json": true,
+        "timestamp-field": "SessionStartTime",
+        "line-format": [
+            {
+                "field": "SessionStartTime"
+            },
+            " ",
+            {
+                "field": "UserID"
+            }
+        ],
+        "url": "https://developers.cloudflare.com/logs/logpush/",
+        "body-field": "UserID",
+        "sample": [
+            {
+                "line": "{\"SessionStartTime\":\"2020-01-01T00:00:00Z\",\"SessionID\":\"sess1\",\"UserID\":\"u1\",\"Email\":\"alice@example.com\",\"DeviceID\":\"dev1\",\"ClientIP\":\"1.2.3.4\",\"SessionStatus\":\"active\",\"VirtualNetworkID\":\"vnet1\"}"
+            }
+        ]
+    }
+}

@@ -1,0 +1,21 @@
+{
+    "openvpn_log": {
+        "title": "OpenVPN",
+        "description": "OpenVPN server log lines",
+        "regex": {
+            "std": {
+                "pattern": "^(?<timestamp>\\w{3} \\w{3}\\s+\\d{1,2} \\d{2}:\\d{2}:\\d{2} \\d{4}) (?<body>.*(?:TLS:|Peer Connection Initiated|VERIFY OK|Initialization Sequence Completed|AUTH_FAILED).*)"
+            }
+        },
+        "sample": [
+            {
+                "line": "Wed Jan  1 00:00:00 2020 1.2.3.4:50000 TLS: Initial packet from [AF_INET]1.2.3.4:50000"
+            },
+            {
+                "line": "Wed Jan  1 00:00:01 2020 1.2.3.4:50000 [alice] Peer Connection Initiated with [AF_INET]1.2.3.4:50000"
+            }
+        ],
+        "url": "https://openvpn.net/",
+        "body-field": "body"
+    }
+}

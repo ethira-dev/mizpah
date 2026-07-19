@@ -1,0 +1,27 @@
+{
+    "serilog_text_log": {
+        "title": "Serilog / .NET text",
+        "description": "Common Serilog timestamp [Level] message layout",
+        "regex": {
+            "std": {
+                "pattern": "^(?<timestamp>\\d{4}-\\d{2}-\\d{2}[ T]\\d{2}:\\d{2}:\\d{2}(?:[\\.,]\\d+)?(?:\\s*(?:Z|[+-]\\d{2}:?\\d{2}))?)\\s+\\[(?<level>\\w+)\\]\\s+(?<body>.*)$"
+            }
+        },
+        "sample": [
+            {
+                "line": "2020-01-01 00:00:00.000 +00:00 [ERR] Something failed"
+            },
+            {
+                "line": "2020-01-01T00:00:00.0000000Z [Information] Started"
+            }
+        ],
+        "level-field": "level",
+        "level": {
+            "error": "ERR|Error|Fatal|CRITICAL",
+            "warn": "WRN|Warn|Warning",
+            "info": "INF|Information|Info",
+            "debug": "DBG|Debug|Verbose|Trace"
+        },
+        "body-field": "body"
+    }
+}

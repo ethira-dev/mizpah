@@ -1,0 +1,23 @@
+{
+    "morgan_log": {
+        "title": "Morgan",
+        "description": "Express morgan dev and tiny access log formats",
+        "url": "https://github.com/expressjs/morgan",
+        "regex": {
+            "dev": {
+                "pattern": "^(?<method>GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\\s+(?<path>\\S+)\\s+(?<status>\\d{3})\\s+(?<response_time>[\\d.]+)\\s+ms\\s+-\\s+(?<size>\\S+)$"
+            },
+            "tiny": {
+                "pattern": "^(?<method>GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\\s+(?<path>\\S+)\\s+(?<status>\\d{3})\\s+(?<size>\\S+)\\s+-\\s+(?<response_time>[\\d.]+)\\s+ms$"
+            }
+        },
+        "sample": [
+            {
+                "line": "GET /api/health 200 12.345 ms - 232"
+            },
+            {
+                "line": "GET / 200 232 - 1.234 ms"
+            }
+        ]
+    }
+}

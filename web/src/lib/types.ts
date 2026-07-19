@@ -1,6 +1,9 @@
 export type LogEntry = {
   id: number
   receivedAt: string
+  /** Wall-clock from payload when present; prefer for display/time filters. */
+  eventTime?: string
+  formatId?: string
   service: string
   data: Record<string, unknown>
 }
@@ -36,6 +39,9 @@ export type ActivityBucket = {
   start: string
   end: string
   count: number
+  error?: number
+  warn?: number
+  other?: number
 }
 
 /** Inclusive `from`, exclusive `to` (RFC3339). Omit `to` for an open upper bound (through now). */
@@ -64,6 +70,7 @@ export type UpdateChannel = "homebrew" | "direct"
 export type UpdateStatus = {
   installedVersion: string
   latestVersion?: string
+  releaseNotes?: string
   updateAvailable: boolean
   channel: UpdateChannel
   busy: boolean

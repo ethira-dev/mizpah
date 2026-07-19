@@ -1,0 +1,38 @@
+{
+    "netskope_log": {
+        "title": "Netskope",
+        "description": "Netskope CASB / SSE event JSON",
+        "file-type": "json",
+        "json": true,
+        "timestamp-field": "timestamp",
+        "line-format": [
+            {
+                "field": "timestamp"
+            },
+            " ",
+            {
+                "field": "activity"
+            },
+            " ",
+            {
+                "field": "user"
+            },
+            " ",
+            {
+                "field": "url"
+            },
+            " ",
+            {
+                "field": "alert"
+            }
+        ],
+        "url": "https://docs.netskope.com/",
+        "level-field": "alert",
+        "body-field": "activity",
+        "sample": [
+            {
+                "line": "{\"timestamp\":1577836800,\"type\":\"nspolicy\",\"activity\":\"Browse\",\"user\":\"alice@example.com\",\"url\":\"https://example.com/\",\"alert\":\"no\",\"action\":\"allow\",\"app\":\"Example\",\"srcip\":\"1.2.3.4\",\"dstip\":\"93.184.216.34\"}"
+            }
+        ]
+    }
+}

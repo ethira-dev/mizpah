@@ -1,14 +1,16 @@
 ---
+import formatIndex from "../data/format-index.json"
 import { GITHUB_URL } from "../lib/nav"
 
 interface Props {
   base: string
-  current?: "home" | "docs"
+  current?: "home" | "docs" | "formats"
 }
 
 const { base, current } = Astro.props
 const withBase = (path: string) =>
   `${base}${path.replace(/^\//, "")}`.replace(/\/{2,}/g, "/")
+const formatCount = formatIndex.length
 ---
 
 <header
@@ -37,6 +39,34 @@ const withBase = (path: string) =>
       <span>ethira</span>
     </a>
     <div class="flex items-center gap-1 sm:gap-2">
+      <a
+        href={withBase("/")}
+        class:list={[
+          "rounded-md px-3 py-1.5 text-sm transition-colors",
+          current === "home"
+            ? "text-primary"
+            : "text-muted-foreground hover:text-foreground",
+        ]}
+      >
+        Home
+      </a>
+      <a
+        href={withBase("/formats/")}
+        class:list={[
+          "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm transition-colors",
+          current === "formats"
+            ? "text-primary"
+            : "text-muted-foreground hover:text-foreground",
+        ]}
+      >
+        <span class="hidden sm:inline">Supported Formats</span>
+        <span class="sm:hidden">Formats</span>
+        <span
+          class="inline-flex min-w-[1.5rem] items-center justify-center rounded-md bg-primary/15 px-1.5 py-0.5 font-mono text-[11px] font-medium tabular-nums text-primary"
+        >
+          {formatCount}
+        </span>
+      </a>
       <a
         href={withBase("/docs/quick-start/")}
         class:list={[

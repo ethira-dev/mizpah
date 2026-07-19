@@ -1,0 +1,30 @@
+{
+    "cloudflare_gateway_network_log": {
+        "title": "Cloudflare Gateway Network",
+        "description": "Cloudflare Logpush Gateway Network",
+        "file-type": "json",
+        "json": true,
+        "timestamp-field": "Datetime",
+        "line-format": [
+            {
+                "field": "Datetime"
+            },
+            " ",
+            {
+                "field": "Action"
+            },
+            " ",
+            {
+                "field": "DestinationIP"
+            }
+        ],
+        "url": "https://developers.cloudflare.com/logs/logpush/",
+        "level-field": "Action",
+        "body-field": "DestinationIP",
+        "sample": [
+            {
+                "line": "{\"Datetime\":\"2020-01-01T00:00:00Z\",\"Action\":\"block\",\"SourceIP\":\"10.0.0.5\",\"DestinationIP\":\"1.2.3.4\",\"DestinationPort\":445,\"Transport\":\"tcp\",\"Email\":\"alice@example.com\"}"
+            }
+        ]
+    }
+}

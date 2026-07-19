@@ -1,0 +1,25 @@
+{
+    "cloudflare_page_shield_log": {
+        "title": "Cloudflare Page Shield",
+        "description": "Cloudflare Logpush page_shield_events",
+        "file-type": "json",
+        "json": true,
+        "timestamp-field": "Timestamp",
+        "line-format": [
+            {
+                "field": "Timestamp"
+            },
+            " ",
+            {
+                "field": "Host"
+            }
+        ],
+        "url": "https://developers.cloudflare.com/logs/logpush/",
+        "body-field": "Host",
+        "sample": [
+            {
+                "line": "{\"Timestamp\":\"2020-01-01T00:00:00Z\",\"Host\":\"example.com\",\"URL\":\"https://cdn.example.com/x.js\",\"Action\":\"log\",\"Score\":10,\"MaliciousDomain\":false,\"PageURL\":\"https://example.com/\"}"
+            }
+        ]
+    }
+}

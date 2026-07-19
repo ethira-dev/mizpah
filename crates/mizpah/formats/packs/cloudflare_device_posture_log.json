@@ -1,0 +1,30 @@
+{
+    "cloudflare_device_posture_log": {
+        "title": "Cloudflare Device Posture",
+        "description": "Cloudflare Logpush Device Posture results",
+        "file-type": "json",
+        "json": true,
+        "timestamp-field": "Timestamp",
+        "line-format": [
+            {
+                "field": "Timestamp"
+            },
+            " ",
+            {
+                "field": "RuleID"
+            },
+            " ",
+            {
+                "field": "DeviceID"
+            }
+        ],
+        "url": "https://developers.cloudflare.com/logs/logpush/",
+        "level-field": "RuleID",
+        "body-field": "DeviceID",
+        "sample": [
+            {
+                "line": "{\"Timestamp\":\"2020-01-01T00:00:00Z\",\"DeviceID\":\"dev1\",\"RuleID\":\"disk_encryption\",\"RuleName\":\"Disk Encryption\",\"Success\":false,\"Email\":\"alice@example.com\",\"SerialNumber\":\"ABC123\"}"
+            }
+        ]
+    }
+}

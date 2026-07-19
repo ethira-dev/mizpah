@@ -1,0 +1,33 @@
+{
+    "crowdstrike_log": {
+        "title": "CrowdStrike",
+        "description": "CrowdStrike FDR / event stream common JSON shape",
+        "file-type": "json",
+        "json": true,
+        "timestamp-field": "timestamp",
+        "line-format": [
+            {
+                "field": "timestamp"
+            },
+            " ",
+            {
+                "field": "event_simpleName"
+            },
+            " ",
+            {
+                "field": "ComputerName"
+            },
+            " ",
+            {
+                "field": "aid"
+            }
+        ],
+        "url": "https://www.crowdstrike.com/",
+        "body-field": "event_simpleName",
+        "sample": [
+            {
+                "line": "{\"timestamp\":\"2020-01-01T00:00:00Z\",\"event_simpleName\":\"ProcessRollup2\",\"aid\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"ComputerName\":\"HOST1\",\"UserName\":\"alice\",\"FileName\":\"cmd.exe\",\"CommandLine\":\"cmd.exe /c whoami\",\"event_platform\":\"Win\"}"
+            }
+        ]
+    }
+}

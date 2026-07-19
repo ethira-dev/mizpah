@@ -22,6 +22,13 @@ pub async fn run_hook_forward(source: HookSource) {
 }
 
 async fn forward_once(source: HookSource) -> Result<(), String> {
+    forward_once_with_stdin(source, &mut io::stdin()).await
+}
+
+async fn forward_once_with_stdin(
+    source: HookSource,
+    stdin: &mut impl Read,
+) -> Result<(), String> {
     let state = load_state().map_err(|e| e.to_string())?;
     let src = match source {
         HookSource::Cursor => state.cursor,
@@ -32,15 +39,21 @@ async fn forward_once(source: HookSource) -> Result<(), String> {
     };
 
     let mut raw = String::new();
-    io::stdin()
-        .read_to_string(&mut raw)
-        .map_err(|e| e.to_string())?;
+    stdin.read_to_string(&mut raw).map_err(|e| e.to_string())?;
     if raw.trim().is_empty() {
         return Ok(());
     }
 
     let event: Value =
         serde_json::from_str(raw.trim()).unwrap_or_else(|_| json!({ "_raw": raw.trim() }));
+    forward_event_to_hub(source, &src, event).await
+}
+
+pub(crate) async fn forward_event_to_hub(
+    source: HookSource,
+    src: &super::state::SourceState,
+    event: Value,
+) -> Result<(), String> {
     let cwd_hint = extract_cwd(&event);
     let envelope = build_envelope(source, event);
     let line = serde_json::to_string(&envelope).map_err(|e| e.to_string())?;
@@ -251,6 +264,18 @@ fn truncate_strings_at(value: &mut Value, max_bytes: usize, path: &str, fields: 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use super::super::state::{save_state, AgentHooksState, SourceState};
+    use crate::test_support::env_lock;
+    use std::io::Cursor;
+
+    fn enabled_source(service: &str, host: &str, port: u16) -> SourceState {
+        SourceState {
+            enabled: true,
+            host: host.into(),
+            port,
+            service: service.into(),
+        }
+    }
 
     #[test]
     fn envelope_renames_source_conflict_and_sets_level() {
@@ -284,5 +309,280 @@ mod tests {
             .iter()
             .any(|f| f.as_str() == Some("content")));
         assert!(env["content"].as_str().unwrap().len() <= MAX_STRING_BYTES);
+    }
+
+    #[test]
+    fn extract_cwd_from_fields() {
+        assert_eq!(
+            extract_cwd(&json!({"cwd": "/tmp"})),
+            Some("/tmp".into())
+        );
+        assert_eq!(
+            extract_cwd(&json!({"workspace_roots": ["/proj"]})),
+            Some("/proj".into())
+        );
+        assert_eq!(extract_cwd(&json!({"cwd": ""})), None);
+        assert_eq!(extract_cwd(&json!({})), None);
+    }
+
+    #[test]
+    fn derive_level_branches() {
+        assert_eq!(derive_level("postToolUseFailure", &json!({})), "error");
+        assert_eq!(derive_level("StopFailure", &json!({})), "error");
+        assert_eq!(
+            derive_level("x", &json!({"failure_type": "timeout"})),
+            "error"
+        );
+        assert_eq!(derive_level("x", &json!({"status": "error"})), "error");
+        assert_eq!(derive_level("x", &json!({"status": "aborted"})), "warn");
+        assert_eq!(derive_level("x", &json!({"reason": "error"})), "error");
+        assert_eq!(derive_level("PreToolUse", &json!({})), "info");
+    }
+
+    #[test]
+    fn derive_msg_includes_detail() {
+        let msg = derive_msg(
+            "cursor",
+            "PreToolUse",
+            &json!({"tool_name": "Bash", "command": "ignored"}),
+        );
+        assert!(msg.contains("Bash"));
+        let empty = derive_msg("claude", "Stop", &json!({}));
+        assert_eq!(empty, "claude Stop");
+    }
+
+    #[test]
+    fn truncate_str_and_nested_strings() {
+        assert_eq!(truncate_str("hello", 10), "hello");
+        assert!(truncate_str("abcdefghij", 5).ends_with('…'));
+        let mut nested = json!({"a": {"b": "x".repeat(MAX_STRING_BYTES + 10)}});
+        let fields = truncate_strings(&mut nested, MAX_STRING_BYTES);
+        assert!(!fields.is_empty());
+        assert!(fields.iter().any(|f| f.contains('.')));
+    }
+
+    #[test]
+    fn envelope_non_object_value() {
+        let env = build_envelope(HookSource::Cursor, json!("plain"));
+        assert_eq!(env["_value"], "plain");
+    }
+
+    #[tokio::test]
+    async fn forward_once_skips_when_disabled() {
+        let _guard = env_lock();
+        let dir = std::env::temp_dir().join(format!("mizpah-fwd-hook-off-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let old = std::env::var_os("MIZPAH_CONFIG_DIR");
+        std::env::set_var("MIZPAH_CONFIG_DIR", &dir);
+        save_state(&AgentHooksState {
+            cursor: Some(SourceState {
+                enabled: false,
+                host: "127.0.0.1".into(),
+                port: 3149,
+                service: "cursor".into(),
+            }),
+            claude: None,
+        })
+        .unwrap();
+        let mut stdin = Cursor::new(r#"{"hook_event_name":"x"}"#);
+        forward_once_with_stdin(HookSource::Cursor, &mut stdin)
+            .await
+            .unwrap();
+        match old {
+            Some(v) => std::env::set_var("MIZPAH_CONFIG_DIR", v),
+            None => std::env::remove_var("MIZPAH_CONFIG_DIR"),
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn forward_once_empty_stdin_is_noop() {
+        let _guard = env_lock();
+        let dir = std::env::temp_dir().join(format!("mizpah-fwd-empty-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let old = std::env::var_os("MIZPAH_CONFIG_DIR");
+        std::env::set_var("MIZPAH_CONFIG_DIR", &dir);
+        save_state(&AgentHooksState {
+            cursor: Some(enabled_source("cursor", "127.0.0.1", 3149)),
+            claude: None,
+        })
+        .unwrap();
+        let mut stdin = Cursor::new("  \n");
+        forward_once_with_stdin(HookSource::Cursor, &mut stdin)
+            .await
+            .unwrap();
+        match old {
+            Some(v) => std::env::set_var("MIZPAH_CONFIG_DIR", v),
+            None => std::env::remove_var("MIZPAH_CONFIG_DIR"),
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[cfg(not(miri))]
+    #[tokio::test]
+    async fn forward_once_posts_to_hub() {
+        let (hub_url, store) = crate::test_support::spawn_test_hub().await;
+        let url = url::Url::parse(&hub_url).unwrap();
+        let host = url.host_str().unwrap_or("127.0.0.1").to_string();
+        let port = url.port().unwrap_or(80);
+        let _guard = env_lock();
+        let dir = std::env::temp_dir().join(format!("mizpah-fwd-hook-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let old = std::env::var_os("MIZPAH_CONFIG_DIR");
+        std::env::set_var("MIZPAH_CONFIG_DIR", &dir);
+        save_state(&AgentHooksState {
+            cursor: Some(enabled_source("hook-svc", &host, port)),
+            claude: None,
+        })
+        .unwrap();
+        let mut stdin = Cursor::new(
+            r#"{"hook_event_name":"preToolUse","tool_name":"Read","cwd":"/tmp"}"#,
+        );
+        forward_once_with_stdin(HookSource::Cursor, &mut stdin)
+            .await
+            .unwrap();
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        assert!(store.stats().await.count >= 1);
+        match old {
+            Some(v) => std::env::set_var("MIZPAH_CONFIG_DIR", v),
+            None => std::env::remove_var("MIZPAH_CONFIG_DIR"),
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[cfg(not(miri))]
+    #[tokio::test]
+    async fn forward_once_invalid_json_wraps_raw() {
+        let (hub_url, store) = crate::test_support::spawn_test_hub().await;
+        let url = url::Url::parse(&hub_url).unwrap();
+        let _guard = env_lock();
+        let dir = std::env::temp_dir().join(format!("mizpah-fwd-raw-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let old = std::env::var_os("MIZPAH_CONFIG_DIR");
+        std::env::set_var("MIZPAH_CONFIG_DIR", &dir);
+        save_state(&AgentHooksState {
+            claude: Some(enabled_source(
+                "claude",
+                url.host_str().unwrap_or("127.0.0.1"),
+                url.port().unwrap_or(80),
+            )),
+            cursor: None,
+        })
+        .unwrap();
+        let mut stdin = Cursor::new("not-json");
+        forward_once_with_stdin(HookSource::Claude, &mut stdin)
+            .await
+            .unwrap();
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        assert!(store.stats().await.count >= 1);
+        match old {
+            Some(v) => std::env::set_var("MIZPAH_CONFIG_DIR", v),
+            None => std::env::remove_var("MIZPAH_CONFIG_DIR"),
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn derive_level_permission_and_abort_reasons() {
+        assert_eq!(derive_level("PermissionDenied", &json!({})), "error");
+        assert_eq!(derive_level("x", &json!({"status": "denied"})), "warn");
+        assert_eq!(
+            derive_level("x", &json!({"reason": "user abort"})),
+            "warn"
+        );
+    }
+
+    #[test]
+    fn derive_msg_command_and_hook_source_fields() {
+        assert!(derive_msg("c", "k", &json!({"command": "git status"})).contains("git"));
+        assert!(derive_msg("c", "k", &json!({"hookSource": "x"})).contains('x'));
+    }
+
+    #[tokio::test]
+    async fn forward_once_corrupt_state_errors() {
+        let _guard = env_lock();
+        let dir = std::env::temp_dir().join(format!("mizpah-hook-bad-state-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let old = std::env::var_os("MIZPAH_CONFIG_DIR");
+        std::env::set_var("MIZPAH_CONFIG_DIR", &dir);
+        std::fs::write(dir.join("agent-hooks.json"), "{bad").unwrap();
+        let mut stdin = Cursor::new("{}");
+        let err = forward_once_with_stdin(HookSource::Cursor, &mut stdin)
+            .await
+            .unwrap_err();
+        assert!(!err.is_empty());
+        match old {
+            Some(v) => std::env::set_var("MIZPAH_CONFIG_DIR", v),
+            None => std::env::remove_var("MIZPAH_CONFIG_DIR"),
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[cfg(not(miri))]
+    #[tokio::test]
+    async fn forward_event_to_hub_posts_envelope() {
+        let (hub_url, store) = crate::test_support::spawn_test_hub().await;
+        let url = url::Url::parse(&hub_url).unwrap();
+        let src = enabled_source(
+            "evt",
+            url.host_str().unwrap_or("127.0.0.1"),
+            url.port().unwrap_or(80),
+        );
+        forward_event_to_hub(
+            HookSource::Cursor,
+            &src,
+            json!({"hook_event_name":"stop","cwd":"/tmp"}),
+        )
+        .await
+        .unwrap();
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        assert!(store.stats().await.count >= 1);
+    }
+
+    #[test]
+    fn derive_level_close_reason_is_warn() {
+        assert_eq!(
+            derive_level("x", &json!({"reason": "window close"})),
+            "warn"
+        );
+    }
+
+    #[test]
+    fn derive_msg_uses_event_source_field() {
+        let msg = derive_msg("claude", "SessionStart", &json!({"source": "startup"}));
+        assert!(msg.contains("startup"));
+    }
+
+    #[tokio::test]
+    async fn run_hook_forward_with_enabled_claude() {
+        let (hub_url, store) = crate::test_support::spawn_test_hub().await;
+        let url = url::Url::parse(&hub_url).unwrap();
+        let _guard = env_lock();
+        let dir = std::env::temp_dir().join(format!("mizpah-hook-run-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let old = std::env::var_os("MIZPAH_CONFIG_DIR");
+        std::env::set_var("MIZPAH_CONFIG_DIR", &dir);
+        save_state(&AgentHooksState {
+            claude: Some(enabled_source(
+                "claude",
+                url.host_str().unwrap_or("127.0.0.1"),
+                url.port().unwrap_or(80),
+            )),
+            cursor: None,
+        })
+        .unwrap();
+        // run_hook_forward reads stdin; empty is ok.
+        run_hook_forward(HookSource::Claude).await;
+        match old {
+            Some(v) => std::env::set_var("MIZPAH_CONFIG_DIR", v),
+            None => std::env::remove_var("MIZPAH_CONFIG_DIR"),
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = store;
+    }
+
+    #[tokio::test]
+    async fn run_hook_forward_is_fail_open() {
+        run_hook_forward(HookSource::Claude).await;
     }
 }

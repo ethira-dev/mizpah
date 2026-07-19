@@ -7,10 +7,24 @@ use serde_json::Value;
 pub struct LogEntry {
     pub id: u64,
     pub received_at: DateTime<Utc>,
+    /// Wall-clock time from the log payload when parseable; otherwise equals `received_at`.
+    /// Absent on older spill rows — use [`LogEntry::effective_event_time`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub event_time: Option<DateTime<Utc>>,
     pub service: String,
+    /// Detected / declared log format id (e.g. `json`, `logfmt`, `syslog`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub format_id: Option<String>,
     pub data: Value,
     #[serde(skip)]
     pub approx_bytes: u64,
+}
+
+impl LogEntry {
+    /// Event time for display, activity, and time filters (falls back to `received_at`).
+    pub fn effective_event_time(&self) -> DateTime<Utc> {
+        self.event_time.unwrap_or(self.received_at)
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -56,7 +70,15 @@ pub struct Stats {
 pub struct ActivityBucket {
     pub start: DateTime<Utc>,
     pub end: DateTime<Utc>,
+    /// Total messages in the bucket (same as `error + warn + other`).
     pub count: u64,
+    /// Additive level breakdown (Phase A). Older clients ignore these fields.
+    #[serde(default)]
+    pub error: u64,
+    #[serde(default)]
+    pub warn: u64,
+    #[serde(default)]
+    pub other: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

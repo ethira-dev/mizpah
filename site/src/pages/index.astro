@@ -116,11 +116,37 @@ const withBase = (path: string) =>
           </p>
         </li>
         <li>
+          <h3 class="text-lg text-primary">Formats beyond NDJSON</h3>
+          <p class="mt-2 text-sm leading-relaxed text-muted-foreground">
+            Prefer JSON lines, but syslog, access logs, Bunyan/Pino, CloudTrail,
+            Suricata, and scores of other format-v1 packs normalize into
+            structured rows. Browse them on
+            <a
+              href={withBase("/formats/")}
+              class="text-primary underline-offset-4 hover:underline"
+              >Supported Formats</a
+            >, or see
+            <a
+              href={withBase("/docs/formats/")}
+              class="text-primary underline-offset-4 hover:underline"
+              >Log formats</a
+            >. Ingest files with <code class="font-mono text-foreground/80"
+              >mzp ingest</code
+            >.
+          </p>
+        </li>
+        <li>
           <h3 class="text-lg text-primary">Filter with CEL</h3>
           <p class="mt-2 text-sm leading-relaxed text-muted-foreground">
             Real queries in the search bar, with autocomplete for fields you've
             actually logged. You find the needle fast; agents get a tiny result
-            set instead of a fat paste.
+            set instead of a fat paste. For rollups, use aggregations or
+            read-only
+            <a
+              href={withBase("/docs/sql/")}
+              class="text-primary underline-offset-4 hover:underline"
+              >SQL</a
+            > over the buffer.
           </p>
         </li>
         <li>

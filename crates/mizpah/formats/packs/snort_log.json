@@ -1,0 +1,24 @@
+{
+    "snort_log": {
+        "title": "Snort",
+        "description": "Snort fast / alert log lines",
+        "regex": {
+            "std": {
+                "pattern": "^(?:(?<timestamp>\\d{2}/\\d{2}(?:/\\d{2,4})?-\\d{2}:\\d{2}:\\d{2}\\.\\d+)\\s+)?\\[\\*\\*\\]\\s+\\[(?<gid>\\d+):(?<sid>\\d+):(?<rev>\\d+)\\]\\s+(?<msg>.+?)\\s+\\[\\*\\*\\](?:\\s+\\[Classification:\\s*(?<classification>[^\\]]+)\\])?(?:\\s+\\[Priority:\\s*(?<priority>\\d+)\\])?(?:\\s+\\{(?<protocol>\\w+)\\}\\s+(?<src>[\\w.:-]+)(?::(?<srcport>\\d+))?\\s+->\\s+(?<dst>[\\w.:-]+)(?::(?<dstport>\\d+))?)?"
+            }
+        },
+        "sample": [
+            {
+                "line": "01/01-00:00:00.000000  [**] [1:1000001:0] ICMP test [**] [Classification: Misc activity] [Priority: 3] {ICMP} 10.0.0.1 -> 10.0.0.2"
+            }
+        ],
+        "url": "https://docs.snort.org/",
+        "level-field": "priority",
+        "level": {
+            "error": "^1$",
+            "warn": "^2$",
+            "info": "^[3-9]$"
+        },
+        "body-field": "msg"
+    }
+}

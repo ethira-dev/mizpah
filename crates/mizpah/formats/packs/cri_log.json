@@ -1,0 +1,18 @@
+{
+    "cri_log": {
+        "title": "CRI / containerd",
+        "description": "CRI container log line format",
+        "regex": {
+            "std": {
+                "pattern": "^(?<timestamp>\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d+Z)\\s+(?<stream>stdout|stderr)\\s+(?<flag>[FP])\\s+(?<body>.*)$"
+            }
+        },
+        "sample": [
+            {
+                "line": "2020-01-01T00:00:00.123456789Z stdout F Hello from container"
+            }
+        ],
+        "url": "https://github.com/kubernetes/design-proposals-archive/blob/main/node/kubelet-cri-logging.md",
+        "body-field": "body"
+    }
+}

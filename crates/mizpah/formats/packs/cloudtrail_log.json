@@ -1,0 +1,33 @@
+{
+    "cloudtrail_log": {
+        "title": "AWS CloudTrail",
+        "description": "AWS CloudTrail management and data events",
+        "file-type": "json",
+        "json": true,
+        "timestamp-field": "eventTime",
+        "line-format": [
+            {
+                "field": "eventTime"
+            },
+            " ",
+            {
+                "field": "eventName"
+            },
+            " ",
+            {
+                "field": "eventSource"
+            },
+            " ",
+            {
+                "field": "awsRegion"
+            }
+        ],
+        "url": "https://docs.aws.amazon.com/awscloudtrail/latest/userguide/cloudtrail-event-reference.html",
+        "body-field": "eventName",
+        "sample": [
+            {
+                "line": "{\"eventVersion\":\"1.08\",\"eventTime\":\"2020-01-01T00:00:00Z\",\"eventSource\":\"s3.amazonaws.com\",\"eventName\":\"GetObject\",\"awsRegion\":\"us-east-1\",\"userIdentity\":{\"type\":\"IAMUser\",\"userName\":\"alice\"},\"sourceIPAddress\":\"1.2.3.4\",\"recipientAccountId\":\"123456789012\"}"
+            }
+        ]
+    }
+}
