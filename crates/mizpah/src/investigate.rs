@@ -169,17 +169,20 @@ mod test_terminal {
     use super::Path;
     use std::sync::{Mutex, OnceLock};
 
-    static OPENER: OnceLock<Mutex<Option<fn(&Path) -> Result<(), String>>>> = OnceLock::new();
+    pub(crate) type TerminalOpener = fn(&Path) -> Result<(), String>;
+    type OpenerCell = Mutex<Option<TerminalOpener>>;
 
-    fn cell() -> &'static Mutex<Option<fn(&Path) -> Result<(), String>>> {
+    static OPENER: OnceLock<OpenerCell> = OnceLock::new();
+
+    fn cell() -> &'static OpenerCell {
         OPENER.get_or_init(|| Mutex::new(None))
     }
 
-    pub(super) fn get() -> Option<fn(&Path) -> Result<(), String>> {
+    pub(super) fn get() -> Option<TerminalOpener> {
         cell().lock().ok().and_then(|g| *g)
     }
 
-    pub(crate) fn set(opener: Option<fn(&Path) -> Result<(), String>>) {
+    pub(crate) fn set(opener: Option<TerminalOpener>) {
         *cell().lock().unwrap() = opener;
     }
 }
@@ -213,7 +216,7 @@ fn open_terminal_platform(launcher: &Path) -> Result<(), String> {
 }
 
 #[cfg(test)]
-pub(crate) fn set_test_terminal_opener(opener: Option<fn(&Path) -> Result<(), String>>) {
+pub(crate) fn set_test_terminal_opener(opener: Option<test_terminal::TerminalOpener>) {
     test_terminal::set(opener);
 }
 
@@ -656,9 +659,9 @@ mod tests {
     #[cfg(target_os = "macos")]
     #[test]
     fn open_terminal_macos_with_success_and_failure() {
-        use std::process::ExitStatus;
         #[cfg(unix)]
         use std::os::unix::process::ExitStatusExt;
+        use std::process::ExitStatus;
 
         let dir = tempfile::tempdir().unwrap();
         let launcher = dir.path().join("go.sh");
@@ -710,10 +713,8 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let launcher = dir.path().join("go.sh");
         fs::write(&launcher, b"#!/bin/sh\n").unwrap();
-        let err = open_terminal_macos_with(&launcher, |_| {
-            Err("osascript not found".into())
-        })
-        .unwrap_err();
+        let err =
+            open_terminal_macos_with(&launcher, |_| Err("osascript not found".into())).unwrap_err();
         assert!(err.contains("osascript"));
     }
 
@@ -721,6 +722,7 @@ mod tests {
     #[test]
     fn open_terminal_macos_uses_osascript_hook() {
         use std::process::ExitStatus;
+        let _opener = crate::test_support::terminal_opener_lock();
         let dir = tempfile::tempdir().unwrap();
         let launcher = dir.path().join("go.sh");
         fs::write(&launcher, b"#!/bin/sh\n").unwrap();
@@ -737,6 +739,7 @@ mod tests {
     #[test]
     fn launch_session_default_opener_path() {
         let _guard = crate::test_support::env_lock();
+        let _opener = crate::test_support::terminal_opener_lock();
         let dir = tempfile::tempdir().unwrap();
         let bin = dir.path().join("claude");
         fs::write(&bin, b"#!/bin/sh\n").unwrap();
@@ -773,12 +776,13 @@ mod tests {
 
     #[test]
     fn open_terminal_respects_test_opener() {
+        let _guard = crate::test_support::terminal_opener_lock();
         set_test_terminal_opener(Some(|_| Ok(())));
         let dir = tempfile::tempdir().unwrap();
         let launcher = dir.path().join("go.sh");
         fs::write(&launcher, b"#!/bin/sh\n").unwrap();
         let result = open_terminal(&launcher);
-        assert!(result.is_ok());
+        assert!(result.is_ok(), "{result:?}");
         set_test_terminal_opener(None);
     }
 
@@ -796,9 +800,7 @@ mod tests {
             content.contains(&project.path().display().to_string())
                 || content.contains("Set-Location")
         );
-        assert!(
-            content.contains(&prompt.display().to_string()) || content.contains("Get-Content")
-        );
+        assert!(content.contains(&prompt.display().to_string()) || content.contains("Get-Content"));
     }
 
     #[cfg(target_os = "linux")]

@@ -3,9 +3,7 @@
 mod normalize;
 mod registry;
 
-pub use registry::{
-    classify_pack_json, detect_pack_text, parse_pack_text, parse_with_format_hint,
-};
+pub use registry::{classify_pack_json, detect_pack_text, parse_pack_text, parse_with_format_hint};
 
 #[cfg(test)]
 pub use registry::{loaded_pack_ids, registry, FormatKind};

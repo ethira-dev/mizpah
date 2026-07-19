@@ -191,7 +191,8 @@ mod tests {
 
     #[test]
     fn merge_cursor_invalid_json_errors() {
-        let err = merge_cursor_hooks("{bad", "/bin/mzp __hook-forward --source cursor").unwrap_err();
+        let err =
+            merge_cursor_hooks("{bad", "/bin/mzp __hook-forward --source cursor").unwrap_err();
         assert!(err.contains("invalid Cursor hooks.json"));
     }
 

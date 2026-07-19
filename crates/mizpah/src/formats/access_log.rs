@@ -50,7 +50,7 @@ impl LogFormat for AccessLogFormat {
         } else {
             "info"
         };
-        let request = caps.name("request").map(|m| m.as_str()).unwrap_or("");
+        let request = caps.name("request").map_or("", |m| m.as_str());
         let mut method = "";
         let mut path = request;
         let mut parts = request.split_whitespace();
@@ -60,11 +60,11 @@ impl LogFormat for AccessLogFormat {
                 path = p;
             }
         }
-        let size_raw = caps.name("size").map(|m| m.as_str()).unwrap_or("-");
+        let size_raw = caps.name("size").map_or("-", |m| m.as_str());
         let size = size_raw.parse::<u64>().ok();
         let mut obj = json!({
-            "ip": caps.name("ip").map(|m| m.as_str()).unwrap_or(""),
-            "timestamp": caps.name("time").map(|m| m.as_str()).unwrap_or(""),
+            "ip": caps.name("ip").map_or("", |m| m.as_str()),
+            "timestamp": caps.name("time").map_or("", |m| m.as_str()),
             "request": request,
             "method": method,
             "path": path,

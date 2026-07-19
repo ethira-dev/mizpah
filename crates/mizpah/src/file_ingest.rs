@@ -147,9 +147,8 @@ fn expand_paths(patterns: &[String]) -> Result<Vec<PathBuf>, IngestError> {
                 .unwrap_or(p.as_str());
             if name.contains('*') || name.contains('?') {
                 let pattern = name.to_string();
-                let entries = std::fs::read_dir(parent).map_err(|e| {
-                    IngestError::Message(format!("read {}: {e}", parent.display()))
-                })?;
+                let entries = std::fs::read_dir(parent)
+                    .map_err(|e| IngestError::Message(format!("read {}: {e}", parent.display())))?;
                 for ent in entries.flatten() {
                     let fname = ent.file_name();
                     let fname = fname.to_string_lossy();
@@ -177,9 +176,7 @@ fn glob_match(pattern: &str, name: &str) -> bool {
     fn rec(p: &[char], n: &[char]) -> bool {
         match (p.first(), n.first()) {
             (None, None) => true,
-            (Some('*'), _) => {
-                (0..=n.len()).any(|i| rec(&p[1..], &n[i..]))
-            }
+            (Some('*'), _) => (0..=n.len()).any(|i| rec(&p[1..], &n[i..])),
             (Some('?'), Some(_)) => rec(&p[1..], &n[1..]),
             (Some(a), Some(b)) if a == b => rec(&p[1..], &n[1..]),
             _ => false,
@@ -199,24 +196,16 @@ async fn flush_lines(
     if buf.is_empty() {
         return Ok(());
     }
-    match crate::ingest_forward::post_batch_hint(
-        client,
-        url,
-        service,
-        None,
-        mzp,
-        buf,
-        format_hint,
-    )
-    .await
+    match crate::ingest_forward::post_batch_hint(client, url, service, None, mzp, buf, format_hint)
+        .await
     {
         Ok(()) => {
             buf.clear();
             Ok(())
         }
-        Err(BatchError::Disconnected) => Err(IngestError::Message(
-            "service disconnected on hub".into(),
-        )),
+        Err(BatchError::Disconnected) => {
+            Err(IngestError::Message("service disconnected on hub".into()))
+        }
         Err(BatchError::Other(e)) => Err(IngestError::Message(e)),
     }
 }
@@ -253,29 +242,13 @@ async fn ingest_reader<R: BufRead + Send>(
             if format_hint.is_none() && !probe.is_empty() {
                 format_hint = crate::formats::suggest_format_lock(&probe);
             }
-            flush_lines(
-                client,
-                url,
-                service,
-                mzp,
-                &mut buf,
-                format_hint.as_deref(),
-            )
-            .await?;
+            flush_lines(client, url, service, mzp, &mut buf, format_hint.as_deref()).await?;
         }
     }
     if format_hint.is_none() && !probe.is_empty() {
         format_hint = crate::formats::suggest_format_lock(&probe);
     }
-    flush_lines(
-        client,
-        url,
-        service,
-        mzp,
-        &mut buf,
-        format_hint.as_deref(),
-    )
-    .await?;
+    flush_lines(client, url, service, mzp, &mut buf, format_hint.as_deref()).await?;
     Ok((total, format_hint))
 }
 
@@ -319,9 +292,9 @@ fn fetch_remote_via_ssh_commands(
     ssh_cat: SshCatFn,
     scp: ScpFn,
 ) -> Result<PathBuf, IngestError> {
-    let (host_part, remote_path) = spec.split_once(':').ok_or_else(|| {
-        IngestError::Message(format!("invalid remote path: {spec}"))
-    })?;
+    let (host_part, remote_path) = spec
+        .split_once(':')
+        .ok_or_else(|| IngestError::Message(format!("invalid remote path: {spec}")))?;
     let tmp = tempfile::NamedTempFile::new()?;
     let tmp_path = tmp.into_temp_path();
     let status = ssh_cat(host_part, remote_path).map_err(IngestError::Message)?;
@@ -376,7 +349,11 @@ pub async fn run_ingest(
     let url = format!("http://{hub_host}:{hub_port}/api/ingest/batch");
     let mzp = MzpMeta::capture();
     let expanded = expand_paths(&paths)?;
-    if follow && expanded.iter().any(|p| is_remote_path(&p.to_string_lossy())) {
+    if follow
+        && expanded
+            .iter()
+            .any(|p| is_remote_path(&p.to_string_lossy()))
+    {
         return Err(IngestError::Message(
             "--follow is not supported for remote paths".into(),
         ));
@@ -428,6 +405,7 @@ fn test_follow_idle_limit() -> Option<usize> {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn follow_files(
     client: &reqwest::Client,
     url: &str,
@@ -463,6 +441,7 @@ async fn follow_files(
     .await
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn follow_files_loop(
     client: &reqwest::Client,
     url: &str,
@@ -497,10 +476,7 @@ async fn follow_files_loop(
                         }
                         let offset = offsets.get(&p).copied().unwrap_or(0);
                         let hint = format_hints.get(&p).and_then(|h| h.as_deref());
-                        match ingest_from_offset(
-                            client, url, service, mzp, &p, offset, hint,
-                        )
-                        .await
+                        match ingest_from_offset(client, url, service, mzp, &p, offset, hint).await
                         {
                             Ok((n, new_off)) => {
                                 offsets.insert(p.clone(), new_off);
@@ -974,7 +950,7 @@ mod tests {
         let mzp = crate::mzp_meta::MzpMeta::capture();
         let mut data = String::new();
         for i in 0..300 {
-            data.push_str(&format!("{{\"msg\":\"line{}\"}}\n", i));
+            data.push_str(&format!("{{\"msg\":\"line{i}\"}}\n"));
         }
         let reader = std::io::BufReader::new(data.as_bytes());
         let (count, _hint) = ingest_reader(
@@ -1210,7 +1186,8 @@ mod tests {
         let client = crate::ingest_forward::http_client().unwrap();
         let mzp = crate::mzp_meta::MzpMeta::capture();
         let (tx, rx) = mpsc::channel();
-        tx.send(Err(notify::Error::generic("watch failed"))).unwrap();
+        tx.send(Err(notify::Error::generic("watch failed")))
+            .unwrap();
         drop(tx);
         let err = follow_files_loop(
             &client,

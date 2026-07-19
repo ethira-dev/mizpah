@@ -46,16 +46,8 @@ fn parse_w3c_row(fields: &[String], line: &str) -> Option<Map<String, Value>> {
     }
     map.insert("_raw".into(), json!(line));
     // Common status / cs-method helpers
-    if let Some(status) = map
-        .get("sc-status")
-        .or_else(|| map.get("status"))
-        .cloned()
-    {
-        if let Ok(code) = status
-            .as_str()
-            .unwrap_or("")
-            .parse::<u64>()
-        {
+    if let Some(status) = map.get("sc-status").or_else(|| map.get("status")).cloned() {
+        if let Ok(code) = status.as_str().unwrap_or("").parse::<u64>() {
             map.insert("status".into(), json!(code));
             let level = if code >= 500 {
                 "error"

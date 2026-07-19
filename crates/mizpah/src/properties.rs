@@ -338,18 +338,16 @@ mod tests {
         assert!(sample.ends_with('…'));
         assert_eq!(sample.chars().count(), 81);
 
-        let infos = vec![
-            PropertyInfo {
-                path: "user.email".into(),
-                types: vec!["string".into()],
-                sample_values: vec!["alice@example.com".into()],
+        let infos = vec![PropertyInfo {
+            path: "user.email".into(),
+            types: vec!["string".into()],
+            sample_values: vec!["alice@example.com".into()],
+            count: 1,
+            values: vec![PropertyValueInfo {
+                value: "alice@example.com".into(),
                 count: 1,
-                values: vec![PropertyValueInfo {
-                    value: "alice@example.com".into(),
-                    count: 1,
-                }],
-            },
-        ];
+            }],
+        }];
         let filtered = filter_properties_by_query(infos, "alice");
         assert_eq!(filtered.len(), 1);
         assert_eq!(filtered[0].path, "user.email");
@@ -363,8 +361,8 @@ mod tests {
         let infos = paths_to_info(&map);
         assert!(infos.iter().any(|p| p.path == "level"));
 
-        let mut infos = infos.clone();
-        let mut services = HashMap::from([("api".into(), 2u64), ("web".into(), 1u64)]);
+        let mut infos = infos;
+        let services = HashMap::from([("api".into(), 2u64), ("web".into(), 1u64)]);
         push_service_property(&mut infos, &services, None);
         assert!(infos.iter().any(|p| p.path == "service"));
 
@@ -398,7 +396,7 @@ mod tests {
             data: json!({"k": "v"}),
             approx_bytes: 0,
         };
-        let mut entries = VecDeque::from([entry]);
+        let entries = VecDeque::from([entry]);
         let props = rebuild_properties_from_entries(&entries);
         assert!(props.contains_key("k"));
 
@@ -439,12 +437,7 @@ mod tests {
     #[test]
     fn discover_boolean_and_null_types() {
         let mut map = HashMap::new();
-        discover_paths_into(
-            &json!({"flag": true, "empty": null}),
-            "",
-            &mut map,
-            true,
-        );
+        discover_paths_into(&json!({"flag": true, "empty": null}), "", &mut map, true);
         assert!(map["flag"].types.contains("boolean"));
         assert!(map["empty"].types.contains("null"));
     }

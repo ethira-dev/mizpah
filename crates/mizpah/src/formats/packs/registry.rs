@@ -1,8 +1,8 @@
 //! Compile and query vendored format-v1 packs.
 
 use super::normalize::{
-    apply_text_aliases, is_mizpah_primary_pack, json_path, mizpah_format_id,
-    normalize_json_object, map_level,
+    apply_text_aliases, is_mizpah_primary_pack, json_path, map_level, mizpah_format_id,
+    normalize_json_object,
 };
 use crate::formats::NormalizedLog;
 use include_dir::{include_dir, Dir};
@@ -180,11 +180,8 @@ fn load_registry() -> PackRegistry {
             };
 
             #[cfg(test)]
-            let samples: Vec<(String, Option<Value>)> = raw
-                .sample
-                .into_iter()
-                .map(|s| (s.line, s.level))
-                .collect();
+            let samples: Vec<(String, Option<Value>)> =
+                raw.sample.into_iter().map(|s| (s.line, s.level)).collect();
 
             let line_format_fields: Vec<String> = raw
                 .line_format
@@ -256,11 +253,7 @@ pub fn registry() -> &'static PackRegistry {
 
 #[cfg(test)]
 pub fn loaded_pack_ids() -> Vec<String> {
-    registry()
-        .packs
-        .iter()
-        .map(|p| p.pack_id.clone())
-        .collect()
+    registry().packs.iter().map(|p| p.pack_id.clone()).collect()
 }
 
 fn capture_to_map(re: &Regex, line: &str) -> Option<Map<String, Value>> {
@@ -346,9 +339,7 @@ impl CompiledPack {
             let hits = self
                 .line_format_fields
                 .iter()
-                .filter(|f| {
-                    !f.starts_with("__") && json_path(&root, f).is_some()
-                })
+                .filter(|f| !f.starts_with("__") && json_path(&root, f).is_some())
                 .count();
             if hits < 2 {
                 return 0.0;

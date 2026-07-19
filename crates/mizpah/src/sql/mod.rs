@@ -85,18 +85,20 @@ pub fn validate_select_sql(sql: &str) -> Result<String, SqlError> {
     }
     let without_trailing = trimmed.trim_end_matches(';').trim();
     if without_trailing.contains(';') {
-        return Err(SqlError::Rejected("multiple statements are not allowed".into()));
+        return Err(SqlError::Rejected(
+            "multiple statements are not allowed".into(),
+        ));
     }
     let tokens = sql_identifier_tokens(without_trailing);
-    let first = tokens.first().map(String::as_str).unwrap_or("");
+    let first = tokens.first().map_or("", String::as_str);
     if first != "select" && first != "with" {
         return Err(SqlError::Rejected(
             "only SELECT (or WITH … SELECT) statements are allowed".into(),
         ));
     }
     const BANNED: &[&str] = &[
-        "attach", "detach", "pragma", "drop", "delete", "insert", "update", "alter",
-        "create", "replace", "vacuum", "reindex", "into",
+        "attach", "detach", "pragma", "drop", "delete", "insert", "update", "alter", "create",
+        "replace", "vacuum", "reindex", "into",
     ];
     for tok in &tokens {
         if BANNED.contains(&tok.as_str()) {
@@ -163,9 +165,7 @@ fn value_ref_to_json(v: ValueRef<'_>) -> Value {
     match v {
         ValueRef::Null => Value::Null,
         ValueRef::Integer(i) => Value::from(i),
-        ValueRef::Real(f) => serde_json::Number::from_f64(f)
-            .map(Value::Number)
-            .unwrap_or(Value::Null),
+        ValueRef::Real(f) => serde_json::Number::from_f64(f).map_or(Value::Null, Value::Number),
         ValueRef::Text(t) => Value::String(String::from_utf8_lossy(t).into_owned()),
         ValueRef::Blob(b) => Value::String(format!("blob:{}b", b.len())),
     }
@@ -182,7 +182,11 @@ impl Store {
             let conn = Connection::open_in_memory()?;
             snapshot_entries(&conn, &entries)?;
             let mut stmt = conn.prepare(&sql)?;
-            let columns: Vec<String> = stmt.column_names().iter().map(|s| (*s).to_string()).collect();
+            let columns: Vec<String> = stmt
+                .column_names()
+                .iter()
+                .map(|s| (*s).to_string())
+                .collect();
             let col_count = columns.len();
             let mut rows_iter = stmt.query([])?;
             let mut rows = Vec::new();
@@ -236,7 +240,10 @@ mod tests {
             .push_line("api", r#"{"level":"error","msg":"x"}"#)
             .await;
         let result = store
-            .query_sql("SELECT id, service, level FROM all_logs WHERE level = 'error'", 50)
+            .query_sql(
+                "SELECT id, service, level FROM all_logs WHERE level = 'error'",
+                50,
+            )
             .await
             .unwrap();
         assert_eq!(result.columns, vec!["id", "service", "level"]);
@@ -313,9 +320,7 @@ mod tests {
     #[tokio::test]
     async fn msg_field_falls_back_to_message() {
         let store = Store::new(1_000_000);
-        store
-            .push_line("svc", r#"{"message":"hello there"}"#)
-            .await;
+        store.push_line("svc", r#"{"message":"hello there"}"#).await;
         let result = store
             .query_sql("SELECT msg FROM all_logs", 1)
             .await

@@ -25,10 +25,7 @@ async fn forward_once(source: HookSource) -> Result<(), String> {
     forward_once_with_stdin(source, &mut io::stdin()).await
 }
 
-async fn forward_once_with_stdin(
-    source: HookSource,
-    stdin: &mut impl Read,
-) -> Result<(), String> {
+async fn forward_once_with_stdin(source: HookSource, stdin: &mut impl Read) -> Result<(), String> {
     let state = load_state().map_err(|e| e.to_string())?;
     let src = match source {
         HookSource::Cursor => state.cursor,
@@ -263,8 +260,8 @@ fn truncate_strings_at(value: &mut Value, max_bytes: usize, path: &str, fields: 
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::state::{save_state, AgentHooksState, SourceState};
+    use super::*;
     use crate::test_support::env_lock;
     use std::io::Cursor;
 
@@ -313,10 +310,7 @@ mod tests {
 
     #[test]
     fn extract_cwd_from_fields() {
-        assert_eq!(
-            extract_cwd(&json!({"cwd": "/tmp"})),
-            Some("/tmp".into())
-        );
+        assert_eq!(extract_cwd(&json!({"cwd": "/tmp"})), Some("/tmp".into()));
         assert_eq!(
             extract_cwd(&json!({"workspace_roots": ["/proj"]})),
             Some("/proj".into())
@@ -435,9 +429,8 @@ mod tests {
             claude: None,
         })
         .unwrap();
-        let mut stdin = Cursor::new(
-            r#"{"hook_event_name":"preToolUse","tool_name":"Read","cwd":"/tmp"}"#,
-        );
+        let mut stdin =
+            Cursor::new(r#"{"hook_event_name":"preToolUse","tool_name":"Read","cwd":"/tmp"}"#);
         forward_once_with_stdin(HookSource::Cursor, &mut stdin)
             .await
             .unwrap();
@@ -486,10 +479,7 @@ mod tests {
     fn derive_level_permission_and_abort_reasons() {
         assert_eq!(derive_level("PermissionDenied", &json!({})), "error");
         assert_eq!(derive_level("x", &json!({"status": "denied"})), "warn");
-        assert_eq!(
-            derive_level("x", &json!({"reason": "user abort"})),
-            "warn"
-        );
+        assert_eq!(derive_level("x", &json!({"reason": "user abort"})), "warn");
     }
 
     #[test]
@@ -501,7 +491,8 @@ mod tests {
     #[tokio::test]
     async fn forward_once_corrupt_state_errors() {
         let _guard = env_lock();
-        let dir = std::env::temp_dir().join(format!("mizpah-hook-bad-state-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("mizpah-hook-bad-state-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let old = std::env::var_os("MIZPAH_CONFIG_DIR");
         std::env::set_var("MIZPAH_CONFIG_DIR", &dir);

@@ -100,7 +100,9 @@ fn registry_loads_all_non_converter_packs() {
         "expected ~195+ active packs, got {}",
         ids.len()
     );
-    assert!(!ids.iter().any(|id| id == "pcap_log" || id == "otel_collector_log"));
+    assert!(!ids
+        .iter()
+        .any(|id| id == "pcap_log" || id == "otel_collector_log"));
 }
 
 #[test]
@@ -141,10 +143,8 @@ fn every_pack_compiles_and_has_samples_exercised() {
                         continue;
                     }
                     match pack.parse_text(line) {
-                        None => failures.push(format!(
-                            "{} sample[{i}]: parse returned None",
-                            pack.pack_id
-                        )),
+                        None => failures
+                            .push(format!("{} sample[{i}]: parse returned None", pack.pack_id)),
                         Some(norm) => {
                             let expected = stable_format_id(&pack.pack_id);
                             if norm.format_id != expected {
@@ -160,10 +160,7 @@ fn every_pack_compiles_and_has_samples_exercised() {
                 }
                 FormatKind::Json => {
                     let Ok(Value::Object(obj)) = serde_json::from_str::<Value>(line) else {
-                        failures.push(format!(
-                            "{} sample[{i}]: not a JSON object",
-                            pack.pack_id
-                        ));
+                        failures.push(format!("{} sample[{i}]: not a JSON object", pack.pack_id));
                         continue;
                     };
                     if pack.json_confidence(&obj) < 0.5 {
@@ -174,10 +171,9 @@ fn every_pack_compiles_and_has_samples_exercised() {
                         continue;
                     }
                     match pack.parse_json(&obj) {
-                        None => failures.push(format!(
-                            "{} sample[{i}]: parse_json None",
-                            pack.pack_id
-                        )),
+                        None => {
+                            failures.push(format!("{} sample[{i}]: parse_json None", pack.pack_id))
+                        }
                         Some(norm) => {
                             let expected = stable_format_id(&pack.pack_id);
                             if norm.format_id != expected {
@@ -210,14 +206,13 @@ fn every_pack_compiles_and_has_samples_exercised() {
         .cloned()
         .collect();
 
-    if !failures.is_empty() || !unexpected.is_empty() {
-        panic!(
-            "pack sample failures ({}):\n{}\nuntested packs: {:?}",
-            failures.len(),
-            failures.join("\n"),
-            unexpected
-        );
-    }
+    assert!(
+        !(!failures.is_empty() || !unexpected.is_empty()),
+        "pack sample failures ({}):\n{}\nuntested packs: {:?}",
+        failures.len(),
+        failures.join("\n"),
+        unexpected
+    );
 
     assert_eq!(
         exercised.len(),
@@ -262,7 +257,13 @@ fn rust_tracing_sample_via_engine() {
     let pack = reg.get("rust_tracing_log").expect("rust_tracing_log");
     let line = &pack.samples[0].0;
     let norm = pack
-        .parse_json(&serde_json::from_str::<Value>(line).unwrap().as_object().unwrap().clone())
+        .parse_json(
+            &serde_json::from_str::<Value>(line)
+                .unwrap()
+                .as_object()
+                .unwrap()
+                .clone(),
+        )
         .expect("parse");
     assert_eq!(norm.format_id, "rust_tracing_log");
 }

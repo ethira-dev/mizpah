@@ -2,16 +2,31 @@
 
 use std::sync::{Mutex, MutexGuard};
 
+/// Opaque guard so clippy does not flag intentional std mutex holds across `.await`
+/// in tests that serialize process-global env mutation.
+pub(crate) struct EnvLock {
+    _guard: MutexGuard<'static, ()>,
+}
+
 /// Serialize tests that mutate process-global env vars (`HOME`, `MIZPAH_CONFIG_DIR`, …).
-pub(crate) fn env_lock() -> MutexGuard<'static, ()> {
+pub(crate) fn env_lock() -> EnvLock {
     static LOCK: Mutex<()> = Mutex::new(());
-    LOCK.lock().unwrap_or_else(|e| e.into_inner())
+    EnvLock {
+        _guard: LOCK.lock().unwrap_or_else(|e| e.into_inner()),
+    }
+}
+
+/// Opaque guard for terminal-opener injection tests (same rationale as [`EnvLock`]).
+pub(crate) struct TerminalOpenerLock {
+    _guard: MutexGuard<'static, ()>,
 }
 
 /// Serialize tests that inject a global terminal opener (`investigate::set_test_terminal_opener`).
-pub(crate) fn terminal_opener_lock() -> MutexGuard<'static, ()> {
+pub(crate) fn terminal_opener_lock() -> TerminalOpenerLock {
     static LOCK: Mutex<()> = Mutex::new(());
-    LOCK.lock().unwrap_or_else(|e| e.into_inner())
+    TerminalOpenerLock {
+        _guard: LOCK.lock().unwrap_or_else(|e| e.into_inner()),
+    }
 }
 
 #[cfg(test)]

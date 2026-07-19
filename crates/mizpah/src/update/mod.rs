@@ -5,8 +5,6 @@ mod check;
 mod resume;
 
 pub use apply::{apply_update, ApplyOutcome};
-#[cfg(test)]
-pub use apply::apply_update_impl;
 #[allow(unused_imports)]
 pub use check::{
     detect_channel, fetch_latest_release, find_brew_binary, parse_cli_version, parse_tag_version,
@@ -226,14 +224,14 @@ mod tests {
     #[tokio::test]
     async fn status_checks_for_updates_when_stale() {
         let manager = make_test_manager();
-        
+
         {
             let mut g = manager.inner.lock().await;
             g.last_checked_at = None;
         }
-        
+
         let _status = manager.status().await;
-        
+
         let g = manager.inner.lock().await;
         assert!(g.last_checked_at.is_some());
     }
@@ -241,27 +239,27 @@ mod tests {
     #[tokio::test]
     async fn status_skips_check_when_fresh() {
         let manager = make_test_manager();
-        
+
         {
             let mut g = manager.inner.lock().await;
             g.last_checked_at = Some(Instant::now());
         }
-        
+
         let _status = manager.status().await;
     }
 
     #[tokio::test]
     async fn status_skips_check_when_busy() {
         let manager = make_test_manager();
-        
+
         {
             let mut g = manager.inner.lock().await;
             g.busy = true;
             g.last_checked_at = None;
         }
-        
+
         let _status = manager.status().await;
-        
+
         let g = manager.inner.lock().await;
         assert!(g.last_checked_at.is_none());
     }
@@ -269,12 +267,12 @@ mod tests {
     #[tokio::test]
     async fn try_begin_apply_when_no_update() {
         let manager = make_test_manager();
-        
+
         {
             let mut g = manager.inner.lock().await;
             g.latest_version = None;
         }
-        
+
         let result = manager.try_begin_apply().await;
         assert!(matches!(result, Err(ApplyBeginError::NoUpdate)));
     }
@@ -282,13 +280,13 @@ mod tests {
     #[tokio::test]
     async fn try_begin_apply_when_already_latest() {
         let manager = make_test_manager();
-        
+
         {
             let mut g = manager.inner.lock().await;
             g.installed_version = Version::new(1, 0, 0);
             g.latest_version = Some(Version::new(1, 0, 0));
         }
-        
+
         let result = manager.try_begin_apply().await;
         assert!(matches!(result, Err(ApplyBeginError::NoUpdate)));
     }
@@ -296,14 +294,14 @@ mod tests {
     #[tokio::test]
     async fn try_begin_apply_when_busy() {
         let manager = make_test_manager();
-        
+
         {
             let mut g = manager.inner.lock().await;
             g.busy = true;
             g.installed_version = Version::new(1, 0, 0);
             g.latest_version = Some(Version::new(1, 1, 0));
         }
-        
+
         let result = manager.try_begin_apply().await;
         assert!(matches!(result, Err(ApplyBeginError::Busy)));
     }
@@ -311,18 +309,18 @@ mod tests {
     #[tokio::test]
     async fn try_begin_apply_success() {
         let manager = make_test_manager();
-        
+
         {
             let mut g = manager.inner.lock().await;
             g.installed_version = Version::new(1, 0, 0);
             g.latest_version = Some(Version::new(1, 1, 0));
             g.busy = false;
         }
-        
+
         let result = manager.try_begin_apply().await;
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), Version::new(1, 1, 0));
-        
+
         let g = manager.inner.lock().await;
         assert!(g.busy);
     }
@@ -330,14 +328,14 @@ mod tests {
     #[tokio::test]
     async fn clear_busy() {
         let manager = make_test_manager();
-        
+
         {
             let mut g = manager.inner.lock().await;
             g.busy = true;
         }
-        
+
         manager.clear_busy().await;
-        
+
         let g = manager.inner.lock().await;
         assert!(!g.busy);
     }
@@ -345,14 +343,14 @@ mod tests {
     #[tokio::test]
     async fn ensure_fresh_when_never_checked() {
         let manager = make_test_manager();
-        
+
         {
             let mut g = manager.inner.lock().await;
             g.last_checked_at = None;
         }
-        
+
         manager.ensure_fresh().await;
-        
+
         let g = manager.inner.lock().await;
         assert!(g.last_checked_at.is_some());
     }
@@ -360,14 +358,14 @@ mod tests {
     #[tokio::test]
     async fn ensure_fresh_when_stale() {
         let manager = make_test_manager();
-        
+
         {
             let mut g = manager.inner.lock().await;
             g.last_checked_at = Some(Instant::now() - CHECK_TTL - Duration::from_secs(1));
         }
-        
+
         manager.ensure_fresh().await;
-        
+
         let g = manager.inner.lock().await;
         let elapsed = Instant::now().saturating_duration_since(g.last_checked_at.unwrap());
         assert!(elapsed < Duration::from_secs(5));
@@ -376,14 +374,14 @@ mod tests {
     #[tokio::test]
     async fn check_now_updates_timestamp() {
         let manager = make_test_manager();
-        
+
         {
             let mut g = manager.inner.lock().await;
             g.last_checked_at = None;
         }
-        
+
         manager.check_now().await;
-        
+
         let g = manager.inner.lock().await;
         assert!(g.last_checked_at.is_some());
     }
@@ -391,15 +389,15 @@ mod tests {
     #[tokio::test]
     async fn check_now_skips_when_busy() {
         let manager = make_test_manager();
-        
+
         {
             let mut g = manager.inner.lock().await;
             g.busy = true;
             g.last_checked_at = None;
         }
-        
+
         manager.check_now().await;
-        
+
         let g = manager.inner.lock().await;
         assert!(g.last_checked_at.is_none());
     }
@@ -416,10 +414,10 @@ mod tests {
     fn update_channel_serialization() {
         let homebrew = UpdateChannel::Homebrew;
         let direct = UpdateChannel::Direct;
-        
+
         let json_hb = serde_json::to_string(&homebrew).unwrap();
         let json_dir = serde_json::to_string(&direct).unwrap();
-        
+
         assert_eq!(json_hb, r#""homebrew""#);
         assert_eq!(json_dir, r#""direct""#);
     }
@@ -434,7 +432,7 @@ mod tests {
             channel: UpdateChannel::Direct,
             busy: false,
         };
-        
+
         let json = serde_json::to_string(&status).unwrap();
         assert!(json.contains("installedVersion"));
         assert!(json.contains("latestVersion"));
@@ -453,7 +451,7 @@ mod tests {
             error: Some("test error".into()),
             restarting: Some(true),
         };
-        
+
         let json = serde_json::to_string(&event).unwrap();
         assert!(json.contains("step"));
         assert!(json.contains("progress"));
@@ -478,7 +476,7 @@ mod tests {
     fn apply_begin_error_variants() {
         let busy = ApplyBeginError::Busy;
         let no_update = ApplyBeginError::NoUpdate;
-        
+
         assert!(matches!(busy, ApplyBeginError::Busy));
         assert!(matches!(no_update, ApplyBeginError::NoUpdate));
     }

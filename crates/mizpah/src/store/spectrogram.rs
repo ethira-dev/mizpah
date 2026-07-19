@@ -78,7 +78,8 @@ impl Store {
         let mut ranked: Vec<(String, u64)> = value_totals.into_iter().collect();
         ranked.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
         let top_n = value_buckets.saturating_sub(1).max(1);
-        let mut value_labels: Vec<String> = ranked.iter().take(top_n).map(|(k, _)| k.clone()).collect();
+        let mut value_labels: Vec<String> =
+            ranked.iter().take(top_n).map(|(k, _)| k.clone()).collect();
         let has_other = ranked.len() > value_labels.len();
         if has_other {
             value_labels.push("__other__".into());
@@ -129,9 +130,7 @@ mod tests {
         store.push_line("api", r#"{"level":"error"}"#).await;
         store.push_line("api", r#"{"level":"info"}"#).await;
         store.push_line("api", r#"{"level":"error"}"#).await;
-        let result = store
-            .spectrogram("level", None, None, 4, 8)
-            .await;
+        let result = store.spectrogram("level", None, None, 4, 8).await;
         assert_eq!(result.field_path, "level");
         assert!(!result.counts.is_empty());
         let total: u64 = result.counts.iter().flatten().sum();

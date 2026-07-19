@@ -46,7 +46,9 @@ impl Store {
                 ann.comment = c;
             }
             // Drop empty annotations
-            if !ann.marked && ann.tags.is_empty() && ann.comment.as_ref().is_none_or(|s| s.is_empty())
+            if !ann.marked
+                && ann.tags.is_empty()
+                && ann.comment.as_ref().is_none_or(|s| s.is_empty())
             {
                 let removed = inner.annotations.remove(&id).unwrap_or_default();
                 Some(removed)
@@ -126,14 +128,22 @@ mod tests {
             .await;
         let id = e[0].id;
         store
-            .set_bookmark(id, Some(true), Some(vec!["keep".into()]), Some(Some("note".into())))
+            .set_bookmark(
+                id,
+                Some(true),
+                Some(vec!["keep".into()]),
+                Some(Some("note".into())),
+            )
             .await
             .unwrap();
         let list = store.list_bookmarks().await;
         assert_eq!(list.len(), 1);
         assert!(list[0].annotation.marked);
 
-        let n = store.tag_by_cel(r#"level == "error""#, "err").await.unwrap();
+        let n = store
+            .tag_by_cel(r#"level == "error""#, "err")
+            .await
+            .unwrap();
         assert_eq!(n, 1);
         let ann = store.get_annotation(id).await.unwrap();
         assert!(ann.tags.contains(&"err".into()));
@@ -142,12 +152,10 @@ mod tests {
     #[tokio::test]
     async fn set_bookmark_missing_id_returns_none() {
         let store = Store::new(1_000_000);
-        assert!(
-            store
-                .set_bookmark(999, Some(true), None, None)
-                .await
-                .is_none()
-        );
+        assert!(store
+            .set_bookmark(999, Some(true), None, None)
+            .await
+            .is_none());
     }
 
     #[tokio::test]
@@ -170,9 +178,7 @@ mod tests {
     #[tokio::test]
     async fn tag_by_cel_rejects_empty_tag() {
         let store = Store::new(1_000_000);
-        store
-            .push_line("api", r#"{"level":"error"}"#)
-            .await;
+        store.push_line("api", r#"{"level":"error"}"#).await;
         let err = store.tag_by_cel(r#"level == "error""#, "  ").await;
         assert_eq!(err.unwrap_err(), "tag is required");
     }

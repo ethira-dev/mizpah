@@ -449,17 +449,11 @@ mod tests {
         assert_eq!(strip_service_prefix("[my app] {", "api"), "[my app] {");
         // NestJS ConsoleLogger marker must stay for nestjs_log pack detection.
         assert_eq!(
-            strip_service_prefix(
-                "[Nest] 1  - 15/08/2024, 23:30:49     LOG [App] hi",
-                "api"
-            ),
+            strip_service_prefix("[Nest] 1  - 15/08/2024, 23:30:49     LOG [App] hi", "api"),
             "[Nest] 1  - 15/08/2024, 23:30:49     LOG [App] hi"
         );
         assert_eq!(
-            strip_service_prefix(
-                "[api] [Nest] 1  - 15/08/2024, 23:30:49     LOG hi",
-                "api"
-            ),
+            strip_service_prefix("[api] [Nest] 1  - 15/08/2024, 23:30:49     LOG hi", "api"),
             "[Nest] 1  - 15/08/2024, 23:30:49     LOG hi"
         );
     }
@@ -502,7 +496,7 @@ mod tests {
 
     #[test]
     fn buffer_helpers_and_invalid_block() {
-        let mut buf = PrettyBuffer::start("{".into());
+        let buf = PrettyBuffer::start("{".into());
         assert_eq!(buf.into_lines(), vec!["{"]);
         let mut big = PrettyBuffer::start("{".into());
         for _ in 0..MAX_BUFFER_LINES {

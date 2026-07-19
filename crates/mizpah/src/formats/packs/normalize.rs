@@ -57,7 +57,6 @@ pub fn json_path<'a>(root: &'a Value, path: &str) -> Option<&'a Value> {
     Some(cur)
 }
 
-
 fn normalize_level_str(raw: &str) -> String {
     let lower = raw.trim().to_ascii_lowercase();
     match lower.as_str() {
@@ -78,10 +77,7 @@ fn normalize_level_str(raw: &str) -> String {
 }
 
 /// Map numeric / string level using optional pack `level` table (string patterns or numbers).
-pub fn map_level(
-    raw: &Value,
-    level_map: &Map<String, Value>,
-) -> Option<String> {
+pub fn map_level(raw: &Value, level_map: &Map<String, Value>) -> Option<String> {
     // Numeric Bunyan-style: level map values are numbers matching raw.
     if let Some(n) = raw.as_i64().or_else(|| raw.as_u64().map(|u| u as i64)) {
         for (name, v) in level_map {
@@ -146,11 +142,9 @@ pub fn apply_text_aliases(map: &mut Map<String, Value>) {
         if !map.contains_key("method") || !map.contains_key("path") {
             let mut parts = req.split_whitespace();
             if let Some(m) = parts.next() {
-                map.entry("method".to_string())
-                    .or_insert_with(|| json!(m));
+                map.entry("method".to_string()).or_insert_with(|| json!(m));
                 if let Some(p) = parts.next() {
-                    map.entry("path".to_string())
-                        .or_insert_with(|| json!(p));
+                    map.entry("path".to_string()).or_insert_with(|| json!(p));
                 }
             }
         }
@@ -246,7 +240,10 @@ mod tests {
     fn json_path_exact_nested_and_empty() {
         let root = json!({"a":{"b":1}, "log.level":"error", "@timestamp":"t"});
         assert_eq!(json_path(&root, "").unwrap(), &root);
-        assert_eq!(json_path(&root, "log.level").and_then(|v| v.as_str()), Some("error"));
+        assert_eq!(
+            json_path(&root, "log.level").and_then(|v| v.as_str()),
+            Some("error")
+        );
         assert_eq!(json_path(&root, "a/b").and_then(|v| v.as_i64()), Some(1));
         assert_eq!(json_path(&root, "a.b").and_then(|v| v.as_i64()), Some(1));
         assert!(json_path(&root, "missing/x").is_none());
@@ -272,10 +269,19 @@ mod tests {
         level_map.insert("error".into(), json!("50"));
         level_map.insert("warn".into(), json!("^W"));
         assert_eq!(map_level(&json!(30), &level_map).as_deref(), Some("info"));
-        assert_eq!(map_level(&json!(50u64), &level_map).as_deref(), Some("error"));
+        assert_eq!(
+            map_level(&json!(50u64), &level_map).as_deref(),
+            Some("error")
+        );
         assert_eq!(map_level(&json!(99), &level_map).as_deref(), Some("99"));
-        assert_eq!(map_level(&json!("WARN"), &level_map).as_deref(), Some("warn"));
-        assert_eq!(map_level(&json!("info"), &level_map).as_deref(), Some("info"));
+        assert_eq!(
+            map_level(&json!("WARN"), &level_map).as_deref(),
+            Some("warn")
+        );
+        assert_eq!(
+            map_level(&json!("info"), &level_map).as_deref(),
+            Some("info")
+        );
         assert_eq!(map_level(&json!(true), &level_map).as_deref(), Some("true"));
         let mut loose = Map::new();
         loose.insert("error".into(), json!("ERROR"));
@@ -359,7 +365,10 @@ mod tests {
         let mut level_map = Map::new();
         level_map.insert("warn".into(), json!("^["));
         assert_eq!(map_level(&json!(true), &level_map).as_deref(), Some("true"));
-        assert_eq!(map_level(&json!("WARN"), &level_map).as_deref(), Some("warn"));
+        assert_eq!(
+            map_level(&json!("WARN"), &level_map).as_deref(),
+            Some("warn")
+        );
     }
 
     #[test]
@@ -367,12 +376,18 @@ mod tests {
         let mut map = Map::new();
         map.insert("time".into(), json!("t-time"));
         apply_text_aliases(&mut map);
-        assert_eq!(map.get("@timestamp").and_then(|v| v.as_str()), Some("t-time"));
+        assert_eq!(
+            map.get("@timestamp").and_then(|v| v.as_str()),
+            Some("t-time")
+        );
 
         let mut map2 = Map::new();
         map2.insert("timestamp".into(), json!("t-only"));
         apply_text_aliases(&mut map2);
-        assert_eq!(map2.get("@timestamp").and_then(|v| v.as_str()), Some("t-only"));
+        assert_eq!(
+            map2.get("@timestamp").and_then(|v| v.as_str()),
+            Some("t-only")
+        );
 
         let mut map3 = Map::new();
         map3.insert("request".into(), json!("GET"));
@@ -387,6 +402,9 @@ mod tests {
         let mut obj = Map::new();
         obj.insert("message".into(), json!({"code": 42}));
         let out = normalize_json_object(&obj, "pino_log", None, None, Some("message"), &Map::new());
-        assert_eq!(out.get("msg").and_then(|v| v.as_str()), Some("{\"code\":42}"));
+        assert_eq!(
+            out.get("msg").and_then(|v| v.as_str()),
+            Some("{\"code\":42}")
+        );
     }
 }

@@ -381,8 +381,7 @@ impl Store {
 
         // Not buffering — single-line JSON goes through format packs (bunyan/pino/…).
         if try_parse_json_object(cleaned).is_some() {
-            let (payload, _) =
-                crate::formats::parse_ingest_line_with_hint(cleaned, format_hint);
+            let (payload, _) = crate::formats::parse_ingest_line_with_hint(cleaned, format_hint);
             return vec![payload];
         }
 
@@ -412,8 +411,7 @@ impl Store {
         }
 
         // Format detectors (logfmt, syslog, access_log, packs, …) then raw
-        let (payload, _) =
-            crate::formats::parse_ingest_line_with_hint(cleaned, format_hint);
+        let (payload, _) = crate::formats::parse_ingest_line_with_hint(cleaned, format_hint);
         vec![payload]
     }
 
@@ -429,7 +427,8 @@ impl Store {
             .and_then(|v| v.as_str())
             .map(|s| s.to_string())
             .or_else(|| {
-                if data.get("_raw").is_some() && data.as_object().map(|o| o.len() == 1) == Some(true)
+                if data.get("_raw").is_some()
+                    && data.as_object().map(|o| o.len() == 1) == Some(true)
                 {
                     Some("raw".into())
                 } else {
@@ -988,9 +987,7 @@ mod tests {
     #[tokio::test]
     async fn single_line_js_object_ingests() {
         let store = Store::new(1_000_000);
-        let entries = store
-            .push_line("api", "{ level: 'info', msg: 'hi' }")
-            .await;
+        let entries = store.push_line("api", "{ level: 'info', msg: 'hi' }").await;
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0].data["level"], json!("info"));
         assert_eq!(entries[0].data["msg"], json!("hi"));

@@ -273,10 +273,9 @@ mod tests {
 
     #[tokio::test]
     async fn fetch_browser_ws_url_success() {
-        let port = serve_cdp_version(
-            r#"{"webSocketDebuggerUrl":"ws://127.0.0.1:1/devtools/browser/x"}"#,
-        )
-        .await;
+        let port =
+            serve_cdp_version(r#"{"webSocketDebuggerUrl":"ws://127.0.0.1:1/devtools/browser/x"}"#)
+                .await;
         let url = fetch_browser_ws_url(port).await.unwrap();
         assert!(url.contains("devtools/browser"));
     }
@@ -306,10 +305,9 @@ mod tests {
 
     #[tokio::test]
     async fn wait_for_cdp_succeeds_when_ready() {
-        let port = serve_cdp_version(
-            r#"{"webSocketDebuggerUrl":"ws://127.0.0.1:1/devtools/browser/x"}"#,
-        )
-        .await;
+        let port =
+            serve_cdp_version(r#"{"webSocketDebuggerUrl":"ws://127.0.0.1:1/devtools/browser/x"}"#)
+                .await;
         wait_for_cdp_until(port, Duration::from_secs(2))
             .await
             .unwrap();
@@ -317,10 +315,9 @@ mod tests {
 
     #[tokio::test]
     async fn resolve_cdp_ws_url_fetches_when_no_override() {
-        let port = serve_cdp_version(
-            r#"{"webSocketDebuggerUrl":"ws://127.0.0.1:1/devtools/browser/y"}"#,
-        )
-        .await;
+        let port =
+            serve_cdp_version(r#"{"webSocketDebuggerUrl":"ws://127.0.0.1:1/devtools/browser/y"}"#)
+                .await;
         let opts = BrowserAttachOpts {
             cdp_port: port,
             cdp_url: None,

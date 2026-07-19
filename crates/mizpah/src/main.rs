@@ -464,7 +464,7 @@ mod tests {
     #[test]
     fn resolve_project_dir_defaults() {
         let resolved = resolve_project_dir(None);
-        assert!(resolved.is_absolute() || resolved == std::path::PathBuf::from("."));
+        assert!(resolved.is_absolute() || resolved == *".");
     }
 
     #[test]
@@ -492,18 +492,20 @@ mod tests {
     }
 
     fn pipe_cli(host: &str, port: u16, allow_remote: bool) -> Cli {
-        Cli::try_parse_from([
-            "mizpah",
-            "--no-open",
-            "--host",
-            host,
-            "--port",
-            &port.to_string(),
-            "--service",
-            "svc",
-        ]
-        .into_iter()
-        .chain(allow_remote.then_some("--allow-remote")))
+        Cli::try_parse_from(
+            [
+                "mizpah",
+                "--no-open",
+                "--host",
+                host,
+                "--port",
+                &port.to_string(),
+                "--service",
+                "svc",
+            ]
+            .into_iter()
+            .chain(allow_remote.then_some("--allow-remote")),
+        )
         .unwrap()
     }
 
@@ -567,7 +569,7 @@ mod tests {
             try_bind,
             |_, _, _, _, _, _, _, _| async { Ok(()) },
             move |_url, service| {
-                let flag = flag.clone();
+                let flag = flag;
                 async move {
                     assert_eq!(service, "svc");
                     flag.store(true, std::sync::atomic::Ordering::SeqCst);
@@ -599,7 +601,12 @@ mod tests {
         let cli = pipe_cli("127.0.0.1", 1, false);
         let err = run_pipe_mode_with(
             cli,
-            |_| Err(std::io::Error::new(std::io::ErrorKind::PermissionDenied, "nope")),
+            |_| {
+                Err(std::io::Error::new(
+                    std::io::ErrorKind::PermissionDenied,
+                    "nope",
+                ))
+            },
             |_, _, _, _, _, _, _, _| async { Ok(()) },
             |_, _| async { Ok(()) },
         )
@@ -617,7 +624,7 @@ mod tests {
     #[test]
     fn init_tracing_stderr_smoke() {
         // May already be initialized by other tests; ignore SetGlobalDefault errors via catch.
-        let _ = std::panic::catch_unwind(|| init_tracing_stderr());
+        let _ = std::panic::catch_unwind(init_tracing_stderr);
     }
 
     #[cfg(not(miri))]

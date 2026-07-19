@@ -138,7 +138,7 @@ mod tests {
 
         let api = store.search_properties(Some("api"), None).await;
         assert!(api.iter().any(|p| p.path == "tenant"));
-        assert!(!api.iter().any(|p| p.path == "level" && p.count > 1) || api.len() >= 1);
+        assert!(!api.iter().any(|p| p.path == "level" && p.count > 1) || !api.is_empty());
 
         let missing = store.search_properties(Some("missing"), None).await;
         assert!(missing.is_empty());
@@ -155,27 +155,13 @@ mod tests {
         store.push_line("api", r#"{"msg":"c"}"#).await;
 
         let (api_only, _) = store
-            .query_logs(
-                Some("api"),
-                None,
-                10,
-                &CompiledQuery::MatchAll,
-                None,
-                None,
-            )
+            .query_logs(Some("api"), None, 10, &CompiledQuery::MatchAll, None, None)
             .await;
         assert_eq!(api_only.len(), 2);
         assert!(api_only.iter().all(|e| e.service == "api"));
 
         let (wildcard, _) = store
-            .query_logs(
-                Some("*"),
-                None,
-                10,
-                &CompiledQuery::MatchAll,
-                None,
-                None,
-            )
+            .query_logs(Some("*"), None, 10, &CompiledQuery::MatchAll, None, None)
             .await;
         assert_eq!(wildcard.len(), 3);
 
@@ -222,19 +208,10 @@ mod tests {
     async fn query_logs_sets_has_more_when_limit_exceeded() {
         let store = Store::new(1_000_000);
         for i in 0..5 {
-            store
-                .push_line("api", &format!(r#"{{"msg":"{i}"}}"#))
-                .await;
+            store.push_line("api", &format!(r#"{{"msg":"{i}"}}"#)).await;
         }
         let (page, has_more) = store
-            .query_logs(
-                Some("api"),
-                None,
-                2,
-                &CompiledQuery::MatchAll,
-                None,
-                None,
-            )
+            .query_logs(Some("api"), None, 2, &CompiledQuery::MatchAll, None, None)
             .await;
         assert_eq!(page.len(), 2);
         assert!(has_more);

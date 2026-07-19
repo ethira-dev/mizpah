@@ -29,8 +29,12 @@ pub enum ApplyOutcome {
 pub type BrewUpgradeFn = Arc<dyn Fn(&Path) -> io::Result<Output> + Send + Sync>;
 pub type VersionCheckFn = Arc<dyn Fn(&Path) -> io::Result<Output> + Send + Sync>;
 pub type SelfReplaceFn = Arc<dyn Fn(&Path) -> Result<(), String> + Send + Sync>;
-pub type ReleaseFetchFn =
-    Arc<dyn Fn() -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<ReleaseInfo, String>> + Send>> + Send + Sync>;
+pub type ReleaseFetchFn = Arc<
+    dyn Fn() -> std::pin::Pin<
+            Box<dyn std::future::Future<Output = Result<ReleaseInfo, String>> + Send>,
+        > + Send
+        + Sync,
+>;
 pub type FindBrewFn = Arc<dyn Fn() -> Option<std::path::PathBuf> + Send + Sync>;
 pub type StableExeFn = Arc<dyn Fn() -> io::Result<std::path::PathBuf> + Send + Sync>;
 pub type ReleaseTargetFn = Arc<dyn Fn() -> Option<String> + Send + Sync>;
@@ -40,7 +44,8 @@ pub type DownloadFn = Arc<
             String,
             std::path::PathBuf,
             ProgressTx,
-        ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), String>> + Send>>
+        )
+            -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), String>> + Send>>
         + Send
         + Sync,
 >;
@@ -115,11 +120,12 @@ pub async fn apply_update(
         real_release_target(),
         real_current_exe(),
         real_download(),
-        |ctx| super::resume::spawn_update_resume(ctx),
+        super::resume::spawn_update_resume,
     )
     .await
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn apply_update_impl<S>(
     manager: Arc<UpdateManager>,
     store: Arc<Store>,
@@ -495,7 +501,7 @@ mod tests {
     use std::path::PathBuf;
     use std::process::ExitStatus;
     use tar::Builder;
-    use tokio::io::AsyncWriteExt;
+
     use tokio::net::TcpListener;
 
     fn mock_brew_path() -> PathBuf {
@@ -519,7 +525,7 @@ mod tests {
     }
 
     fn stable_exe_err(msg: &'static str) -> StableExeFn {
-        Arc::new(move || Err(io::Error::new(io::ErrorKind::Other, msg)))
+        Arc::new(move || Err(io::Error::other(msg)))
     }
 
     fn ok_brew_upgrade() -> BrewUpgradeFn {
@@ -563,7 +569,8 @@ mod tests {
         let file = File::create(path).expect("create archive");
         let enc = GzEncoder::new(file, Compression::default());
         let mut tar = Builder::new(enc);
-        tar.append_path_with_name(&mizpah, "mizpah").expect("append mizpah");
+        tar.append_path_with_name(&mizpah, "mizpah")
+            .expect("append mizpah");
         tar.append_path_with_name(&mzp, "mzp").expect("append mzp");
         tar.finish().expect("finish tar");
     }
@@ -576,7 +583,8 @@ mod tests {
         let file = File::create(path).expect("create archive");
         let enc = GzEncoder::new(file, Compression::default());
         let mut tar = Builder::new(enc);
-        tar.append_path_with_name(&only, "readme.txt").expect("append readme");
+        tar.append_path_with_name(&only, "readme.txt")
+            .expect("append readme");
         tar.finish().expect("finish tar");
     }
 
@@ -623,21 +631,18 @@ mod tests {
             Arc::new(move || Ok(install_dir.join(&running)))
         };
         let download: DownloadFn = {
-            let install_dir = install_dir.clone();
-            Arc::new(
-                move |_url: String, dest: PathBuf, _tx: ProgressTx| {
-                    let install_dir = install_dir.clone();
-                    Box::pin(async move {
-                        let src = install_dir.join("fixture.tar.gz");
-                        if src.is_file() {
-                            fs::copy(&src, &dest).map_err(|e| e.to_string())?;
-                        } else {
-                            write_mizpah_tarball(&dest);
-                        }
-                        Ok(())
-                    }) as _
-                },
-            )
+            Arc::new(move |_url: String, dest: PathBuf, _tx: ProgressTx| {
+                let install_dir = install_dir.clone();
+                Box::pin(async move {
+                    let src = install_dir.join("fixture.tar.gz");
+                    if src.is_file() {
+                        fs::copy(&src, &dest).map_err(|e| e.to_string())?;
+                    } else {
+                        write_mizpah_tarball(&dest);
+                    }
+                    Ok(())
+                }) as _
+            })
         };
         (release_target_fn, current_exe_fn, download)
     }
@@ -654,7 +659,7 @@ mod tests {
     async fn apply_homebrew_success() {
         let latest = Version::new(0, 9, 0);
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
-        
+
         let mock_brew_upgrade = Arc::new(|_: &Path| -> io::Result<Output> {
             Ok(Output {
                 status: ExitStatus::default(),
@@ -662,7 +667,7 @@ mod tests {
                 stderr: vec![],
             })
         });
-        
+
         let mock_version_check = Arc::new(|_: &Path| -> io::Result<Output> {
             Ok(Output {
                 status: ExitStatus::default(),
@@ -670,10 +675,9 @@ mod tests {
                 stderr: vec![],
             })
         });
-        
+
         let mock_find_brew = Arc::new(|| Some(std::path::PathBuf::from("/usr/local/bin/brew")));
-        let mock_stable_exe =
-            Arc::new(|| Ok(std::path::PathBuf::from("/opt/homebrew/bin/mizpah")));
+        let mock_stable_exe = Arc::new(|| Ok(std::path::PathBuf::from("/opt/homebrew/bin/mizpah")));
 
         let result = apply_homebrew_impl(
             &latest,
@@ -684,14 +688,14 @@ mod tests {
             mock_stable_exe,
         )
         .await;
-        
+
         drop(tx);
         let mut events = vec![];
         while let Some(e) = rx.recv().await {
             events.push(e);
         }
-        
-        assert!(result.is_ok(), "expected success, got {:?}", result);
+
+        assert!(result.is_ok(), "expected success, got {result:?}");
         assert!(events.iter().any(|e| e.step.contains("Checking Homebrew")));
     }
 
@@ -699,18 +703,18 @@ mod tests {
     async fn apply_homebrew_upgrade_failed() {
         let latest = Version::new(0, 9, 0);
         let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
-        
+
         #[cfg(unix)]
         fn make_failed_status() -> ExitStatus {
             use std::os::unix::process::ExitStatusExt;
             ExitStatus::from_raw(256)
         }
-        
+
         #[cfg(not(unix))]
         fn make_failed_status() -> ExitStatus {
             panic!("test only runs on unix")
         }
-        
+
         let mock_brew_upgrade = Arc::new(|_: &Path| -> io::Result<Output> {
             Ok(Output {
                 status: make_failed_status(),
@@ -718,7 +722,7 @@ mod tests {
                 stderr: b"brew error\n".to_vec(),
             })
         });
-        
+
         let mock_version_check = Arc::new(|_: &Path| -> io::Result<Output> {
             Ok(Output {
                 status: ExitStatus::default(),
@@ -726,10 +730,9 @@ mod tests {
                 stderr: vec![],
             })
         });
-        
+
         let mock_find_brew = Arc::new(|| Some(std::path::PathBuf::from("/usr/local/bin/brew")));
-        let mock_stable_exe =
-            Arc::new(|| Ok(std::path::PathBuf::from("/opt/homebrew/bin/mizpah")));
+        let mock_stable_exe = Arc::new(|| Ok(std::path::PathBuf::from("/opt/homebrew/bin/mizpah")));
 
         let result = apply_homebrew_impl(
             &latest,
@@ -748,7 +751,7 @@ mod tests {
     async fn apply_homebrew_version_mismatch() {
         let latest = Version::new(0, 9, 0);
         let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
-        
+
         let mock_brew_upgrade = Arc::new(|_: &Path| -> io::Result<Output> {
             Ok(Output {
                 status: ExitStatus::default(),
@@ -756,7 +759,7 @@ mod tests {
                 stderr: vec![],
             })
         });
-        
+
         let mock_version_check = Arc::new(|_: &Path| -> io::Result<Output> {
             Ok(Output {
                 status: ExitStatus::default(),
@@ -764,10 +767,9 @@ mod tests {
                 stderr: vec![],
             })
         });
-        
+
         let mock_find_brew = Arc::new(|| Some(std::path::PathBuf::from("/usr/local/bin/brew")));
-        let mock_stable_exe =
-            Arc::new(|| Ok(std::path::PathBuf::from("/opt/homebrew/bin/mizpah")));
+        let mock_stable_exe = Arc::new(|| Ok(std::path::PathBuf::from("/opt/homebrew/bin/mizpah")));
 
         let result = apply_homebrew_impl(
             &latest,
@@ -788,11 +790,9 @@ mod tests {
     async fn apply_direct_success() {
         let latest = Version::new(0, 9, 0);
         let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
-        
-        let mock_self_replace = Arc::new(|_: &Path| -> Result<(), String> {
-            Ok(())
-        });
-        
+
+        let mock_self_replace = Arc::new(|_: &Path| -> Result<(), String> { Ok(()) });
+
         let mock_release_fetch = Arc::new(|| {
             Box::pin(async {
                 Ok(ReleaseInfo {
@@ -800,17 +800,17 @@ mod tests {
                     download_url: None,
                     body: None,
                 })
-            }) as std::pin::Pin<Box<dyn std::future::Future<Output = Result<ReleaseInfo, String>> + Send>>
+            })
+                as std::pin::Pin<
+                    Box<dyn std::future::Future<Output = Result<ReleaseInfo, String>> + Send>,
+                >
         });
-        
+
         let mock_release_target = Arc::new(|| Some("aarch64-apple-darwin".into()));
-        let mock_current_exe =
-            Arc::new(|| Ok(std::env::current_exe().unwrap()));
+        let mock_current_exe = Arc::new(|| Ok(std::env::current_exe().unwrap()));
         let mock_download = Arc::new(|_: String, _: std::path::PathBuf, _: ProgressTx| {
             Box::pin(async { Ok(()) })
-                as std::pin::Pin<
-                    Box<dyn std::future::Future<Output = Result<(), String>> + Send>,
-                >
+                as std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), String>> + Send>>
         });
 
         let result = apply_direct_impl(
@@ -823,7 +823,7 @@ mod tests {
             mock_download,
         )
         .await;
-        
+
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(err.contains("No prebuilt binary") || err.contains("no asset"));
@@ -841,14 +841,14 @@ mod tests {
         });
         let latest = Version::new(0, 9, 0);
         let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
-        
+
         {
             let mut g = manager.inner.lock().await;
             g.channel = UpdateChannel::Homebrew;
             g.latest_version = Some(Version::new(0, 9, 0));
             g.installed_version = Version::new(0, 8, 0);
         }
-        
+
         let mock_brew_upgrade = Arc::new(|_: &Path| -> io::Result<Output> {
             Ok(Output {
                 status: ExitStatus::default(),
@@ -856,7 +856,7 @@ mod tests {
                 stderr: vec![],
             })
         });
-        
+
         let mock_version_check = Arc::new(|_: &Path| -> io::Result<Output> {
             Ok(Output {
                 status: ExitStatus::default(),
@@ -864,11 +864,9 @@ mod tests {
                 stderr: vec![],
             })
         });
-        
-        let mock_self_replace = Arc::new(|_: &Path| -> Result<(), String> {
-            Ok(())
-        });
-        
+
+        let mock_self_replace = Arc::new(|_: &Path| -> Result<(), String> { Ok(()) });
+
         let mock_release_fetch = Arc::new(|| {
             Box::pin(async {
                 Ok(ReleaseInfo {
@@ -876,9 +874,12 @@ mod tests {
                     download_url: Some("http://example.com/archive.tar.gz".into()),
                     body: None,
                 })
-            }) as std::pin::Pin<Box<dyn std::future::Future<Output = Result<ReleaseInfo, String>> + Send>>
+            })
+                as std::pin::Pin<
+                    Box<dyn std::future::Future<Output = Result<ReleaseInfo, String>> + Send>,
+                >
         });
-        
+
         let spawner = |_: &crate::update::RestartContext| Ok(());
         let (release_target_fn, current_exe_fn, download) = noop_direct_deps();
 
@@ -899,7 +900,7 @@ mod tests {
             spawner,
         )
         .await;
-        
+
         assert_eq!(outcome, ApplyOutcome::RestartRequested);
     }
 
@@ -915,25 +916,25 @@ mod tests {
         });
         let latest = Version::new(0, 9, 0);
         let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
-        
+
         {
             let mut g = manager.inner.lock().await;
             g.channel = UpdateChannel::Homebrew;
             g.latest_version = Some(Version::new(0, 9, 0));
             g.installed_version = Version::new(0, 8, 0);
         }
-        
+
         #[cfg(unix)]
         fn make_failed_status() -> ExitStatus {
             use std::os::unix::process::ExitStatusExt;
             ExitStatus::from_raw(256)
         }
-        
+
         #[cfg(not(unix))]
         fn make_failed_status() -> ExitStatus {
             panic!("test only runs on unix")
         }
-        
+
         let mock_brew_upgrade = Arc::new(|_: &Path| -> io::Result<Output> {
             Ok(Output {
                 status: make_failed_status(),
@@ -941,7 +942,7 @@ mod tests {
                 stderr: b"upgrade failed\n".to_vec(),
             })
         });
-        
+
         let mock_version_check = Arc::new(|_: &Path| -> io::Result<Output> {
             Ok(Output {
                 status: ExitStatus::default(),
@@ -949,11 +950,9 @@ mod tests {
                 stderr: vec![],
             })
         });
-        
-        let mock_self_replace = Arc::new(|_: &Path| -> Result<(), String> {
-            Ok(())
-        });
-        
+
+        let mock_self_replace = Arc::new(|_: &Path| -> Result<(), String> { Ok(()) });
+
         let mock_release_fetch = Arc::new(|| {
             Box::pin(async {
                 Ok(ReleaseInfo {
@@ -961,9 +960,12 @@ mod tests {
                     download_url: Some("http://example.com/archive.tar.gz".into()),
                     body: None,
                 })
-            }) as std::pin::Pin<Box<dyn std::future::Future<Output = Result<ReleaseInfo, String>> + Send>>
+            })
+                as std::pin::Pin<
+                    Box<dyn std::future::Future<Output = Result<ReleaseInfo, String>> + Send>,
+                >
         });
-        
+
         let spawner = |_: &crate::update::RestartContext| Ok(());
         let (release_target_fn, current_exe_fn, download) = noop_direct_deps();
 
@@ -984,7 +986,7 @@ mod tests {
             spawner,
         )
         .await;
-        
+
         assert_eq!(outcome, ApplyOutcome::Failed);
     }
 
@@ -1063,9 +1065,8 @@ mod tests {
         let latest = Version::new(0, 9, 0);
         let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
 
-        let mock_brew_upgrade = Arc::new(|_: &Path| {
-            Err(io::Error::new(io::ErrorKind::NotFound, "missing brew"))
-        });
+        let mock_brew_upgrade =
+            Arc::new(|_: &Path| Err(io::Error::new(io::ErrorKind::NotFound, "missing brew")));
 
         let result = apply_homebrew_impl(
             &latest,
@@ -1103,9 +1104,8 @@ mod tests {
         let latest = Version::new(0, 9, 0);
         let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
 
-        let mock_version_check = Arc::new(|_: &Path| {
-            Err(io::Error::new(io::ErrorKind::PermissionDenied, "denied"))
-        });
+        let mock_version_check =
+            Arc::new(|_: &Path| Err(io::Error::new(io::ErrorKind::PermissionDenied, "denied")));
 
         let result = apply_homebrew_impl(
             &latest,
@@ -1225,7 +1225,7 @@ mod tests {
                 saw_install = true;
             }
         }
-        assert!(result.is_ok(), "expected success, got {:?}", result);
+        assert!(result.is_ok(), "expected success, got {result:?}");
         assert!(saw_install);
     }
 
@@ -1260,7 +1260,7 @@ mod tests {
         )
         .await;
 
-        assert!(result.is_ok(), "expected success, got {:?}", result);
+        assert!(result.is_ok(), "expected success, got {result:?}");
     }
 
     #[tokio::test]
@@ -1293,7 +1293,7 @@ mod tests {
         )
         .await;
 
-        assert!(result.is_ok(), "expected success, got {:?}", result);
+        assert!(result.is_ok(), "expected success, got {result:?}");
     }
 
     #[tokio::test]
@@ -1325,7 +1325,7 @@ mod tests {
         )
         .await;
 
-        assert!(result.is_ok(), "expected success, got {:?}", result);
+        assert!(result.is_ok(), "expected success, got {result:?}");
         assert!(install.path().join("mzp").is_file());
     }
 

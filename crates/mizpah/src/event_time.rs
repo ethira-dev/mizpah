@@ -135,7 +135,10 @@ mod tests {
         assert!(extract_event_time(&time_field).is_some());
 
         let ts_secs = json!({"ts": 1_704_067_200i64});
-        assert_eq!(extract_event_time(&ts_secs).unwrap().timestamp(), 1_704_067_200);
+        assert_eq!(
+            extract_event_time(&ts_secs).unwrap().timestamp(),
+            1_704_067_200
+        );
 
         let ts_float = json!({"ts": 1_704_067_200.5});
         assert!(extract_event_time(&ts_float).is_some());

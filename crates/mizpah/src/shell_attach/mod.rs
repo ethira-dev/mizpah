@@ -96,9 +96,7 @@ mod tests {
     use crate::shell_attach::state::load_state_from;
     use crate::test_support::env_lock;
 
-    fn with_home_and_config<F: FnOnce(&std::path::Path, &std::path::Path)>(
-        f: F,
-    ) {
+    fn with_home_and_config<F: FnOnce(&std::path::Path, &std::path::Path)>(f: F) {
         let _guard = env_lock();
         let home = std::env::temp_dir().join(format!(
             "mizpah-attach-home-{}-{}",
@@ -274,7 +272,10 @@ mod tests {
                 port: 9999,
             })
             .unwrap();
-            assert_eq!(load_state_from(&config.join("attach.json")).unwrap().port, 9999);
+            assert_eq!(
+                load_state_from(&config.join("attach.json")).unwrap().port,
+                9999
+            );
             let (h, p) = resolve_open_target(Some(String::new()), None).unwrap();
             assert_eq!(h, "192.168.1.1");
             assert_eq!(p, 9999);

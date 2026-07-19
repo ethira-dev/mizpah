@@ -492,7 +492,9 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method("GET")
-                    .uri(format!("/api/nav/level?fromId={err_id}&direction=next&levels=error,warn"))
+                    .uri(format!(
+                        "/api/nav/level?fromId={err_id}&direction=next&levels=error,warn"
+                    ))
                     .body(Body::empty())
                     .unwrap(),
             )

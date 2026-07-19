@@ -39,6 +39,7 @@ impl Store {
     ///
     /// - `Next`: newer than `from_id` (higher id), closest first
     /// - `Prev`: older than `from_id` (lower id), closest first
+    #[allow(clippy::too_many_arguments)]
     pub async fn find_level_near(
         &self,
         from_id: u64,
@@ -85,11 +86,15 @@ mod tests {
     #[tokio::test]
     async fn finds_next_and_prev_error() {
         let store = Store::new(1_000_000);
-        store.push_line("api", r#"{"level":"info","msg":"a"}"#).await;
+        store
+            .push_line("api", r#"{"level":"info","msg":"a"}"#)
+            .await;
         let e1 = store
             .push_line("api", r#"{"level":"error","msg":"b"}"#)
             .await;
-        store.push_line("api", r#"{"level":"info","msg":"c"}"#).await;
+        store
+            .push_line("api", r#"{"level":"info","msg":"c"}"#)
+            .await;
         let e2 = store
             .push_line("api", r#"{"level":"error","msg":"d"}"#)
             .await;
@@ -128,7 +133,9 @@ mod tests {
     #[tokio::test]
     async fn empty_levels_match_all_and_filters_skip() {
         let store = Store::new(1_000_000);
-        store.push_line("api", r#"{"level":"info","msg":"a"}"#).await;
+        store
+            .push_line("api", r#"{"level":"info","msg":"a"}"#)
+            .await;
         let mid = store
             .push_line("web", r#"{"level":"warn","msg":"b"}"#)
             .await;
@@ -197,9 +204,7 @@ mod tests {
         let first = store
             .push_line("api", r#"{"severity":"info","msg":"a"}"#)
             .await;
-        let mid = store
-            .push_line("api", r#"{"lvl":"error","msg":"b"}"#)
-            .await;
+        let mid = store.push_line("api", r#"{"lvl":"error","msg":"b"}"#).await;
         store
             .push_line("api", r#"{"level":"info","msg":"c"}"#)
             .await;

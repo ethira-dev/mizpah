@@ -36,8 +36,7 @@ pub fn parse_script(text: &str) -> Result<Vec<ScriptCmd>, ScriptError> {
         }
         let (verb, rest) = line
             .split_once(char::is_whitespace)
-            .map(|(a, b)| (a, b.trim()))
-            .unwrap_or((line, ""));
+            .map_or((line, ""), |(a, b)| (a, b.trim()));
         match verb.to_ascii_lowercase().as_str() {
             "query" => {
                 let (cel, limit) = parse_cel_and_limit(rest);
@@ -99,7 +98,11 @@ fn parse_aggregate(rest: &str) -> Result<(String, Vec<String>, Option<usize>), S
         }
         if tokens[i] == "--group-by" || tokens[i] == "-g" {
             if let Some(g) = tokens.get(i + 1) {
-                group_by = g.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
+                group_by = g
+                    .split(',')
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+                    .collect();
                 i += 2;
                 continue;
             }
@@ -118,19 +121,30 @@ pub async fn run_script(path: &Path, hub_url: &str) -> Result<(), ScriptError> {
     for cmd in cmds {
         match cmd {
             ScriptCmd::Query { cel, limit } => {
-                let q = if cel.is_empty() { None } else { Some(cel.as_str()) };
+                let q = if cel.is_empty() {
+                    None
+                } else {
+                    Some(cel.as_str())
+                };
                 let resp = hub
                     .search_logs(None, q, limit, None)
                     .await
                     .map_err(|e| ScriptError::Message(e.to_string()))?;
-                println!("{}", serde_json::to_string_pretty(&resp).unwrap_or_default());
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&resp).unwrap_or_default()
+                );
             }
             ScriptCmd::Aggregate {
                 cel,
                 group_by,
                 limit,
             } => {
-                let q = if cel.is_empty() { None } else { Some(cel.as_str()) };
+                let q = if cel.is_empty() {
+                    None
+                } else {
+                    Some(cel.as_str())
+                };
                 let resp = hub
                     .aggregate_logs(None, q, &group_by, limit)
                     .await
@@ -202,8 +216,7 @@ aggregate --group-by level level != ""
 
     #[test]
     fn parse_aggregate_with_group_short_flag_and_limit() {
-        let cmds =
-            parse_script("aggregate -g service,level --limit 2 status >= 400").unwrap();
+        let cmds = parse_script("aggregate -g service,level --limit 2 status >= 400").unwrap();
         assert_eq!(cmds.len(), 1);
         match &cmds[0] {
             ScriptCmd::Aggregate {

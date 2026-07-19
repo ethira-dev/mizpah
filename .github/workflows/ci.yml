@@ -11,6 +11,9 @@ on:
 env:
   CARGO_TERM_COLOR: always
 
+permissions:
+  contents: read
+
 jobs:
   rust:
     name: rust
@@ -79,13 +82,24 @@ jobs:
   audit:
     name: audit
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write
     steps:
       - uses: actions/checkout@v4
 
-      - name: Audit dependencies
-        uses: rustsec/audit-check@v2.0.0
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      # Prefer cargo-audit directly: rustsec/audit-check fails when the token
+      # cannot create check runs (org default GITHUB_TOKEN permissions).
+      - name: Install cargo-audit
+        uses: taiki-e/install-action@v2
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          tool: cargo-audit
+
+      - name: Audit dependencies
+        run: cargo audit --file Cargo.lock --deny warnings
 
   web:
     name: web

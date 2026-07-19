@@ -155,10 +155,7 @@ export function LogRowContextMenu({
   const level = useMemo(() => levelOf(entry.data), [entry.data])
   const opid = useMemo(() => resolveOpid(entry.data), [entry.data])
   const message = useMemo(() => summarizeLog(entry.data), [entry.data])
-  const matchFields = useMemo(
-    () => collectMatchFields(entry),
-    [entry.id, entry.service, entry.data]
-  )
+  const matchFields = useMemo(() => collectMatchFields(entry), [entry])
 
   const allSelected =
     matchFields.length > 0 && selectedPaths.size === matchFields.length

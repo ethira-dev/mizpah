@@ -51,10 +51,22 @@ pub fn spawn_update_resume_impl(
     Ok(())
 }
 
-pub type HubProber = Arc<dyn Fn(&str, u16) -> std::pin::Pin<Box<dyn std::future::Future<Output = bool> + Send>> + Send + Sync>;
+pub type HubProber = Arc<
+    dyn Fn(&str, u16) -> std::pin::Pin<Box<dyn std::future::Future<Output = bool> + Send>>
+        + Send
+        + Sync,
+>;
 pub type ProcessChecker = Arc<dyn Fn(u32) -> bool + Send + Sync>;
 pub type HubSpawner = Arc<
-    dyn Fn(&Path, &str, u16, Option<&Path>, Option<u64>, Option<u64>, bool) -> std::io::Result<Child>
+    dyn Fn(
+            &Path,
+            &str,
+            u16,
+            Option<&Path>,
+            Option<u64>,
+            Option<u64>,
+            bool,
+        ) -> std::io::Result<Child>
         + Send
         + Sync,
 >;
@@ -118,6 +130,7 @@ pub async fn run_update_resume(
 const WAIT_FOR_PARENT: Duration = Duration::from_secs(15);
 const WAIT_FOR_HUB_READY: Duration = Duration::from_secs(10);
 
+#[allow(clippy::too_many_arguments)]
 pub async fn run_update_resume_impl(
     wait_pid: u32,
     host: String,
@@ -145,6 +158,7 @@ pub async fn run_update_resume_impl(
     .await
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn run_update_resume_impl_with_timeouts(
     wait_pid: u32,
     host: String,
@@ -217,10 +231,7 @@ mod tests {
         let spawned_clone = Arc::clone(&spawned);
         let mock_spawner = Arc::new(move |_cmd: &mut Command| -> std::io::Result<Child> {
             spawned_clone.store(true, Ordering::SeqCst);
-            Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "mock spawn",
-            ))
+            Err(std::io::Error::other("mock spawn"))
         });
 
         let result = spawn_update_resume_impl(&ctx, mock_spawner);
@@ -231,7 +242,8 @@ mod tests {
     #[tokio::test]
     async fn run_update_resume_parent_already_gone() {
         let hub_prober = Arc::new(|_host: &str, _port: u16| {
-            Box::pin(async { false }) as std::pin::Pin<Box<dyn std::future::Future<Output = bool> + Send>>
+            Box::pin(async { false })
+                as std::pin::Pin<Box<dyn std::future::Future<Output = bool> + Send>>
         });
         let process_checker = Arc::new(|_pid: u32| false);
         let hub_spawner = Arc::new(
@@ -242,12 +254,7 @@ mod tests {
              _max_bytes: Option<u64>,
              _ttl_hours: Option<u64>,
              _allow_remote: bool|
-             -> std::io::Result<Child> {
-                Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    "spawn failed",
-                ))
-            },
+             -> std::io::Result<Child> { Err(std::io::Error::other("spawn failed")) },
         );
 
         let result = run_update_resume_impl(
@@ -270,7 +277,8 @@ mod tests {
     #[tokio::test]
     async fn run_update_resume_port_still_in_use() {
         let hub_prober = Arc::new(|_host: &str, _port: u16| {
-            Box::pin(async { true }) as std::pin::Pin<Box<dyn std::future::Future<Output = bool> + Send>>
+            Box::pin(async { true })
+                as std::pin::Pin<Box<dyn std::future::Future<Output = bool> + Send>>
         });
         let process_checker = Arc::new(|_pid: u32| false);
         let hub_spawner = Arc::new(
@@ -306,10 +314,11 @@ mod tests {
     #[tokio::test]
     async fn run_update_resume_hub_never_becomes_healthy() {
         let hub_prober = Arc::new(|_host: &str, _port: u16| {
-            Box::pin(async { false }) as std::pin::Pin<Box<dyn std::future::Future<Output = bool> + Send>>
+            Box::pin(async { false })
+                as std::pin::Pin<Box<dyn std::future::Future<Output = bool> + Send>>
         });
         let process_checker = Arc::new(|_pid: u32| false);
-        
+
         #[cfg(unix)]
         fn spawn_mock_child() -> Child {
             use std::process::Stdio;
@@ -324,12 +333,12 @@ mod tests {
                 .spawn()
                 .unwrap()
         }
-        
+
         #[cfg(not(unix))]
         fn spawn_mock_child() -> Child {
             panic!("test only runs on unix")
         }
-        
+
         let hub_spawner = Arc::new(
             |_exe: &Path,
              _host: &str,
@@ -362,7 +371,7 @@ mod tests {
     async fn run_update_resume_success() {
         let call_count = Arc::new(std::sync::Mutex::new(0));
         let call_count_clone = Arc::clone(&call_count);
-        
+
         // Returns false while waiting (port free), true only after hub spawn
         // has been attempted (3rd+ probe: wait-loop, pre-spawn check, then ready).
         let hub_prober = Arc::new(move |_host: &str, _port: u16| {
@@ -373,9 +382,9 @@ mod tests {
                 *count >= 3
             }) as std::pin::Pin<Box<dyn std::future::Future<Output = bool> + Send>>
         });
-        
+
         let process_checker = Arc::new(|_pid: u32| false);
-        
+
         #[cfg(unix)]
         fn spawn_mock_child() -> Child {
             use std::process::Stdio;
@@ -390,12 +399,12 @@ mod tests {
                 .spawn()
                 .unwrap()
         }
-        
+
         #[cfg(not(unix))]
         fn spawn_mock_child() -> Child {
             panic!("test only runs on unix")
         }
-        
+
         let hub_spawner = Arc::new(
             |_exe: &Path,
              _host: &str,
@@ -464,9 +473,11 @@ mod tests {
         let alive = Arc::new(std::sync::atomic::AtomicBool::new(true));
         let alive_clone = Arc::clone(&alive);
         let hub_prober = Arc::new(|_host: &str, _port: u16| {
-            Box::pin(async { false }) as std::pin::Pin<Box<dyn std::future::Future<Output = bool> + Send>>
+            Box::pin(async { false })
+                as std::pin::Pin<Box<dyn std::future::Future<Output = bool> + Send>>
         });
-        let process_checker = Arc::new(move |_pid: u32| alive_clone.load(std::sync::atomic::Ordering::SeqCst));
+        let process_checker =
+            Arc::new(move |_pid: u32| alive_clone.load(std::sync::atomic::Ordering::SeqCst));
         #[cfg(unix)]
         fn mock_child() -> Child {
             use std::process::{Command, Stdio};

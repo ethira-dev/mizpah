@@ -8,8 +8,8 @@ use crate::ingest_forward::{
 use crate::mzp_meta::MzpMeta;
 use crate::shell_attach::{self, AttachState};
 use base64::Engine;
-use std::time::Duration;
 use std::future::Future;
+use std::time::Duration;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::sync::mpsc;
 use tracing::{debug, warn};
@@ -63,7 +63,7 @@ fn classify_line(line: &str) -> ForwardMsg {
 ///
 /// Never blocks the shell on network I/O: full queues drop lines.
 pub async fn run_shell_forward(tty_service: String) -> Result<(), String> {
-    run_shell_forward_with_drain(tty_service, |tx| drain_stdin(tx)).await
+    run_shell_forward_with_drain(tty_service, drain_stdin).await
 }
 
 pub(crate) async fn run_shell_forward_with_drain<F, Fut>(
@@ -91,10 +91,7 @@ async fn drain_stdin(tx: mpsc::Sender<ForwardMsg>) {
     drain_stdin_with(tx, tokio::io::stdin()).await;
 }
 
-async fn drain_stdin_with(
-    tx: mpsc::Sender<ForwardMsg>,
-    stdin: impl tokio::io::AsyncRead + Unpin,
-) {
+async fn drain_stdin_with(tx: mpsc::Sender<ForwardMsg>, stdin: impl tokio::io::AsyncRead + Unpin) {
     let mut lines = BufReader::new(stdin).lines();
     drain_lines(&mut lines, tx).await;
 }
@@ -282,7 +279,7 @@ async fn flush_batch_for_state(
         return;
     }
 
-    let service = resolve_service(&state, &meta.cwd);
+    let service = resolve_service(state, &meta.cwd);
     let url = format!("{}/api/ingest/batch", hub::hub_url(&state.host, state.port));
 
     if *dropped_since_ok > 0 {
@@ -496,7 +493,7 @@ mod tests {
                 _cx: &mut Context<'_>,
                 _buf: &mut ReadBuf<'_>,
             ) -> Poll<io::Result<()>> {
-                Poll::Ready(Err(io::Error::new(io::ErrorKind::Other, "read fail")))
+                Poll::Ready(Err(io::Error::other("read fail")))
             }
         }
 
@@ -603,10 +600,7 @@ mod tests {
         async fn flush_batch_success_posts_to_hub() {
             let (hub_url, store) = crate::test_support::spawn_test_hub().await;
             let _guard = env_lock();
-            let dir = std::env::temp_dir().join(format!(
-                "mizpah-fwd-ok-{}",
-                std::process::id()
-            ));
+            let dir = std::env::temp_dir().join(format!("mizpah-fwd-ok-{}", std::process::id()));
             let _ = std::fs::remove_dir_all(&dir);
             std::fs::create_dir_all(&dir).unwrap();
             let old = std::env::var_os("MIZPAH_CONFIG_DIR");
@@ -856,7 +850,9 @@ mod tests {
             })
             .await
             .unwrap();
-            tx.send(ForwardMsg::Line("after-meta".into())).await.unwrap();
+            tx.send(ForwardMsg::Line("after-meta".into()))
+                .await
+                .unwrap();
             drop(tx);
             forward_worker(rx, "fb".into()).await;
 
@@ -940,7 +936,9 @@ mod tests {
             save_state(&attach_state_for_hub(&hub_url, true, Some("time"))).unwrap();
 
             let (tx, rx) = mpsc::channel(4);
-            tx.send(ForwardMsg::Line("wait-flush".into())).await.unwrap();
+            tx.send(ForwardMsg::Line("wait-flush".into()))
+                .await
+                .unwrap();
             let worker = tokio::spawn(forward_worker(rx, "svc".into()));
             tokio::time::sleep(crate::ingest_forward::BATCH_FLUSH + Duration::from_millis(80))
                 .await;
@@ -1012,12 +1010,7 @@ mod tests {
             let (tx, rx) = mpsc::channel(4);
             tx.send(ForwardMsg::Line("x".into())).await.unwrap();
             drop(tx);
-            forward_worker_with_client(
-                rx,
-                "svc".into(),
-                Some(Err("build failed".into())),
-            )
-            .await;
+            forward_worker_with_client(rx, "svc".into(), Some(Err("build failed".into()))).await;
         }
     }
 }

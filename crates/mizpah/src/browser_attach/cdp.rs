@@ -32,9 +32,16 @@ pub(crate) struct SessionState {
 }
 
 pub(crate) enum CdpAction {
-    EnableDomains { session_id: String },
-    FetchResponseBody { request_id: String, session_id: String },
-    DetachTarget { session_id: String },
+    EnableDomains {
+        session_id: String,
+    },
+    FetchResponseBody {
+        request_id: String,
+        session_id: String,
+    },
+    DetachTarget {
+        session_id: String,
+    },
     Emit(IngestItem),
 }
 
@@ -132,15 +139,7 @@ pub(crate) async fn run_cdp_session(
 
     while let Some(value) = event_rx.recv().await {
         let actions = process_cdp_event(&mut state, &value, all_network);
-        dispatch_cdp_actions(
-            actions,
-            &write,
-            &pending,
-            &next_id,
-            &tx,
-            &state,
-        )
-        .await;
+        dispatch_cdp_actions(actions, &write, &pending, &next_id, &tx, &state).await;
     }
 
     reader.abort();
@@ -335,9 +334,7 @@ pub(crate) fn process_cdp_event(
             }
 
             if target_type != "page" {
-                actions.push(CdpAction::DetachTarget {
-                    session_id: sid,
-                });
+                actions.push(CdpAction::DetachTarget { session_id: sid });
                 return actions;
             }
 
@@ -499,8 +496,8 @@ pub(crate) fn process_cdp_event(
                 None
             };
 
-            let should_fetch = should_fetch_body(&pending_net.resource_type)
-                && !skip_body_url(&pending_net.url);
+            let should_fetch =
+                should_fetch_body(&pending_net.resource_type) && !skip_body_url(&pending_net.url);
             if should_fetch {
                 actions.push(CdpAction::FetchResponseBody {
                     request_id: request_id.clone(),
@@ -534,7 +531,8 @@ pub(crate) fn process_cdp_event(
                 .and_then(|v| v.as_bool())
                 .unwrap_or(false);
             let (page_url, host) = session_page(&state.sessions, &pending_net.session_id);
-            if let Some(item) = map_network_failed(&pending_net, &error_text, canceled, &page_url, &host)
+            if let Some(item) =
+                map_network_failed(&pending_net, &error_text, canceled, &page_url, &host)
             {
                 actions.push(CdpAction::Emit(item));
             }
@@ -972,7 +970,7 @@ mod tests {
         });
         let actions = process_cdp_event(&mut state, &event, false);
         assert!(!state.network.contains_key("req1"));
-        assert!(actions.len() >= 1);
+        assert!(!actions.is_empty());
         assert!(actions.iter().any(|a| matches!(a, CdpAction::Emit(_))));
     }
 
@@ -1013,7 +1011,9 @@ mod tests {
             }
         });
         let actions = process_cdp_event(&mut state, &event, false);
-        assert!(!actions.iter().any(|a| matches!(a, CdpAction::FetchResponseBody { .. })));
+        assert!(!actions
+            .iter()
+            .any(|a| matches!(a, CdpAction::FetchResponseBody { .. })));
     }
 
     #[test]
@@ -1401,16 +1401,9 @@ mod tests {
                 let _ = tx.send(Err("method not found".into()));
             }
         });
-        let err = cdp_call(
-            &write,
-            &pending,
-            &next_id,
-            "Bad.method",
-            json!({}),
-            None,
-        )
-        .await
-        .unwrap_err();
+        let err = cdp_call(&write, &pending, &next_id, "Bad.method", json!({}), None)
+            .await
+            .unwrap_err();
         assert_eq!(err, "method not found");
     }
 
@@ -1420,23 +1413,16 @@ mod tests {
         let pending: PendingMap = Arc::new(Mutex::new(HashMap::new()));
         let next_id = Arc::new(AtomicU64::new(9));
         let write = Arc::new(Mutex::new(drain()));
-        let err = cdp_call(
-            &write,
-            &pending,
-            &next_id,
-            "Slow.method",
-            json!({}),
-            None,
-        )
-        .await
-        .unwrap_err();
+        let err = cdp_call(&write, &pending, &next_id, "Slow.method", json!({}), None)
+            .await
+            .unwrap_err();
         assert!(err.contains("timeout"));
         assert!(err.contains("Slow.method"));
     }
 
     #[tokio::test]
     async fn cdp_call_send_failure() {
-        use futures_util::sink::{Sink, SinkExt};
+        use futures_util::sink::Sink;
         use std::pin::Pin;
         use std::task::{Context, Poll};
 
@@ -1445,7 +1431,10 @@ mod tests {
         impl Sink<Message> for FailSink {
             type Error = std::io::Error;
 
-            fn poll_ready(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+            fn poll_ready(
+                self: Pin<&mut Self>,
+                _: &mut Context<'_>,
+            ) -> Poll<Result<(), Self::Error>> {
                 Poll::Ready(Ok(()))
             }
 
@@ -1456,11 +1445,17 @@ mod tests {
                 ))
             }
 
-            fn poll_flush(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+            fn poll_flush(
+                self: Pin<&mut Self>,
+                _: &mut Context<'_>,
+            ) -> Poll<Result<(), Self::Error>> {
                 Poll::Ready(Ok(()))
             }
 
-            fn poll_close(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+            fn poll_close(
+                self: Pin<&mut Self>,
+                _: &mut Context<'_>,
+            ) -> Poll<Result<(), Self::Error>> {
                 Poll::Ready(Ok(()))
             }
         }
@@ -1665,4 +1660,3 @@ mod tests {
         assert_eq!(item.service, "browser");
     }
 }
-

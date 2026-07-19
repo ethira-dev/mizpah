@@ -488,7 +488,9 @@ mod tests {
 
     #[test]
     fn prepare_shell_init_unknown_shell_errors() {
-        assert!(prepare_shell_init("fish").unwrap_err().contains("unknown shell"));
+        assert!(prepare_shell_init("fish")
+            .unwrap_err()
+            .contains("unknown shell"));
     }
 
     #[test]

@@ -283,10 +283,7 @@ mod tests {
             from: None,
             to: None,
         };
-        assert!(event_matches_subscription(
-            &WsEvent::Log { entry },
-            &sub
-        ));
+        assert!(event_matches_subscription(&WsEvent::Log { entry }, &sub));
     }
 
     #[test]
@@ -307,7 +304,9 @@ mod tests {
             to: None,
         };
         assert!(event_matches_subscription(
-            &WsEvent::Log { entry: entry.clone() },
+            &WsEvent::Log {
+                entry: entry.clone()
+            },
             &sub
         ));
 
@@ -345,7 +344,9 @@ mod tests {
             to: Some(to),
         };
         assert!(event_matches_subscription(
-            &WsEvent::Log { entry: entry.clone() },
+            &WsEvent::Log {
+                entry: entry.clone()
+            },
             &sub
         ));
 
@@ -417,10 +418,7 @@ mod tests {
             from: None,
             to: None,
         };
-        assert!(event_matches_subscription(
-            &WsEvent::Log { entry },
-            &sub
-        ));
+        assert!(event_matches_subscription(&WsEvent::Log { entry }, &sub));
     }
 
     #[test]
@@ -439,7 +437,10 @@ mod tests {
             },
             &sub
         ));
-        assert!(event_matches_subscription(&WsEvent::Lagged { skipped: 10 }, &sub));
+        assert!(event_matches_subscription(
+            &WsEvent::Lagged { skipped: 10 },
+            &sub
+        ));
     }
 
     // Integration tests with tokio-tungstenite
@@ -448,18 +449,16 @@ mod tests {
     #[cfg(not(miri))]
     use futures_util::{SinkExt, StreamExt};
     #[cfg(not(miri))]
-    use tokio_tungstenite::tungstenite::Message as WsMessage;
-    #[cfg(not(miri))]
     use std::time::Duration;
+    #[cfg(not(miri))]
+    use tokio_tungstenite::tungstenite::Message as WsMessage;
 
     #[cfg(not(miri))]
     #[tokio::test]
     async fn ws_receives_services_snapshot() {
         let (url, _store) = spawn_test_hub().await;
         let ws_url = url.replace("http://", "ws://") + "/ws";
-        let (mut ws, _) = tokio_tungstenite::connect_async(&ws_url)
-            .await
-            .unwrap();
+        let (mut ws, _) = tokio_tungstenite::connect_async(&ws_url).await.unwrap();
 
         let msg = ws.next().await.unwrap().unwrap();
         if let WsMessage::Text(txt) = msg {
@@ -475,9 +474,7 @@ mod tests {
     async fn ws_subscribe_filters_logs() {
         let (url, store) = spawn_test_hub().await;
         let ws_url = url.replace("http://", "ws://") + "/ws";
-        let (mut ws, _) = tokio_tungstenite::connect_async(&ws_url)
-            .await
-            .unwrap();
+        let (mut ws, _) = tokio_tungstenite::connect_async(&ws_url).await.unwrap();
 
         // Consume services snapshot
         let _ = ws.next().await.unwrap().unwrap();
@@ -488,7 +485,9 @@ mod tests {
             "service": "*",
             "q": r#"level == "error""#
         });
-        ws.send(WsMessage::Text(sub.to_string().into())).await.unwrap();
+        ws.send(WsMessage::Text(sub.to_string().into()))
+            .await
+            .unwrap();
         // Allow the server to apply the subscription before pushing.
         tokio::time::sleep(Duration::from_millis(100)).await;
 
@@ -532,16 +531,16 @@ mod tests {
     async fn ws_ping_pong() {
         let (url, _store) = spawn_test_hub().await;
         let ws_url = url.replace("http://", "ws://") + "/ws";
-        let (mut ws, _) = tokio_tungstenite::connect_async(&ws_url)
-            .await
-            .unwrap();
+        let (mut ws, _) = tokio_tungstenite::connect_async(&ws_url).await.unwrap();
 
         // Consume services snapshot
         let _ = ws.next().await.unwrap().unwrap();
 
         // Send ping
         let ping = json!({"type": "ping"});
-        ws.send(WsMessage::Text(ping.to_string().into())).await.unwrap();
+        ws.send(WsMessage::Text(ping.to_string().into()))
+            .await
+            .unwrap();
 
         // Should receive pong
         let msg = ws.next().await.unwrap().unwrap();
@@ -558,9 +557,7 @@ mod tests {
     async fn ws_invalid_cel_ignored() {
         let (url, store) = spawn_test_hub().await;
         let ws_url = url.replace("http://", "ws://") + "/ws";
-        let (mut ws, _) = tokio_tungstenite::connect_async(&ws_url)
-            .await
-            .unwrap();
+        let (mut ws, _) = tokio_tungstenite::connect_async(&ws_url).await.unwrap();
 
         // Consume services snapshot
         let _ = ws.next().await.unwrap().unwrap();
@@ -590,9 +587,7 @@ mod tests {
     async fn ws_invalid_time_bounds_ignored() {
         let (url, store) = spawn_test_hub().await;
         let ws_url = url.replace("http://", "ws://") + "/ws";
-        let (mut ws, _) = tokio_tungstenite::connect_async(&ws_url)
-            .await
-            .unwrap();
+        let (mut ws, _) = tokio_tungstenite::connect_async(&ws_url).await.unwrap();
 
         // Consume services snapshot
         let _ = ws.next().await.unwrap().unwrap();
@@ -648,9 +643,7 @@ mod tests {
     async fn ws_close_terminates_connection() {
         let (url, _store) = spawn_test_hub().await;
         let ws_url = url.replace("http://", "ws://") + "/ws";
-        let (mut ws, _) = tokio_tungstenite::connect_async(&ws_url)
-            .await
-            .unwrap();
+        let (mut ws, _) = tokio_tungstenite::connect_async(&ws_url).await.unwrap();
 
         // Consume services snapshot
         let _ = ws.next().await.unwrap().unwrap();

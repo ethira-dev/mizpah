@@ -187,26 +187,22 @@ async fn run_tui_loop<B: Backend, E: EventSource>(
             KeyAction::Up => {
                 *selected = selected.saturating_sub(1);
             }
-            KeyAction::NextError => {
-                match nav_error(client, entries, *selected, "next").await {
-                    Ok(Some(i)) => {
-                        *selected = i;
-                        status.clear();
-                    }
-                    Ok(None) => *status = "no next error/warn".into(),
-                    Err(e) => *status = e.to_string(),
+            KeyAction::NextError => match nav_error(client, entries, *selected, "next").await {
+                Ok(Some(i)) => {
+                    *selected = i;
+                    status.clear();
                 }
-            }
-            KeyAction::PrevError => {
-                match nav_error(client, entries, *selected, "prev").await {
-                    Ok(Some(i)) => {
-                        *selected = i;
-                        status.clear();
-                    }
-                    Ok(None) => *status = "no prev error/warn".into(),
-                    Err(e) => *status = e.to_string(),
+                Ok(None) => *status = "no next error/warn".into(),
+                Err(e) => *status = e.to_string(),
+            },
+            KeyAction::PrevError => match nav_error(client, entries, *selected, "prev").await {
+                Ok(Some(i)) => {
+                    *selected = i;
+                    status.clear();
                 }
-            }
+                Ok(None) => *status = "no prev error/warn".into(),
+                Err(e) => *status = e.to_string(),
+            },
             KeyAction::ShowTrace => match load_trace(client, entries, *selected).await {
                 Ok(Some(trace)) => {
                     *entries = trace;
@@ -246,10 +242,7 @@ fn draw_frame<B: Backend>(
             .enumerate()
             .map(|(i, e)| {
                 let id = e.get("id").and_then(|v| v.as_u64()).unwrap_or(0);
-                let svc = e
-                    .get("service")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("?");
+                let svc = e.get("service").and_then(|v| v.as_str()).unwrap_or("?");
                 let data = e.get("data").cloned().unwrap_or(Value::Null);
                 let level = data
                     .get("level")
@@ -272,19 +265,15 @@ fn draw_frame<B: Backend>(
             })
             .collect();
 
-        let list = List::new(items).block(
-            Block::default()
-                .borders(Borders::ALL)
-                .title(format!(
-                    " Mizpah TUI ({} quit · {}/{} error · {}/{} move · {} trace) ",
-                    keymap.quit,
-                    keymap.next_error,
-                    keymap.prev_error,
-                    keymap.down,
-                    keymap.up,
-                    keymap.show_trace
-                )),
-        );
+        let list = List::new(items).block(Block::default().borders(Borders::ALL).title(format!(
+            " Mizpah TUI ({} quit · {}/{} error · {}/{} move · {} trace) ",
+            keymap.quit,
+            keymap.next_error,
+            keymap.prev_error,
+            keymap.down,
+            keymap.up,
+            keymap.show_trace
+        )));
         f.render_widget(list, chunks[0]);
 
         let help = Paragraph::new(format!(
@@ -332,7 +321,9 @@ async fn nav_error(
     };
     let id = entry.get("id").and_then(|v| v.as_u64());
     if let Some(id) = id {
-        if let Some(i) = entries.iter().position(|e| e.get("id").and_then(|v| v.as_u64()) == Some(id))
+        if let Some(i) = entries
+            .iter()
+            .position(|e| e.get("id").and_then(|v| v.as_u64()) == Some(id))
         {
             return Ok(Some(i));
         }
@@ -396,7 +387,10 @@ fn find_level(entries: &[Value], from: usize, dir: i32) -> Option<usize> {
             .and_then(|v| v.as_str())
             .unwrap_or("")
             .to_ascii_lowercase();
-        if matches!(level.as_str(), "error" | "err" | "fatal" | "warn" | "warning") {
+        if matches!(
+            level.as_str(),
+            "error" | "err" | "fatal" | "warn" | "warning"
+        ) {
             return Some(i as usize);
         }
         i += i64::from(dir);
@@ -482,16 +476,10 @@ mod tests {
             .push_line("api", r#"{"level":"info","msg":"a"}"#)
             .await;
         store
-            .push_line(
-                "api",
-                r#"{"level":"error","msg":"b","trace_id":"t-1"}"#,
-            )
+            .push_line("api", r#"{"level":"error","msg":"b","trace_id":"t-1"}"#)
             .await;
         store
-            .push_line(
-                "api",
-                r#"{"level":"info","msg":"c","trace_id":"t-1"}"#,
-            )
+            .push_line("api", r#"{"level":"info","msg":"c","trace_id":"t-1"}"#)
             .await;
 
         let client = HubClient::new(url);
@@ -502,11 +490,7 @@ mod tests {
         let backend = TestBackend::new(80, 20);
         let mut terminal = Terminal::new(backend).unwrap();
 
-        let next_c = keymap
-            .next_error
-            .chars()
-            .next()
-            .unwrap_or('n');
+        let next_c = keymap.next_error.chars().next().unwrap_or('n');
         let prev_c = keymap.prev_error.chars().next().unwrap_or('p');
         let trace_c = keymap.show_trace.chars().next().unwrap_or('t');
         let quit_c = keymap.quit.chars().next().unwrap_or('q');
@@ -621,7 +605,9 @@ mod tests {
     #[tokio::test]
     async fn load_trace_without_opid() {
         let (url, store) = spawn_test_hub().await;
-        store.push_line("api", r#"{"level":"info","msg":"x"}"#).await;
+        store
+            .push_line("api", r#"{"level":"info","msg":"x"}"#)
+            .await;
         store
             .push_line("api", r#"{"level":"error","msg":"c"}"#)
             .await;
@@ -637,16 +623,10 @@ mod tests {
     async fn load_trace_with_opid() {
         let (url, store) = spawn_test_hub().await;
         store
-            .push_line(
-                "api",
-                r#"{"level":"error","msg":"a","trace_id":"t-1"}"#,
-            )
+            .push_line("api", r#"{"level":"error","msg":"a","trace_id":"t-1"}"#)
             .await;
         store
-            .push_line(
-                "api",
-                r#"{"level":"info","msg":"b","trace_id":"t-1"}"#,
-            )
+            .push_line("api", r#"{"level":"info","msg":"b","trace_id":"t-1"}"#)
             .await;
         store
             .push_line("api", r#"{"level":"error","msg":"c"}"#)
@@ -665,7 +645,7 @@ mod tests {
             .unwrap_or(0);
         let trace = load_trace(&client, &entries, selected).await.unwrap();
         assert!(trace.is_some());
-        assert!(trace.unwrap().len() >= 1);
+        assert!(!trace.unwrap().is_empty());
     }
 
     #[test]
@@ -775,7 +755,9 @@ mod tests {
     #[tokio::test]
     async fn nav_error_when_no_match_in_current_entries() {
         let (url, store) = spawn_test_hub().await;
-        store.push_line("api", r#"{"level":"info","msg":"a"}"#).await;
+        store
+            .push_line("api", r#"{"level":"info","msg":"a"}"#)
+            .await;
         let client = HubClient::new(url);
         let entries = fetch_entries(&client).await.unwrap();
         let result = nav_error(&client, &entries, 0, "next").await.unwrap();
@@ -807,11 +789,21 @@ mod tests {
         // Find the warn entry and navigate backwards to find the error entry
         let warn_idx = entries
             .iter()
-            .position(|e| e.get("data").and_then(|d| d.get("msg")).and_then(|m| m.as_str()) == Some("c"))
+            .position(|e| {
+                e.get("data")
+                    .and_then(|d| d.get("msg"))
+                    .and_then(|m| m.as_str())
+                    == Some("c")
+            })
             .expect("warn row");
         let err_idx = entries
             .iter()
-            .position(|e| e.get("data").and_then(|d| d.get("msg")).and_then(|m| m.as_str()) == Some("a"))
+            .position(|e| {
+                e.get("data")
+                    .and_then(|d| d.get("msg"))
+                    .and_then(|m| m.as_str())
+                    == Some("a")
+            })
             .expect("error row");
         // Navigate backwards from warn should find error
         let result = nav_error(&client, &entries, warn_idx, "prev")
@@ -824,7 +816,9 @@ mod tests {
     #[tokio::test]
     async fn scripted_loop_handles_key_release() {
         let (url, store) = spawn_test_hub().await;
-        store.push_line("api", r#"{"level":"info","msg":"x"}"#).await;
+        store
+            .push_line("api", r#"{"level":"info","msg":"x"}"#)
+            .await;
         let client = HubClient::new(url);
         let keymap = Keymap::load();
         let mut entries = fetch_entries(&client).await.unwrap();
@@ -866,7 +860,9 @@ mod tests {
     #[tokio::test]
     async fn scripted_loop_handles_non_key_events() {
         let (url, store) = spawn_test_hub().await;
-        store.push_line("api", r#"{"level":"info","msg":"x"}"#).await;
+        store
+            .push_line("api", r#"{"level":"info","msg":"x"}"#)
+            .await;
         let client = HubClient::new(url);
         let keymap = Keymap::load();
         let mut entries = fetch_entries(&client).await.unwrap();
@@ -878,7 +874,9 @@ mod tests {
         let scripted = ScriptedEvents {
             events: vec![
                 Event::Mouse(crossterm::event::MouseEvent {
-                    kind: crossterm::event::MouseEventKind::Down(crossterm::event::MouseButton::Left),
+                    kind: crossterm::event::MouseEventKind::Down(
+                        crossterm::event::MouseButton::Left,
+                    ),
                     column: 0,
                     row: 0,
                     modifiers: KeyModifiers::NONE,

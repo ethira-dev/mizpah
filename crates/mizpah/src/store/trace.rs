@@ -104,7 +104,7 @@ impl Store {
             }
         }
         let mut out: Vec<TraceSummary> = map.into_values().collect();
-        out.sort_by(|a, b| b.max_event_time.cmp(&a.max_event_time));
+        out.sort_by_key(|s| std::cmp::Reverse(s.max_event_time));
         out.truncate(limit);
         out
     }
@@ -153,10 +153,7 @@ mod tests {
             resolve_opid(&json!({"id": ""}), &["id".into()]).as_deref(),
             None
         );
-        assert_eq!(
-            resolve_opid(&json!({"id": true}), &["id".into()]),
-            None
-        );
+        assert_eq!(resolve_opid(&json!({"id": true}), &["id".into()]), None);
         assert_eq!(
             resolve_opid(&json!({"id": 42}), &["id".into()]).as_deref(),
             Some("42")

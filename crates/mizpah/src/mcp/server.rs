@@ -224,9 +224,7 @@ impl MizpahMcp {
         &self,
         Parameters(args): Parameters<AggregateLogsArgs>,
     ) -> Result<CallToolResult, McpError> {
-        let group_by = args
-            .group_by
-            .unwrap_or_else(|| vec!["service".into()]);
+        let group_by = args.group_by.unwrap_or_else(|| vec!["service".into()]);
         let resp = self
             .hub
             .aggregate_logs(
@@ -272,7 +270,9 @@ impl MizpahMcp {
         toon_result(resp)
     }
 
-    #[tool(description = "List bookmarks / tags / comments on buffered log entries. Results are TOON.")]
+    #[tool(
+        description = "List bookmarks / tags / comments on buffered log entries. Results are TOON."
+    )]
     async fn list_bookmarks(&self) -> Result<CallToolResult, McpError> {
         let resp = self.hub.list_bookmarks().await.map_err(hub_err)?;
         toon_result(resp)
@@ -420,7 +420,9 @@ mod tests {
     #[tokio::test]
     async fn tool_list_properties() {
         let (url, store) = spawn_test_hub().await;
-        store.push_line("api", r#"{"level":"error","msg":"boom"}"#).await;
+        store
+            .push_line("api", r#"{"level":"error","msg":"boom"}"#)
+            .await;
 
         let mcp = MizpahMcp::new(url);
         let args = ListPropertiesArgs {
@@ -437,8 +439,12 @@ mod tests {
     #[tokio::test]
     async fn tool_search_logs() {
         let (url, store) = spawn_test_hub().await;
-        store.push_line("api", r#"{"level":"error","msg":"boom"}"#).await;
-        store.push_line("api", r#"{"level":"info","msg":"ok"}"#).await;
+        store
+            .push_line("api", r#"{"level":"error","msg":"boom"}"#)
+            .await;
+        store
+            .push_line("api", r#"{"level":"info","msg":"ok"}"#)
+            .await;
 
         let mcp = MizpahMcp::new(url);
         let args = SearchLogsArgs {
@@ -463,7 +469,7 @@ mod tests {
         }
 
         let mcp = MizpahMcp::new(url);
-        
+
         // Get all logs to find a middle ID
         let search_args = SearchLogsArgs {
             q: None,
@@ -473,7 +479,7 @@ mod tests {
         };
         let all = mcp.search_logs(Parameters(search_args)).await.unwrap();
         let text = text_content(&all.content[0]);
-        
+
         // Extract an ID from the response (parse the TOON format)
         let lines: Vec<&str> = text.lines().collect();
         let id_line = lines.iter().find(|l| l.contains("id:")).unwrap();
@@ -515,8 +521,12 @@ mod tests {
     #[tokio::test]
     async fn tool_get_trace() {
         let (url, store) = spawn_test_hub().await;
-        store.push_line("api", r#"{"opid":"req-123","msg":"start"}"#).await;
-        store.push_line("api", r#"{"opid":"req-123","msg":"end"}"#).await;
+        store
+            .push_line("api", r#"{"opid":"req-123","msg":"start"}"#)
+            .await;
+        store
+            .push_line("api", r#"{"opid":"req-123","msg":"end"}"#)
+            .await;
 
         let mcp = MizpahMcp::new(url);
         let args = GetTraceArgs {
@@ -533,7 +543,9 @@ mod tests {
     #[tokio::test]
     async fn tool_query_sql() {
         let (url, store) = spawn_test_hub().await;
-        store.push_line("api", r#"{"level":"error","msg":"boom"}"#).await;
+        store
+            .push_line("api", r#"{"level":"error","msg":"boom"}"#)
+            .await;
 
         let mcp = MizpahMcp::new(url);
         let args = QuerySqlArgs {
@@ -558,12 +570,12 @@ mod tests {
     #[tokio::test]
     async fn tool_list_traces() {
         let (url, store) = spawn_test_hub().await;
-        store.push_line("api", r#"{"opid":"req-123","msg":"test"}"#).await;
+        store
+            .push_line("api", r#"{"opid":"req-123","msg":"test"}"#)
+            .await;
 
         let mcp = MizpahMcp::new(url);
-        let args = ListTracesArgs {
-            limit: Some(10),
-        };
+        let args = ListTracesArgs { limit: Some(10) };
         let result = mcp.list_traces(Parameters(args)).await.unwrap();
         assert_eq!(result.content.len(), 1);
     }
@@ -572,11 +584,15 @@ mod tests {
     #[tokio::test]
     async fn tool_nav_level() {
         let (url, store) = spawn_test_hub().await;
-        store.push_line("api", r#"{"level":"info","msg":"ok"}"#).await;
-        store.push_line("api", r#"{"level":"error","msg":"boom"}"#).await;
+        store
+            .push_line("api", r#"{"level":"info","msg":"ok"}"#)
+            .await;
+        store
+            .push_line("api", r#"{"level":"error","msg":"boom"}"#)
+            .await;
 
         let mcp = MizpahMcp::new(url);
-        
+
         // Get first entry ID
         let search_args = SearchLogsArgs {
             q: None,

@@ -41,7 +41,11 @@ fn parse_bro_row(fields: &[String], line: &str) -> Option<Map<String, Value>> {
         map.insert(name.clone(), json!(val));
     }
     map.insert("_raw".into(), json!(line));
-    if let Some(msg) = map.get("msg").cloned().or_else(|| map.get("message").cloned()) {
+    if let Some(msg) = map
+        .get("msg")
+        .cloned()
+        .or_else(|| map.get("message").cloned())
+    {
         map.insert("msg".into(), msg);
     } else if let Some(uid) = map.get("uid").cloned() {
         map.insert("msg".into(), uid);
@@ -59,7 +63,8 @@ impl LogFormat for BroFormat {
             return 0.85;
         }
         // Tab-separated with common Zeek columns without header context — weak.
-        if line.contains('\t') && (line.contains("TCP") || line.contains("UDP") || line.contains("icmp"))
+        if line.contains('\t')
+            && (line.contains("TCP") || line.contains("UDP") || line.contains("icmp"))
         {
             let tabs = line.matches('\t').count();
             if tabs >= 4 {
@@ -75,10 +80,7 @@ impl LogFormat for BroFormat {
             map.insert("_raw".into(), json!(line.trim()));
             map.insert("msg".into(), json!(line.trim()));
             if let Some(fields) = parse_fields_header(line) {
-                map.insert(
-                    "_bro_fields".into(),
-                    json!(fields.join(",")),
-                );
+                map.insert("_bro_fields".into(), json!(fields.join(",")));
             }
             map.insert("_format".into(), json!("bro_log"));
             return Some(NormalizedLog {
@@ -151,9 +153,7 @@ mod tests {
     fn session_parses_data_row() {
         let mut s = BroSession::default();
         s.ingest_line("#fields\tts\tuid\tproto\tmsg").unwrap();
-        let n = s
-            .ingest_line("1.0\tCabc123\tTCP\thello")
-            .unwrap();
+        let n = s.ingest_line("1.0\tCabc123\tTCP\thello").unwrap();
         assert_eq!(n.format_id, "bro_log");
         assert_eq!(n.data["uid"], "Cabc123");
         assert_eq!(n.data["proto"], "TCP");

@@ -465,7 +465,7 @@ mod tests {
                 }
             ]
         }"###;
-        
+
         let info = parse_github_release(json).unwrap();
         assert_eq!(info.version, Version::parse("0.8.0").unwrap());
         assert_eq!(
@@ -505,7 +505,7 @@ mod tests {
             "tag_name": "not-a-version",
             "assets": []
         }"#;
-        
+
         let result = parse_github_release(json);
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("invalid release tag"));
@@ -514,7 +514,7 @@ mod tests {
     #[test]
     fn parse_github_release_malformed_json() {
         let json = r#"{ invalid json"#;
-        
+
         let result = parse_github_release(json);
         assert!(result.is_err());
     }
@@ -530,7 +530,7 @@ mod tests {
                 }
             ]
         }"#;
-        
+
         let info = parse_github_release(json).unwrap();
         assert_eq!(info.version, Version::parse("0.8.0").unwrap());
         assert!(info.download_url.is_none());
@@ -542,7 +542,7 @@ mod tests {
             "tag_name": "v0.8.0",
             "assets": []
         }"#;
-        
+
         let info = parse_github_release(json).unwrap();
         assert_eq!(info.version, Version::parse("0.8.0").unwrap());
         assert!(info.download_url.is_none());
@@ -563,7 +563,9 @@ mod tests {
         assert!(path_looks_like_homebrew_cellar(Path::new(
             "/opt/homebrew/Cellar/mizpah/0.7.0/bin/mizpah"
         )));
-        assert!(!path_looks_like_homebrew_cellar(Path::new("/usr/local/bin/mizpah")));
+        assert!(!path_looks_like_homebrew_cellar(Path::new(
+            "/usr/local/bin/mizpah"
+        )));
     }
 
     #[test]

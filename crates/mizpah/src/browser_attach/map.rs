@@ -876,6 +876,9 @@ mod tests {
         });
         let result = remote_object_to_json(&obj);
         assert_eq!(result.get("_type"), Some(&json!("Error")));
-        assert_eq!(result.get("description"), Some(&json!("Error: something went wrong")));
+        assert_eq!(
+            result.get("description"),
+            Some(&json!("Error: something went wrong"))
+        );
     }
 }

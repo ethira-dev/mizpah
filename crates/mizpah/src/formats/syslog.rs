@@ -54,10 +54,10 @@ impl LogFormat for SyslogFormat {
         let t = line.trim();
         let caps = rfc3164_re().captures(t)?;
         let mut obj = json!({
-            "timestamp": caps.name("ts").map(|m| m.as_str()).unwrap_or(""),
-            "host": caps.name("host").map(|m| m.as_str()).unwrap_or(""),
-            "app": caps.name("app").map(|m| m.as_str()).unwrap_or(""),
-            "msg": caps.name("msg").map(|m| m.as_str()).unwrap_or(""),
+            "timestamp": caps.name("ts").map_or("", |m| m.as_str()),
+            "host": caps.name("host").map_or("", |m| m.as_str()),
+            "app": caps.name("app").map_or("", |m| m.as_str()),
+            "msg": caps.name("msg").map_or("", |m| m.as_str()),
             "_raw": t,
         });
         if let Some(pri) = caps.name("pri") {

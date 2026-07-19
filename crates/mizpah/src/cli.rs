@@ -13,7 +13,7 @@ use crate::tui;
 use crate::update;
 use crate::{init_tracing_stderr, run_pipe_mode};
 use clap::{Args, Parser, Subcommand};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tracing::error;
 
 #[derive(Debug, Clone, Args)]
@@ -375,8 +375,7 @@ pub(crate) fn default_ingest_service() -> String {
     std::env::current_dir()
         .ok()
         .and_then(|d| d.canonicalize().ok())
-        .map(|d| d.display().to_string())
-        .unwrap_or_else(|| "default".into())
+        .map_or_else(|| "default".into(), |d| d.display().to_string())
 }
 
 /// Apply config.toml defaults when CLI still has clap defaults.
@@ -454,9 +453,7 @@ impl CliDeps {
         if let Some(r) = &self.mcp_stdio {
             return r.clone();
         }
-        mcp::run_stdio(base_url)
-            .await
-            .map_err(|e| e.to_string())
+        mcp::run_stdio(base_url).await.map_err(|e| e.to_string())
     }
 
     fn mcp_install(&self) -> i32 {
@@ -653,7 +650,7 @@ impl CliDeps {
             .map_err(|e| e.to_string())
     }
 
-    async fn run_script(&self, path: &PathBuf, base: &str) -> Result<(), String> {
+    async fn run_script(&self, path: &Path, base: &str) -> Result<(), String> {
         if let Some(r) = &self.run_script {
             return r.clone();
         }
@@ -748,9 +745,7 @@ pub async fn run_parsed(cli: Cli, deps: &CliDeps) -> i32 {
                 Some(AttachTarget::Shell { service, hub }) => {
                     deps.shell_attach(service, hub.host, hub.port).await
                 }
-                Some(AttachTarget::Browser { args }) => {
-                    deps.browser_attach(args.into_opts()).await
-                }
+                Some(AttachTarget::Browser { args }) => deps.browser_attach(args.into_opts()).await,
                 Some(AttachTarget::Cursor { service, hub }) => {
                     deps.attach_cursor(service, hub.host, hub.port).await
                 }
@@ -785,7 +780,8 @@ pub async fn run_parsed(cli: Cli, deps: &CliDeps) -> i32 {
         Some(Commands::Browser { action }) => {
             deps.maybe_init_tracing();
             match action {
-                BrowserAction::Attach { args } => match deps.browser_attach(args.into_opts()).await {
+                BrowserAction::Attach { args } => match deps.browser_attach(args.into_opts()).await
+                {
                     Ok(()) => 0,
                     Err(err) => {
                         eprintln!("error: {err}");
@@ -883,13 +879,7 @@ pub async fn run_parsed(cli: Cli, deps: &CliDeps) -> i32 {
             deps.maybe_init_tracing();
             let base = hub_http_base(&hub.host, hub.port);
             match deps
-                .query_logs(
-                    &base,
-                    &cel,
-                    &group_by,
-                    limit,
-                    service.as_deref(),
-                )
+                .query_logs(&base, &cel, &group_by, limit, service.as_deref())
                 .await
             {
                 Ok(text) => {
@@ -1078,10 +1068,7 @@ mod tests {
         .unwrap();
         assert!(matches!(
             ingest.command,
-            Some(Commands::Ingest {
-                follow: true,
-                ..
-            })
+            Some(Commands::Ingest { follow: true, .. })
         ));
 
         let q = Cli::try_parse_from([
@@ -1438,13 +1425,19 @@ mod tests {
             mcp_install: Some(42),
             ..test_deps()
         };
-        assert_eq!(run_parsed(parse(&["mizpah", "mcp", "install"]), &deps).await, 42);
+        assert_eq!(
+            run_parsed(parse(&["mizpah", "mcp", "install"]), &deps).await,
+            42
+        );
 
         let deps = CliDeps {
             mcp_uninstall: Some(7),
             ..test_deps()
         };
-        assert_eq!(run_parsed(parse(&["mizpah", "mcp", "uninstall"]), &deps).await, 7);
+        assert_eq!(
+            run_parsed(parse(&["mizpah", "mcp", "uninstall"]), &deps).await,
+            7
+        );
     }
 
     #[tokio::test]
@@ -1456,10 +1449,7 @@ mod tests {
             attach_claude: Some(Ok(())),
             ..test_deps()
         };
-        assert_eq!(
-            run_parsed(parse(&["mizpah", "attach"]), &ok).await,
-            0
-        );
+        assert_eq!(run_parsed(parse(&["mizpah", "attach"]), &ok).await, 0);
         assert_eq!(
             run_parsed(parse(&["mizpah", "attach", "shell"]), &ok).await,
             0
@@ -1507,7 +1497,10 @@ mod tests {
             detach_all: Some(Err("detach fail".into())),
             ..test_deps()
         };
-        assert_eq!(run_parsed(parse(&["mizpah", "detach", "all"]), &err).await, 1);
+        assert_eq!(
+            run_parsed(parse(&["mizpah", "detach", "all"]), &err).await,
+            1
+        );
     }
 
     #[tokio::test]
@@ -1585,7 +1578,10 @@ mod tests {
             resolve_open: Some(Err("no state".into())),
             ..test_deps()
         };
-        assert_eq!(run_parsed(parse(&["mizpah", "open"]), &resolve_err).await, 1);
+        assert_eq!(
+            run_parsed(parse(&["mizpah", "open"]), &resolve_err).await,
+            1
+        );
 
         let open_err = CliDeps {
             resolve_open: Some(Ok(("127.0.0.1".into(), 3149))),
@@ -1669,16 +1665,19 @@ mod tests {
     #[tokio::test]
     async fn run_parsed_query_sql_live_hub() {
         let (base, _store) = crate::test_support::spawn_test_hub().await;
-        let port: u16 = base
-            .rsplit(':')
-            .next()
-            .unwrap()
-            .parse()
-            .unwrap();
+        let port: u16 = base.rsplit(':').next().unwrap().parse().unwrap();
         let deps = test_deps();
         assert_eq!(
             run_parsed(
-                parse(&["mizpah", "query", "true", "--host", "127.0.0.1", "-p", &port.to_string()]),
+                parse(&[
+                    "mizpah",
+                    "query",
+                    "true",
+                    "--host",
+                    "127.0.0.1",
+                    "-p",
+                    &port.to_string()
+                ]),
                 &deps
             )
             .await,
@@ -1704,7 +1703,15 @@ mod tests {
         );
         assert_eq!(
             run_parsed(
-                parse(&["mizpah", "sql", "SELECT 1", "--host", "127.0.0.1", "-p", &port.to_string()]),
+                parse(&[
+                    "mizpah",
+                    "sql",
+                    "SELECT 1",
+                    "--host",
+                    "127.0.0.1",
+                    "-p",
+                    &port.to_string()
+                ]),
                 &deps
             )
             .await,
@@ -1861,11 +1868,7 @@ mod tests {
             run_parsed(parse(&["mizpah", "__shell-init", "bash"]), &deps).await,
             0
         );
-        assert!(
-            run_parsed(parse(&["mizpah", "hub", "stop", "-p", "1"]), &deps)
-                .await
-                <= 1
-        );
+        assert!(run_parsed(parse(&["mizpah", "hub", "stop", "-p", "1"]), &deps).await <= 1);
         assert_eq!(
             run_parsed(parse(&["mizpah", "ingest", "/nonexistent/file.log"]), &deps).await,
             1
@@ -1882,34 +1885,28 @@ mod tests {
             run_parsed(parse(&["mizpah", "script", "/nonexistent.mzp"]), &deps).await,
             1
         );
+        assert!(run_parsed(parse(&["mizpah", "open", "-p", "1"]), &deps).await <= 1);
+        assert!(run_parsed(parse(&["mizpah", "attach", "-p", "59999"]), &deps).await <= 1);
         assert!(
-            run_parsed(parse(&["mizpah", "open", "-p", "1"]), &deps)
-                .await
+            run_parsed(parse(&["mizpah", "attach", "cursor", "-p", "59999"]), &deps).await <= 1
+        );
+        assert!(
+            run_parsed(parse(&["mizpah", "attach", "claude", "-p", "59999"]), &deps).await <= 1
+        );
+        assert!(
+            run_parsed(
+                parse(&["mizpah", "attach", "browser", "-p", "59999"]),
+                &deps
+            )
+            .await
                 <= 1
         );
         assert!(
-            run_parsed(parse(&["mizpah", "attach", "-p", "59999"]), &deps)
-                .await
-                <= 1
-        );
-        assert!(
-            run_parsed(parse(&["mizpah", "attach", "cursor", "-p", "59999"]), &deps)
-                .await
-                <= 1
-        );
-        assert!(
-            run_parsed(parse(&["mizpah", "attach", "claude", "-p", "59999"]), &deps)
-                .await
-                <= 1
-        );
-        assert!(
-            run_parsed(parse(&["mizpah", "attach", "browser", "-p", "59999"]), &deps)
-                .await
-                <= 1
-        );
-        assert!(
-            run_parsed(parse(&["mizpah", "browser", "attach", "-p", "59999"]), &deps)
-                .await
+            run_parsed(
+                parse(&["mizpah", "browser", "attach", "-p", "59999"]),
+                &deps
+            )
+            .await
                 <= 1
         );
         assert_eq!(
@@ -1952,7 +1949,10 @@ mod tests {
             hub_restart: Some(Err("restart fail".into())),
             ..test_deps()
         };
-        assert_eq!(run_parsed(parse(&["mizpah", "hub", "start"]), &err).await, 1);
+        assert_eq!(
+            run_parsed(parse(&["mizpah", "hub", "start"]), &err).await,
+            1
+        );
         assert_eq!(
             run_parsed(parse(&["mizpah", "hub", "restart"]), &err).await,
             1

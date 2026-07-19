@@ -38,12 +38,18 @@ mod tests {
 
     #[test]
     fn shell_quote_path_safe_chars_unquoted() {
-        assert_eq!(shell_quote_path(Path::new("/tmp/foo-bar_1.txt")), "/tmp/foo-bar_1.txt");
+        assert_eq!(
+            shell_quote_path(Path::new("/tmp/foo-bar_1.txt")),
+            "/tmp/foo-bar_1.txt"
+        );
     }
 
     #[test]
     fn shell_quote_path_spaces() {
-        assert_eq!(shell_quote_path(Path::new("/tmp/my file")), "'/tmp/my file'");
+        assert_eq!(
+            shell_quote_path(Path::new("/tmp/my file")),
+            "'/tmp/my file'"
+        );
     }
 
     #[test]

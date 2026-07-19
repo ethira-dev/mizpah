@@ -72,6 +72,7 @@ fn as_f64(v: &Value) -> Option<f64> {
 }
 
 impl Store {
+    #[allow(clippy::too_many_arguments)]
     pub async fn aggregate_logs(
         &self,
         service: Option<&str>,
@@ -129,8 +130,8 @@ impl Store {
                         if let Some(n) = get_at_path(&entry.data, path).and_then(as_f64) {
                             acc.sum += n;
                             acc.numeric_n += 1;
-                            acc.min = Some(acc.min.map(|m| m.min(n)).unwrap_or(n));
-                            acc.max = Some(acc.max.map(|m| m.max(n)).unwrap_or(n));
+                            acc.min = Some(acc.min.map_or(n, |m| m.min(n)));
+                            acc.max = Some(acc.max.map_or(n, |m| m.max(n)));
                         }
                     }
                 }

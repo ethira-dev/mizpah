@@ -69,10 +69,7 @@ mod tests {
         })
         .await
         .unwrap();
-        assert_eq!(
-            *got.lock().unwrap(),
-            vec!["a".to_string(), "b".to_string()]
-        );
+        assert_eq!(*got.lock().unwrap(), vec!["a".to_string(), "b".to_string()]);
     }
 
     #[tokio::test]
@@ -108,11 +105,9 @@ mod tests {
                 std::task::Poll::Ready(Err(std::io::Error::other("x")))
             }
         }
-        for_each_line(BufReader::new(FailRead), |_line| async {
-            Ok::<(), ()>(())
-        })
-        .await
-        .unwrap();
+        for_each_line(BufReader::new(FailRead), |_line| async { Ok::<(), ()>(()) })
+            .await
+            .unwrap();
     }
 
     #[tokio::test]

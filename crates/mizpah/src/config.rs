@@ -45,7 +45,10 @@ impl Default for MizpahConfig {
             port: crate::hub::DEFAULT_PORT,
             max_bytes: crate::store::DEFAULT_MAX_BYTES,
             ttl_hours: crate::store::DEFAULT_TTL_HOURS,
-            trace_fields: DEFAULT_TRACE_FIELDS.iter().map(|s| (*s).to_string()).collect(),
+            trace_fields: DEFAULT_TRACE_FIELDS
+                .iter()
+                .map(|s| (*s).to_string())
+                .collect(),
             persist_dir: None,
             secure: false,
         }
@@ -138,6 +141,7 @@ pub fn ensure_default_config_file() -> io::Result<PathBuf> {
 }
 
 /// Merge: CLI / explicit values win over config file for hub bind defaults.
+#[allow(clippy::too_many_arguments)]
 pub fn apply_hub_defaults(
     host: String,
     port: u16,
@@ -149,11 +153,7 @@ pub fn apply_hub_defaults(
     cli_ttl_is_default: bool,
 ) -> (String, u16, u64, u64) {
     let cfg = MizpahConfig::load();
-    let host = if cli_host_is_default {
-        cfg.host
-    } else {
-        host
-    };
+    let host = if cli_host_is_default { cfg.host } else { host };
     let port = if cli_port_is_default { cfg.port } else { port };
     let max_bytes = if cli_max_is_default {
         cfg.max_bytes
@@ -258,7 +258,9 @@ mod tests {
             assert!(MizpahConfig::themes_dir().unwrap().is_dir());
             assert!(MizpahConfig::scripts_dir().unwrap().is_dir());
             assert!(MizpahConfig::keymaps_path().unwrap().starts_with(dir));
-            assert!(MizpahConfig::config_file_path().unwrap().ends_with("config.toml"));
+            assert!(MizpahConfig::config_file_path()
+                .unwrap()
+                .ends_with("config.toml"));
         });
     }
 
@@ -291,10 +293,7 @@ mod tests {
                 persist_dir: Some("spill".into()),
                 ..Default::default()
             };
-            assert_eq!(
-                relative.resolve_persist_dir().unwrap(),
-                dir.join("spill")
-            );
+            assert_eq!(relative.resolve_persist_dir().unwrap(), dir.join("spill"));
 
             let absolute = MizpahConfig {
                 persist_dir: Some("/tmp/mizpah-spill".into()),
@@ -324,16 +323,8 @@ mod tests {
             )
             .unwrap();
 
-            let (host, port, max_bytes, ttl) = apply_hub_defaults(
-                "127.0.0.1".into(),
-                3149,
-                1024,
-                0,
-                true,
-                true,
-                true,
-                true,
-            );
+            let (host, port, max_bytes, ttl) =
+                apply_hub_defaults("127.0.0.1".into(), 3149, 1024, 0, true, true, true, true);
             assert_eq!(host, "10.0.0.1");
             assert_eq!(port, 4242);
             assert_eq!(max_bytes, 8192);
@@ -360,11 +351,17 @@ mod tests {
     fn config_path_helpers_under_isolated_dir() {
         with_isolated_config_dir("paths", |dir| {
             MizpahConfig::ensure_layout().unwrap();
-            assert_eq!(MizpahConfig::config_file_path().unwrap(), dir.join("config.toml"));
+            assert_eq!(
+                MizpahConfig::config_file_path().unwrap(),
+                dir.join("config.toml")
+            );
             assert_eq!(MizpahConfig::formats_dir().unwrap(), dir.join("formats"));
             assert_eq!(MizpahConfig::themes_dir().unwrap(), dir.join("themes"));
             assert_eq!(MizpahConfig::scripts_dir().unwrap(), dir.join("scripts"));
-            assert_eq!(MizpahConfig::keymaps_path().unwrap(), dir.join("keymaps.toml"));
+            assert_eq!(
+                MizpahConfig::keymaps_path().unwrap(),
+                dir.join("keymaps.toml")
+            );
         });
     }
 

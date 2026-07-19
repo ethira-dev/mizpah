@@ -361,14 +361,9 @@ impl Store {
                 }
                 let value: Value = serde_json::from_slice(trimmed)
                     .map_err(|e| SpillError::msg(format!("invalid spill line: {e}")))?;
-                if value
-                    .get("_spillKind")
-                    .and_then(|v| v.as_str())
-                    == Some(SPILL_KIND_ANNOTATION)
-                {
-                    let ann: SpillAnnotationLine = serde_json::from_value(value).map_err(|e| {
-                        SpillError::msg(format!("invalid spill annotation: {e}"))
-                    })?;
+                if value.get("_spillKind").and_then(|v| v.as_str()) == Some(SPILL_KIND_ANNOTATION) {
+                    let ann: SpillAnnotationLine = serde_json::from_value(value)
+                        .map_err(|e| SpillError::msg(format!("invalid spill annotation: {e}")))?;
                     annotations.push(AnnotatedEntry {
                         id: ann.id,
                         annotation: ann.annotation,
@@ -704,8 +699,7 @@ mod tests {
         body.extend_from_slice(&orphan);
         body.push(b'\n');
         fs::write(&body_path, &body).unwrap();
-        let mut mac =
-            HmacSha256::new_from_slice(&key).expect("key");
+        let mut mac = HmacSha256::new_from_slice(&key).expect("key");
         mac.update(&body);
         fs::write(&hmac_path, hex_encode(&mac.finalize().into_bytes())).unwrap();
 
@@ -810,7 +804,10 @@ mod tests {
             .restore_update_spill_from_dir(dir.path())
             .await
             .unwrap_err();
-        assert!(err.to_string().contains("too large") || err.to_string().contains("size limit"), "{err}");
+        assert!(
+            err.to_string().contains("too large") || err.to_string().contains("size limit"),
+            "{err}"
+        );
     }
 
     #[tokio::test]

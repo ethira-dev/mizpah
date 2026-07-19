@@ -185,10 +185,7 @@ mod tests {
 
     #[test]
     fn load_empty_file_returns_default() {
-        let dir = std::env::temp_dir().join(format!(
-            "mizpah-empty-attach-{}",
-            std::process::id()
-        ));
+        let dir = std::env::temp_dir().join(format!("mizpah-empty-attach-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         let path = dir.join("attach.json");

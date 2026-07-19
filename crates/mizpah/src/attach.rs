@@ -33,11 +33,7 @@ async fn forward_line(
     line: &str,
     mzp: &MzpMeta,
 ) -> Result<(), AttachError> {
-    let body = IngestBody {
-        service,
-        line,
-        mzp,
-    };
+    let body = IngestBody { service, line, mzp };
     match client.post(ingest_url).json(&body).send().await {
         Ok(r) if r.status().is_success() => Ok(()),
         Ok(r) if r.status() == reqwest::StatusCode::CONFLICT => {
@@ -86,10 +82,7 @@ where
 }
 
 /// Forward stdin lines to an existing Mizpah hub via POST /api/ingest.
-pub async fn attach_and_forward(
-    base_url: &str,
-    service: &str,
-) -> Result<(), AttachError> {
+pub async fn attach_and_forward(base_url: &str, service: &str) -> Result<(), AttachError> {
     crate::util::ensure_rustls_crypto_provider();
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(30))
@@ -116,14 +109,9 @@ mod tests {
         let (url, store) = spawn_test_hub().await;
         let client = reqwest::Client::new();
         let data = b"{\"msg\":\"from-attach\"}\n";
-        attach_from_reader(
-            client,
-            &url,
-            "svc",
-            BufReader::new(Cursor::new(&data[..])),
-        )
-        .await
-        .unwrap();
+        attach_from_reader(client, &url, "svc", BufReader::new(Cursor::new(&data[..])))
+            .await
+            .unwrap();
         let (entries, _) = store
             .query_logs(
                 Some("svc"),
@@ -183,8 +171,10 @@ mod tests {
         use tokio::net::TcpListener;
 
         crate::util::ensure_rustls_crypto_provider();
-        let app =
-            Router::new().route("/api/stats", get(|| async { axum::http::StatusCode::INTERNAL_SERVER_ERROR }));
+        let app = Router::new().route(
+            "/api/stats",
+            get(|| async { axum::http::StatusCode::INTERNAL_SERVER_ERROR }),
+        );
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr: SocketAddr = listener.local_addr().unwrap();
         tokio::spawn(async move {
@@ -205,13 +195,15 @@ mod tests {
         use tokio::net::TcpListener;
 
         crate::util::ensure_rustls_crypto_provider();
-        let app = Router::new().route(
-            "/api/stats",
-            axum::routing::get(|| async { axum::http::StatusCode::OK }),
-        ).route(
-            "/api/ingest",
-            post(|| async { axum::http::StatusCode::BAD_REQUEST }),
-        );
+        let app = Router::new()
+            .route(
+                "/api/stats",
+                axum::routing::get(|| async { axum::http::StatusCode::OK }),
+            )
+            .route(
+                "/api/ingest",
+                post(|| async { axum::http::StatusCode::BAD_REQUEST }),
+            );
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr: SocketAddr = listener.local_addr().unwrap();
         tokio::spawn(async move {

@@ -4,8 +4,8 @@ mod access_log;
 mod bro;
 mod generic;
 mod json_pack;
-mod packs;
 mod logfmt;
+mod packs;
 mod syslog;
 mod w3c;
 
@@ -15,10 +15,8 @@ pub use access_log::AccessLogFormat;
 pub use bro::BroFormat;
 pub use generic::GenericFormat;
 pub use json_pack::classify_json_object;
-pub use packs::{
-    classify_pack_json, detect_pack_text, parse_pack_text, parse_with_format_hint,
-};
 pub use logfmt::LogfmtFormat;
+pub use packs::{classify_pack_json, detect_pack_text, parse_pack_text, parse_with_format_hint};
 pub use syslog::SyslogFormat;
 pub use w3c::W3cFormat;
 
@@ -82,18 +80,12 @@ pub fn parse_ingest_line_with_hint(
         match hint {
             "logfmt" => {
                 if let Some(norm) = LogfmtFormat.parse(trimmed) {
-                    return (
-                        attach_format(norm.data, "logfmt"),
-                        Some("logfmt".into()),
-                    );
+                    return (attach_format(norm.data, "logfmt"), Some("logfmt".into()));
                 }
             }
             "syslog" => {
                 if let Some(norm) = SyslogFormat.parse(trimmed) {
-                    return (
-                        attach_format(norm.data, "syslog"),
-                        Some("syslog".into()),
-                    );
+                    return (attach_format(norm.data, "syslog"), Some("syslog".into()));
                 }
             }
             "access_log" => {
@@ -116,10 +108,7 @@ pub fn parse_ingest_line_with_hint(
             }
             "generic" => {
                 if let Some(norm) = GenericFormat.parse(trimmed) {
-                    return (
-                        attach_format(norm.data, "generic"),
-                        Some("generic".into()),
-                    );
+                    return (attach_format(norm.data, "generic"), Some("generic".into()));
                 }
             }
             _ => {}
@@ -179,10 +168,7 @@ pub fn parse_ingest_line(line: &str) -> (Value, Option<String>) {
     // Explicit logfmt fallback even at lower confidence
     if let Some(norm) = LogfmtFormat.parse(trimmed) {
         if LogfmtFormat.detect(trimmed) >= 0.3 {
-            return (
-                attach_format(norm.data, "logfmt"),
-                Some("logfmt".into()),
-            );
+            return (attach_format(norm.data, "logfmt"), Some("logfmt".into()));
         }
     }
 
@@ -197,10 +183,7 @@ pub fn parse_ingest_line(line: &str) -> (Value, Option<String>) {
     // 4) generic level-token
     if GenericFormat.detect(trimmed) >= 0.5 {
         if let Some(norm) = GenericFormat.parse(trimmed) {
-            return (
-                attach_format(norm.data, "generic"),
-                Some("generic".into()),
-            );
+            return (attach_format(norm.data, "generic"), Some("generic".into()));
         }
     }
 
@@ -292,9 +275,10 @@ mod tests {
 
     #[test]
     fn parse_generic_level_prefix() {
-        let (v, id) = parse_ingest_line("ERROR something broke");
+        // FATAL is covered by generic but not by common pack patterns (e.g. deno_log).
+        let (v, id) = parse_ingest_line("FATAL something broke");
         assert_eq!(id.as_deref(), Some("generic"));
-        assert_eq!(v["level"], "error");
+        assert_eq!(v["level"], "fatal");
         assert_eq!(v["msg"], "something broke");
     }
 
@@ -464,7 +448,10 @@ mod tests {
 
     #[test]
     fn suggest_format_lock_below_threshold_returns_none() {
-        let lines = vec![r#"level=info msg=one"#.into(), r#"level=warn msg=two"#.into()];
+        let lines = vec![
+            r#"level=info msg=one"#.into(),
+            r#"level=warn msg=two"#.into(),
+        ];
         assert!(suggest_format_lock(&lines).is_none());
     }
 

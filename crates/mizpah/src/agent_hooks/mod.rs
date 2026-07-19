@@ -130,9 +130,7 @@ pub(crate) fn run_detach_source_at(
         HookSource::Claude => claude_path
             .map(std::path::Path::to_path_buf)
             .or_else(claude_settings_path)
-            .ok_or_else(|| {
-                "could not resolve home directory for Claude settings".to_string()
-            })?,
+            .ok_or_else(|| "could not resolve home directory for Claude settings".to_string())?,
     };
 
     let existing = read_file_or_empty(&path).map_err(|e| e.to_string())?;
@@ -201,9 +199,7 @@ pub(crate) fn run_detach_source_at(
 mod tests {
     use super::shared::{is_managed_command, managed_command, read_file_or_empty};
     use super::state::{load_state, save_state, AgentHooksState, SourceState};
-    use super::{
-        run_attach_source_at, run_detach_all, run_detach_source_at, HookSource,
-    };
+    use super::{run_attach_source_at, run_detach_all, run_detach_source_at, HookSource};
     use crate::test_support::env_lock;
     use std::path::Path;
 
@@ -351,8 +347,7 @@ mod tests {
         with_agent_home(|home, _config| {
             let cursor_path = home.join(".cursor/hooks.json");
             let cmd = managed_command(Path::new("/bin/mzp"), HookSource::Cursor);
-            let (merged, _) =
-                super::cursor::merge_cursor_hooks("", &cmd).unwrap();
+            let (merged, _) = super::cursor::merge_cursor_hooks("", &cmd).unwrap();
             std::fs::write(&cursor_path, merged).unwrap();
             run_detach_source_at(HookSource::Cursor, Some(&cursor_path), None).unwrap();
             let content = std::fs::read_to_string(&cursor_path).unwrap();
@@ -411,7 +406,11 @@ mod tests {
             let cursor_path = home.join(".cursor/hooks.json");
             std::fs::write(&cursor_path, "{}\n").unwrap();
             run_detach_all().unwrap();
-            assert!(!load_state().unwrap().cursor.as_ref().is_some_and(|s| s.enabled));
+            assert!(!load_state()
+                .unwrap()
+                .cursor
+                .as_ref()
+                .is_some_and(|s| s.enabled));
             assert!(!crate::shell_attach::load_state().unwrap().enabled);
             let _ = config;
         });
@@ -421,8 +420,11 @@ mod tests {
     fn run_detach_source_reports_missing_managed_hooks() {
         with_agent_home(|home, _config| {
             let cursor_path = home.join(".cursor/hooks.json");
-            std::fs::write(&cursor_path, r#"{"version":1,"hooks":{"stop":[{"command":"./user.sh"}]}}"#)
-                .unwrap();
+            std::fs::write(
+                &cursor_path,
+                r#"{"version":1,"hooks":{"stop":[{"command":"./user.sh"}]}}"#,
+            )
+            .unwrap();
             run_detach_source_at(HookSource::Cursor, Some(&cursor_path), None).unwrap();
             let content = std::fs::read_to_string(&cursor_path).unwrap();
             assert!(content.contains("user.sh"));
@@ -437,7 +439,8 @@ mod tests {
         let port = url.port().unwrap_or(80);
 
         let _guard = env_lock();
-        let home = std::env::temp_dir().join(format!("mizpah-agent-present-{}", std::process::id()));
+        let home =
+            std::env::temp_dir().join(format!("mizpah-agent-present-{}", std::process::id()));
         let config = home.join("cfg");
         let _ = std::fs::remove_dir_all(&home);
         std::fs::create_dir_all(&config).unwrap();
@@ -668,7 +671,11 @@ mod tests {
             })
             .unwrap();
             run_detach_all().unwrap();
-            assert!(!load_state().unwrap().claude.as_ref().is_some_and(|s| s.enabled));
+            assert!(!load_state()
+                .unwrap()
+                .claude
+                .as_ref()
+                .is_some_and(|s| s.enabled));
             let _ = config;
         });
     }

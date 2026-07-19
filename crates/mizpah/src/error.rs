@@ -107,14 +107,23 @@ mod tests {
 
     #[test]
     fn api_error_constructors_and_status() {
-        assert!(matches!(ApiError::bad_request("x"), ApiError::BadRequest(_)));
+        assert!(matches!(
+            ApiError::bad_request("x"),
+            ApiError::BadRequest(_)
+        ));
         assert!(matches!(ApiError::not_found("x"), ApiError::NotFound(_)));
         assert!(matches!(ApiError::conflict("x"), ApiError::Conflict(_)));
         assert!(matches!(ApiError::forbidden("x"), ApiError::Forbidden(_)));
-        assert!(matches!(ApiError::bad_gateway("x"), ApiError::BadGateway(_)));
+        assert!(matches!(
+            ApiError::bad_gateway("x"),
+            ApiError::BadGateway(_)
+        ));
         assert!(matches!(ApiError::internal("x"), ApiError::Internal(_)));
 
-        assert_eq!(ApiError::BadGateway("x".into()).into_response().status(), StatusCode::BAD_GATEWAY);
+        assert_eq!(
+            ApiError::BadGateway("x".into()).into_response().status(),
+            StatusCode::BAD_GATEWAY
+        );
         assert_eq!(
             ApiError::Internal("x".into()).into_response().status(),
             StatusCode::INTERNAL_SERVER_ERROR
@@ -135,7 +144,8 @@ mod tests {
             message: "bad".into(),
         };
         assert!(bind.to_string().contains("x"));
-        let io: HubLifecycleError = std::io::Error::new(std::io::ErrorKind::NotFound, "nope").into();
+        let io: HubLifecycleError =
+            std::io::Error::new(std::io::ErrorKind::NotFound, "nope").into();
         assert!(io.to_string().contains("nope"));
     }
 

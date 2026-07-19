@@ -184,12 +184,7 @@ fn pack_confidence(obj: &Map<String, Value>, pack: &JsonFieldPack) -> f32 {
     if pack.match_keys.is_empty() && pack.match_any.is_empty() {
         return 0.0;
     }
-    if !pack.match_keys.is_empty()
-        && !pack
-            .match_keys
-            .iter()
-            .all(|k| obj.contains_key(k))
-    {
+    if !pack.match_keys.is_empty() && !pack.match_keys.iter().all(|k| obj.contains_key(k)) {
         return 0.0;
     }
     let any_hits = pack
@@ -230,12 +225,7 @@ fn pack_confidence(obj: &Map<String, Value>, pack: &JsonFieldPack) -> f32 {
     // slog: UPPERCASE string levels; reject numeric (pino) / lowercase (logrus).
     if pack.id == "slog" {
         match obj.get("level") {
-            Some(Value::String(s))
-                if matches!(
-                    s.as_str(),
-                    "DEBUG" | "INFO" | "WARN" | "ERROR"
-                ) =>
-            {
+            Some(Value::String(s)) if matches!(s.as_str(), "DEBUG" | "INFO" | "WARN" | "ERROR") => {
                 score += 0.25;
             }
             _ => return 0.0,
@@ -251,14 +241,7 @@ fn pack_confidence(obj: &Map<String, Value>, pack: &JsonFieldPack) -> f32 {
                 let lower = s.to_ascii_lowercase();
                 if matches!(
                     lower.as_str(),
-                    "trace"
-                        | "debug"
-                        | "info"
-                        | "warning"
-                        | "warn"
-                        | "error"
-                        | "fatal"
-                        | "panic"
+                    "trace" | "debug" | "info" | "warning" | "warn" | "error" | "fatal" | "panic"
                 ) && s.chars().all(|c| !c.is_ascii_uppercase())
                 {
                     score += 0.25;
@@ -564,12 +547,16 @@ msgField = "body"
         assert_eq!(pack_confidence(&map, &empty), 0.0);
 
         let bunyan_bad_v = json!({"v": 1, "level": 50, "msg": "x", "name": "a", "time": "t"});
-        let Value::Object(bmap) = bunyan_bad_v else { panic!() };
+        let Value::Object(bmap) = bunyan_bad_v else {
+            panic!()
+        };
         let bunyan = builtins().iter().find(|p| p.id == "bunyan").unwrap();
         assert_eq!(pack_confidence(&bmap, bunyan), 0.0);
 
         let otel_one = json!({"severityText": "INFO"});
-        let Value::Object(omap) = otel_one else { panic!() };
+        let Value::Object(omap) = otel_one else {
+            panic!()
+        };
         let otel = builtins().iter().find(|p| p.id == "otel").unwrap();
         assert_eq!(pack_confidence(&omap, otel), 0.0);
     }
@@ -661,7 +648,9 @@ msgField = "body"
             level_map: Map::new(),
         };
         let with_v = json!({"level": 30, "time": 1, "v": 0});
-        let Value::Object(vmap) = with_v else { panic!() };
+        let Value::Object(vmap) = with_v else {
+            panic!()
+        };
         assert!(pack_confidence(&vmap, &pack) < 0.55);
 
         let pack = JsonFieldPack {

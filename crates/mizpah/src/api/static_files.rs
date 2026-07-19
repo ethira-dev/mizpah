@@ -97,11 +97,14 @@ mod tests {
 
     #[tokio::test]
     async fn serves_embedded_asset() {
+        let js_path = Assets::iter()
+            .find(|p| p.ends_with(".js"))
+            .expect("embedded JS asset");
         let app = test_app();
         let resp = app
             .oneshot(
                 Request::builder()
-                    .uri("/assets/index-BgGmZBMR.js")
+                    .uri(format!("/{js_path}"))
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -113,7 +116,10 @@ mod tests {
             .get(header::CONTENT_TYPE)
             .and_then(|v| v.to_str().ok())
             .unwrap_or("");
-        assert!(ct.contains("javascript") || ct.contains("ecmascript") || ct.contains("js"));
+        assert!(
+            ct.contains("javascript") || ct.contains("ecmascript") || ct.contains("js"),
+            "unexpected content-type {ct:?} for {js_path}"
+        );
     }
 
     #[tokio::test]

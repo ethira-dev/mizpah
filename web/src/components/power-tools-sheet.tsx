@@ -1,5 +1,5 @@
 import { Bookmark, ChartColumn, Loader2, SquareTerminal, Waves } from "lucide-react"
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useMemo, useState } from "react"
 
 import { SqlResultTable } from "@/components/sql-result-table"
 import { Badge } from "@/components/ui/badge"
@@ -76,9 +76,22 @@ export function PowerToolsSheet({
     }
   }, [])
 
-  useEffect(() => {
-    if (open && tab === "bookmarks") void loadBookmarks()
-  }, [open, tab, loadBookmarks])
+  const selectTab = useCallback(
+    (id: Tab) => {
+      setTab(id)
+      setError(null)
+      if (id === "bookmarks") void loadBookmarks()
+    },
+    [loadBookmarks]
+  )
+
+  const handleOpenChange = useCallback(
+    (next: boolean) => {
+      onOpenChange(next)
+      if (next && tab === "bookmarks") void loadBookmarks()
+    },
+    [loadBookmarks, onOpenChange, tab]
+  )
 
   const markSelected = useCallback(async () => {
     if (selectedEntryId == null) {
@@ -168,7 +181,7 @@ export function PowerToolsSheet({
   ]
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
+    <Sheet open={open} onOpenChange={handleOpenChange}>
       <SheetContent
         side="right"
         className="w-full gap-0 sm:max-w-xl"
@@ -189,10 +202,7 @@ export function PowerToolsSheet({
               size="sm"
               variant={tab === id ? "secondary" : "ghost"}
               className="gap-1.5"
-              onClick={() => {
-                setTab(id)
-                setError(null)
-              }}
+              onClick={() => selectTab(id)}
             >
               <Icon className="size-3.5" />
               {label}

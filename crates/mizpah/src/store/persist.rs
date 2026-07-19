@@ -40,11 +40,8 @@ impl PersistWriter {
         fs::create_dir_all(dir)?;
         let seq = next_segment_seq(dir)?;
         let path = segment_path(dir, seq);
-        let existing = path.metadata().map(|m| m.len()).unwrap_or(0);
-        let file = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&path)?;
+        let existing = path.metadata().map_or(0, |m| m.len());
+        let file = OpenOptions::new().create(true).append(true).open(&path)?;
         Ok(Self {
             dir: dir.to_path_buf(),
             file: Mutex::new(file),
@@ -58,10 +55,7 @@ impl PersistWriter {
         if cur > 0 && cur.saturating_add(upcoming_len) > MAX_SEGMENT_BYTES {
             let next = self.segment_seq.load(Ordering::Relaxed).saturating_add(1);
             let path = segment_path(&self.dir, next);
-            let file = OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open(&path)?;
+            let file = OpenOptions::new().create(true).append(true).open(&path)?;
             let mut guard = self.file.lock().await;
             *guard = file;
             self.bytes_in_segment.store(0, Ordering::Relaxed);
@@ -166,11 +160,7 @@ fn load_persist_dir(dir: &Path) -> std::io::Result<PersistLoad> {
                     continue;
                 }
             };
-            if value
-                .get("_persistKind")
-                .and_then(|v| v.as_str())
-                == Some(PERSIST_KIND_ANNOTATION)
-            {
+            if value.get("_persistKind").and_then(|v| v.as_str()) == Some(PERSIST_KIND_ANNOTATION) {
                 match serde_json::from_value::<PersistAnnotationLine>(value) {
                     Ok(ann) => annotations.push(AnnotatedEntry {
                         id: ann.id,
@@ -244,8 +234,7 @@ impl Store {
             for mut entry in entries {
                 max_id = max_id.max(entry.id);
                 if entry.approx_bytes == 0 {
-                    entry.approx_bytes =
-                        super::ingest::estimate_bytes(&entry.service, &entry.data);
+                    entry.approx_bytes = super::ingest::estimate_bytes(&entry.service, &entry.data);
                 }
                 *inner.services.entry(entry.service.clone()).or_insert(0) += 1;
                 crate::properties::discover_paths_into(
@@ -262,8 +251,7 @@ impl Store {
                 inner.approx_bytes += entry.approx_bytes;
                 inner.entries.push_back(entry);
             }
-            let live: std::collections::HashSet<u64> =
-                inner.entries.iter().map(|e| e.id).collect();
+            let live: std::collections::HashSet<u64> = inner.entries.iter().map(|e| e.id).collect();
             for ann in annotations {
                 if live.contains(&ann.id) {
                     inner.annotations.insert(ann.id, ann.annotation);
@@ -320,7 +308,10 @@ mod tests {
         let store2 = Store::new(1_000_000);
         let n = store2.hydrate_from_persist(dir.path()).await.unwrap();
         assert_eq!(n, 1);
-        let ann = store2.get_annotation(id).await.expect("annotation restored");
+        let ann = store2
+            .get_annotation(id)
+            .await
+            .expect("annotation restored");
         assert!(ann.marked);
         assert_eq!(ann.tags, vec!["keep".to_string()]);
         assert_eq!(ann.comment.as_deref(), Some("note"));
@@ -333,7 +324,10 @@ mod tests {
         store.enable_persist(dir.path()).await.unwrap();
         for i in 0..20 {
             store
-                .push_line("api", &format!(r#"{{"level":"info","msg":"{i}","pad":"xxxxxxxxxx"}}"#))
+                .push_line(
+                    "api",
+                    &format!(r#"{{"level":"info","msg":"{i}","pad":"xxxxxxxxxx"}}"#),
+                )
                 .await;
         }
         assert!(
@@ -399,6 +393,13 @@ mod tests {
         let store = Store::new(1_000_000);
         store.enable_persist(dir.path()).await.unwrap();
         store.push_line("api", r#"{"msg":"after-open"}"#).await;
-        assert!(dir.path().join("segment-000005.ndjson").metadata().unwrap().len() > 1);
+        assert!(
+            dir.path()
+                .join("segment-000005.ndjson")
+                .metadata()
+                .unwrap()
+                .len()
+                > 1
+        );
     }
 }

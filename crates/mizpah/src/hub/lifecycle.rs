@@ -60,17 +60,11 @@ pub async fn ensure_hub(
                 as std::pin::Pin<Box<dyn std::future::Future<Output = bool> + Send>>
         }),
         Arc::new(
-            |exe: &Path,
-             host: &str,
-             port: u16,
-             project: Option<&Path>,
-             allow_remote: bool| {
+            |exe: &Path, host: &str, port: u16, project: Option<&Path>, allow_remote: bool| {
                 spawn_detached_hub(exe, host, port, project, allow_remote)
             },
         ),
-        Arc::new(|| {
-            crate::mcp::resolve_binary_path().map_err(|e| e.to_string())
-        }),
+        Arc::new(|| crate::mcp::resolve_binary_path().map_err(|e| e.to_string())),
         HUB_STARTUP_TIMEOUT,
     )
     .await
@@ -87,6 +81,7 @@ type DetachedHubSpawner = Arc<
     dyn Fn(&Path, &str, u16, Option<&Path>, bool) -> io::Result<std::process::Child> + Send + Sync,
 >;
 
+#[allow(clippy::too_many_arguments)]
 async fn ensure_hub_impl(
     host: &str,
     port: u16,
@@ -391,7 +386,7 @@ mod tests {
     fn spawn_detached_hub_with_all_options() {
         let exe = std::env::current_exe().unwrap();
         let project = std::env::temp_dir();
-        
+
         let result = spawn_detached_hub_with_options(
             &exe,
             "127.0.0.1",
@@ -401,7 +396,7 @@ mod tests {
             Some(24),
             false,
         );
-        
+
         if let Ok(mut child) = result {
             let _ = child.kill();
             let _ = child.wait();
@@ -411,15 +406,7 @@ mod tests {
     #[test]
     fn spawn_detached_hub_allow_remote() {
         let exe = std::env::current_exe().unwrap();
-        let result = spawn_detached_hub_with_options(
-            &exe,
-            "0.0.0.0",
-            3149,
-            None,
-            None,
-            None,
-            true,
-        );
+        let result = spawn_detached_hub_with_options(&exe, "0.0.0.0", 3149, None, None, None, true);
         if let Ok(mut child) = result {
             let _ = child.kill();
             let _ = child.wait();
@@ -506,9 +493,8 @@ mod tests {
         let calls_clone = Arc::clone(&calls);
         let probe = Arc::new(move |_h: &str, _p: u16| {
             let calls = Arc::clone(&calls_clone);
-            Box::pin(async move {
-                calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst) >= 2
-            }) as std::pin::Pin<Box<dyn std::future::Future<Output = bool> + Send>>
+            Box::pin(async move { calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst) >= 2 })
+                as std::pin::Pin<Box<dyn std::future::Future<Output = bool> + Send>>
         });
         #[cfg(unix)]
         fn mock_child() -> std::process::Child {
@@ -584,7 +570,10 @@ mod tests {
         )
         .await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("did not become healthy"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("did not become healthy"));
     }
 
     #[tokio::test]
