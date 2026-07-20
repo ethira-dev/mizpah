@@ -1,0 +1,28 @@
+{
+    "cloudevents_log": {
+        "title": "CloudEvents",
+        "description": "CloudEvents 1.0 JSON event envelope (specversion, type, source, id)",
+        "url": "https://github.com/cloudevents/spec/blob/v1.0.2/cloudevents/formats/json-format.md",
+        "file-type": "json",
+        "json": true,
+        "timestamp-field": "time",
+        "match-keys": ["specversion", "type", "source", "id"],
+        "body-field": "type",
+        "line-format": [
+            { "field": "time" },
+            " ",
+            { "field": "type" },
+            " ",
+            { "field": "source" },
+            " ",
+            { "field": "id" },
+            " ",
+            { "field": "subject" }
+        ],
+        "sample": [
+            {
+                "line": "{\"specversion\":\"1.0\",\"type\":\"com.example.order.created\",\"source\":\"https://example.com/orders\",\"id\":\"A234-1234-1234\",\"time\":\"2020-01-01T00:00:00Z\",\"subject\":\"order/123\",\"datacontenttype\":\"application/json\",\"data\":{\"orderId\":\"123\",\"amount\":42}}"
+            }
+        ]
+    }
+}

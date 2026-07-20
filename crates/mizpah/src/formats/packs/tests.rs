@@ -96,13 +96,20 @@ fn json_fixture(pack_id: &str) -> Option<String> {
 fn registry_loads_all_non_converter_packs() {
     let ids = loaded_pack_ids();
     assert!(
-        ids.len() >= 195,
-        "expected ~195+ active packs, got {}",
+        ids.len() >= 210,
+        "expected ~210+ active packs, got {}",
         ids.len()
     );
-    assert!(!ids
-        .iter()
-        .any(|id| id == "pcap_log" || id == "otel_collector_log"));
+    assert!(
+        ids.iter().any(|id| id == "pcap_log"),
+        "pcap_log should be registered (post-convert JSON pack)"
+    );
+    assert!(
+        ids.iter().any(|id| id == "otel_collector_log"),
+        "otel_collector_log should be registered"
+    );
+    assert!(ids.iter().any(|id| id == "windows_evtx_log"));
+    assert!(ids.iter().any(|id| id == "vault_audit_log"));
 }
 
 #[test]
@@ -249,6 +256,24 @@ fn stable_ids_for_primary_packs() {
     assert_eq!(stable_format_id("syslog_log"), "syslog");
     assert_eq!(stable_format_id("bunyan_log"), "bunyan");
     assert_eq!(stable_format_id("postgres_log"), "postgres_log");
+}
+
+#[test]
+fn match_keys_reject_partial_json() {
+    use crate::formats::classify_pack_json;
+    // Looks Vault-ish (has time) but missing auth/request — must not win vault_audit_log.
+    let obj = serde_json::json!({
+        "time": "2020-01-01T00:00:00Z",
+        "type": "request",
+        "data": {"x": 1}
+    });
+    let Value::Object(map) = obj else { panic!("obj") };
+    if let Some(norm) = classify_pack_json(&map) {
+        assert_ne!(
+            norm.format_id, "vault_audit_log",
+            "partial object must not match vault_audit_log"
+        );
+    }
 }
 
 #[test]

@@ -1,0 +1,28 @@
+{
+    "powershell_scriptblock_log": {
+        "title": "PowerShell ScriptBlock",
+        "description": "Windows PowerShell ScriptBlock logging (Event ID 4104) via Winlogbeat/Elastic JSON",
+        "file-type": "json",
+        "json": true,
+        "timestamp-field": "@timestamp",
+        "match-keys": ["winlog.event_id", "winlog.event_data.ScriptBlockText"],
+        "line-format": [
+            { "field": "@timestamp" },
+            " ",
+            { "field": "winlog.event_id" },
+            " ",
+            { "field": "winlog.channel" },
+            " ",
+            { "field": "winlog.provider_name" },
+            " ",
+            { "field": "message" }
+        ],
+        "url": "https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_logging_windows",
+        "body-field": "winlog.event_data.ScriptBlockText",
+        "sample": [
+            {
+                "line": "{\"@timestamp\":\"2020-01-01T00:00:00.000Z\",\"event\":{\"code\":\"4104\",\"provider\":\"Microsoft-Windows-PowerShell\"},\"winlog\":{\"channel\":\"Microsoft-Windows-PowerShell/Operational\",\"event_id\":4104,\"provider_name\":\"Microsoft-Windows-PowerShell\",\"computer_name\":\"WORKSTATION01\",\"event_data\":{\"ScriptBlockText\":\"Write-Host 'hello'\",\"ScriptBlockId\":\"a1b2c3d4-e5f6-7890-abcd-ef1234567890\",\"MessageNumber\":\"1\",\"MessageTotal\":\"1\"}},\"message\":\"Creating Scriptblock text (1 of 1):\",\"host\":{\"hostname\":\"WORKSTATION01\"}}"
+            }
+        ]
+    }
+}

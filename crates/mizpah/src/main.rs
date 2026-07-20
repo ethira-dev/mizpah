@@ -6,6 +6,7 @@ mod cli;
 mod config;
 mod error;
 mod event_time;
+mod file_convert;
 mod file_ingest;
 mod filter;
 mod formats;

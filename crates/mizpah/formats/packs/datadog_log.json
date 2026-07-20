@@ -1,0 +1,29 @@
+{
+    "datadog_log": {
+        "title": "Datadog log",
+        "description": "Datadog agent / intake JSON logs with ddsource or ddtags",
+        "file-type": "json",
+        "json": true,
+        "timestamp-field": "@timestamp",
+        "match-keys": ["ddsource", "message"],
+        "line-format": [
+            { "field": "@timestamp" },
+            " ",
+            { "field": "ddsource" },
+            " ",
+            { "field": "service" },
+            " ",
+            { "field": "status" },
+            " ",
+            { "field": "message" }
+        ],
+        "url": "https://docs.datadoghq.com/logs/log_collection/?tab=http",
+        "level-field": "status",
+        "body-field": "message",
+        "sample": [
+            {
+                "line": "{\"@timestamp\":\"2020-01-01T00:00:00.000Z\",\"message\":\"Request completed\",\"status\":\"info\",\"service\":\"api\",\"ddsource\":\"nodejs\",\"ddtags\":\"env:prod,version:1.2.3\",\"hostname\":\"web-1\"}"
+            }
+        ]
+    }
+}

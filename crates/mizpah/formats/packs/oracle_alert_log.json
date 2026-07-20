@@ -1,0 +1,45 @@
+{
+    "oracle_alert_log": {
+        "title": "Oracle alert log",
+        "description": "Oracle Database alert log lines (ORA- errors and XML/text timestamps)",
+        "url": "https://docs.oracle.com/en/database/oracle/oracle-database/19/refrn/ALERT_LOG.html",
+        "regex": {
+            "ora": {
+                "pattern": "^(?<ora_code>ORA-\\d{5}):\\s*(?<body>.*)$"
+            },
+            "iso_ts": {
+                "pattern": "^(?<timestamp>\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d+(?:[+-]\\d{2}:\\d{2}|Z)?)\\s*(?<body>.*)$"
+            },
+            "legacy_ts": {
+                "pattern": "^(?<timestamp>(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\\s+\\d{1,2}\\s+\\d{2}:\\d{2}:\\d{2}\\s+\\d{4})\\s*$"
+            },
+            "starting": {
+                "pattern": "^(?<body>Starting ORACLE instance \\((?<mode>normal|restrict)\\).*)$"
+            }
+        },
+        "timestamp-field": "timestamp",
+        "body-field": "body",
+        "level": {
+            "error": "^ORA-"
+        },
+        "value": {
+            "timestamp": { "kind": "string" },
+            "ora_code": { "kind": "string", "identifier": true },
+            "mode": { "kind": "string" }
+        },
+        "sample": [
+            {
+                "line": "ORA-00600: internal error code, arguments: [1234], [], [], [], [], [], [], []"
+            },
+            {
+                "line": "2020-01-01T00:00:00.123456+00:00"
+            },
+            {
+                "line": "Tue Jan 01 00:00:00 2020"
+            },
+            {
+                "line": "Starting ORACLE instance (normal)"
+            }
+        ]
+    }
+}

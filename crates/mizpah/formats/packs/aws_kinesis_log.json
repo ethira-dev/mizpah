@@ -1,0 +1,24 @@
+{
+    "aws_kinesis_log": {
+        "title": "Amazon Kinesis record",
+        "description": "Amazon Kinesis Data Streams GetRecords-shaped JSON records",
+        "url": "https://docs.aws.amazon.com/kinesis/latest/APIReference/API_Record.html",
+        "file-type": "json",
+        "json": true,
+        "timestamp-field": "ApproximateArrivalTimestamp",
+        "match-keys": ["SequenceNumber", "PartitionKey", "Data"],
+        "body-field": "PartitionKey",
+        "line-format": [
+            { "field": "ApproximateArrivalTimestamp" },
+            " ",
+            { "field": "PartitionKey" },
+            " ",
+            { "field": "SequenceNumber" }
+        ],
+        "sample": [
+            {
+                "line": "{\"SequenceNumber\":\"49590338271490256608559692538361571095921575989136588898\",\"ApproximateArrivalTimestamp\":\"2020-01-01T00:00:00.000Z\",\"Data\":\"SGVsbG8sIHRoaXMgaXMgYSB0ZXN0Lg==\",\"PartitionKey\":\"partitionKey-01\",\"EncryptionType\":\"NONE\"}"
+            }
+        ]
+    }
+}

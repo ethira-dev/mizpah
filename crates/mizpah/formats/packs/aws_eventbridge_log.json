@@ -1,0 +1,28 @@
+{
+    "aws_eventbridge_log": {
+        "title": "Amazon EventBridge",
+        "description": "Amazon EventBridge event envelope (version, detail-type, source, detail)",
+        "url": "https://docs.aws.amazon.com/eventbridge/latest/userguide/eb-events.html",
+        "file-type": "json",
+        "json": true,
+        "timestamp-field": "time",
+        "match-keys": ["detail-type", "source", "detail", "account", "region"],
+        "body-field": "detail-type",
+        "line-format": [
+            { "field": "time" },
+            " ",
+            { "field": "source" },
+            " ",
+            { "field": "detail-type" },
+            " ",
+            { "field": "account" },
+            " ",
+            { "field": "region" }
+        ],
+        "sample": [
+            {
+                "line": "{\"version\":\"0\",\"id\":\"6a7e8feb-b491-4cf7-a9f1-bf3703467718\",\"detail-type\":\"EC2 Instance State-change Notification\",\"source\":\"aws.ec2\",\"account\":\"123456789012\",\"time\":\"2020-01-01T00:00:00Z\",\"region\":\"us-east-1\",\"resources\":[\"arn:aws:ec2:us-east-1:123456789012:instance/i-abcd1111\"],\"detail\":{\"instance-id\":\"i-abcd1111\",\"state\":\"running\"}}"
+            }
+        ]
+    }
+}

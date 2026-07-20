@@ -53,6 +53,9 @@ struct RawPack {
     file_pattern: Option<String>,
     #[serde(default, rename = "line-format")]
     line_format: Vec<Value>,
+    /// Required JSON paths; missing any → confidence 0 (collision-safe packs).
+    #[serde(default, rename = "match-keys")]
+    match_keys: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -88,6 +91,7 @@ pub struct CompiledPack {
     /// Higher = more specific (more capture groups / longer patterns).
     pub specificity: f32,
     pub line_format_fields: Vec<String>,
+    pub match_keys: Vec<String>,
 }
 
 pub struct PackRegistry {
@@ -201,6 +205,7 @@ fn load_registry() -> PackRegistry {
                 specificity += 0.0001 * cr.pattern_len as f32;
             }
             specificity += 0.02 * line_format_fields.len() as f32;
+            specificity += 0.03 * raw.match_keys.len() as f32;
             if file_pattern.is_some() {
                 specificity += 0.05;
             }
@@ -218,6 +223,7 @@ fn load_registry() -> PackRegistry {
                 _file_pattern: file_pattern,
                 specificity,
                 line_format_fields,
+                match_keys: raw.match_keys,
             });
         }
     }
@@ -330,11 +336,16 @@ impl CompiledPack {
 
     pub fn json_confidence(&self, obj: &Map<String, Value>) -> f32 {
         let root = Value::Object(obj.clone());
+        for key in &self.match_keys {
+            if json_path(&root, key).is_none() {
+                return 0.0;
+            }
+        }
         if let Some(tf) = &self.timestamp_field {
             if json_path(&root, tf).is_none() {
                 return 0.0;
             }
-        } else {
+        } else if self.match_keys.is_empty() {
             // No timestamp-field: require at least two line-format fields present.
             let hits = self
                 .line_format_fields
@@ -345,6 +356,11 @@ impl CompiledPack {
                 return 0.0;
             }
             return (0.55 + 0.05 * hits as f32).clamp(0.55, 0.9);
+        } else {
+            // match-keys alone are enough (e.g. OTLP resourceLogs envelopes).
+            let mut score = 0.65_f32;
+            score += 0.03 * self.match_keys.len() as f32;
+            return score.clamp(0.55, 0.95);
         }
 
         let mut score = 0.6_f32;
@@ -354,6 +370,7 @@ impl CompiledPack {
             .filter(|f| !f.starts_with("__") && json_path(&root, f).is_some())
             .count();
         score += 0.03 * field_hits as f32;
+        score += 0.02 * self.match_keys.len() as f32;
         if let Some(lf) = &self.level_field {
             if json_path(&root, lf).is_some() {
                 score += 0.05;

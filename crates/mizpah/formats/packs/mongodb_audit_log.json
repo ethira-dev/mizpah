@@ -1,0 +1,31 @@
+{
+    "mongodb_audit_log": {
+        "title": "MongoDB audit",
+        "description": "MongoDB enterprise / Atlas audit JSON (atype + param, distinct from server logs)",
+        "url": "https://www.mongodb.com/docs/manual/core/auditing/",
+        "file-type": "json",
+        "json": true,
+        "timestamp-field": "ts/$date",
+        "match-keys": ["atype", "local", "remote", "uuid"],
+        "body-field": "atype",
+        "line-format": [
+            { "field": "ts/$date" },
+            " ",
+            { "field": "atype" },
+            " ",
+            { "field": "param.user" },
+            " ",
+            { "field": "param.ns" },
+            " ",
+            { "field": "result" }
+        ],
+        "sample": [
+            {
+                "line": "{\"atype\":\"authenticate\",\"ts\":{\"$date\":\"2020-01-01T00:00:00.000Z\"},\"local\":{\"ip\":\"127.0.0.1\",\"port\":27017},\"remote\":{\"ip\":\"10.0.0.1\",\"port\":54321},\"uuid\":{\"$binary\":\"AAAAAAAAAAAAAAAAAAAAAA==\",\"$type\":\"04\"},\"param\":{\"user\":\"alice\",\"db\":\"admin\",\"mechanism\":\"SCRAM-SHA-256\"},\"result\":0}"
+            },
+            {
+                "line": "{\"atype\":\"authCheck\",\"ts\":{\"$date\":\"2020-01-01T00:00:01.000Z\"},\"local\":{\"ip\":\"127.0.0.1\",\"port\":27017},\"remote\":{\"ip\":\"10.0.0.1\",\"port\":54321},\"uuid\":{\"$binary\":\"BBBBBBBBBBBBBBBBBBBBBB==\",\"$type\":\"04\"},\"param\":{\"command\":\"find\",\"ns\":\"app.users\",\"args\":{}},\"result\":0}"
+            }
+        ]
+    }
+}

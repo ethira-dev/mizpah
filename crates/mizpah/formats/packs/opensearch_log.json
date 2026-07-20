@@ -1,0 +1,30 @@
+{
+    "opensearch_log": {
+        "title": "OpenSearch server",
+        "description": "OpenSearch server process logs (o.o.* / org.opensearch components)",
+        "url": "https://opensearch.org/docs/latest/",
+        "regex": {
+            "std": {
+                "pattern": "^\\[(?<timestamp>[^\\]]+)\\]\\[(?<level>[A-Z]+)\\s*\\]\\[(?<component>o\\.o\\.[^\\]]+|org\\.opensearch[^\\]]*)\\]\\s+(?<body>.*)$"
+            }
+        },
+        "level-field": "level",
+        "level": {
+            "error": "ERROR|FATAL",
+            "warn": "WARN",
+            "info": "INFO",
+            "debug": "DEBUG|TRACE"
+        },
+        "body-field": "body",
+        "sample": [
+            {
+                "line": "[2020-01-01T00:00:00,000][INFO ][o.o.n.Node               ] [node-1] initialized",
+                "level": "info"
+            },
+            {
+                "line": "[2020-01-01T00:00:01,000][ERROR][org.opensearch.bootstrap.OpenSearchUncaughtExceptionHandler] [node-1] fatal error",
+                "level": "error"
+            }
+        ]
+    }
+}

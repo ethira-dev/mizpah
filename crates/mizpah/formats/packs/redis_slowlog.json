@@ -1,0 +1,40 @@
+{
+    "redis_slowlog": {
+        "title": "Redis SLOWLOG",
+        "description": "Redis SLOWLOG GET textual / MONITOR-adjacent slow entry lines",
+        "url": "https://redis.io/commands/slowlog/",
+        "regex": {
+            "get_entry": {
+                "pattern": "^(?<entry_id>\\d+)\\)\\s+1\\)\\s+\\(integer\\)\\s+(?<unix_time>\\d+)\\s+2\\)\\s+\\(integer\\)\\s+(?<duration_us>\\d+)\\s+3\\)\\s+1\\)\\s+\"(?<command>[^\"]+)\"(?:\\s+2\\)\\s+\"(?<arg1>[^\"]*)\")?"
+            },
+            "human": {
+                "pattern": "^\\[(?<unix_time>\\d+)\\]\\s+(?<duration_us>\\d+)\\s+(?<command>\\S+)(?:\\s+(?<args>.*))?$"
+            },
+            "cli": {
+                "pattern": "^(?<entry_id>\\d+)\\s+(?<unix_time>\\d+)\\s+(?<duration_us>\\d+)\\s+(?<command>.+)$"
+            }
+        },
+        "timestamp-field": "unix_time",
+        "body-field": "command",
+        "duration-field": "duration_us",
+        "value": {
+            "entry_id": { "kind": "string", "identifier": true },
+            "unix_time": { "kind": "string" },
+            "duration_us": { "kind": "string", "collate": "measure_with_units" },
+            "command": { "kind": "string" },
+            "arg1": { "kind": "string" },
+            "args": { "kind": "string" }
+        },
+        "sample": [
+            {
+                "line": "1) 1) (integer) 1577836800 2) (integer) 15000 3) 1) \"KEYS\" 2) \"*\""
+            },
+            {
+                "line": "[1577836800] 15000 KEYS *"
+            },
+            {
+                "line": "1 1577836800 15000 KEYS *"
+            }
+        ]
+    }
+}

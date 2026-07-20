@@ -1,0 +1,40 @@
+{
+    "activemq_log": {
+        "title": "ActiveMQ / Artemis",
+        "description": "Apache ActiveMQ Classic and ActiveMQ Artemis broker log lines",
+        "url": "https://activemq.apache.org/components/artemis/documentation/latest/logging.html",
+        "regex": {
+            "classic": {
+                "pattern": "^(?<timestamp>\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2},\\d{3})\\s+\\|\\s+(?<level>INFO|WARN|ERROR|DEBUG|TRACE)\\s+\\|\\s+(?<thread>[^|]+)\\s+\\|\\s+(?<logger>[^|]+)\\s+\\|\\s+(?<body>.*)$"
+            },
+            "artemis": {
+                "pattern": "^(?<timestamp>\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2},\\d{3})\\s+(?<level>INFO|WARN|ERROR|DEBUG|TRACE)\\s+\\[(?<thread>[^\\]]+)\\]\\s+(?<logger>org\\.apache\\.activemq\\S*)\\s+-\\s+(?<body>.*)$"
+            }
+        },
+        "level-field": "level",
+        "body-field": "body",
+        "timestamp-field": "timestamp",
+        "level": {
+            "error": "ERROR",
+            "warn": "WARN",
+            "info": "INFO",
+            "debug": "DEBUG|TRACE"
+        },
+        "value": {
+            "thread": { "kind": "string", "identifier": true },
+            "logger": { "kind": "string", "identifier": true },
+            "level": { "kind": "string" },
+            "timestamp": { "kind": "string" }
+        },
+        "sample": [
+            {
+                "line": "2020-01-01 00:00:00,000 | INFO  | main | org.apache.activemq.broker.BrokerService | Apache ActiveMQ 5.16.0 starting",
+                "level": "info"
+            },
+            {
+                "line": "2020-01-01 00:00:01,000 INFO  [main] org.apache.activemq.artemis.core.server.impl.ActiveMQServerImpl - AMQ221000: live Message Broker is starting",
+                "level": "info"
+            }
+        ]
+    }
+}

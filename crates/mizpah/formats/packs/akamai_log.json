@@ -1,0 +1,28 @@
+{
+    "akamai_log": {
+        "title": "Akamai WAF / security",
+        "description": "Akamai security / WAF JSON event export",
+        "file-type": "json",
+        "json": true,
+        "timestamp-field": "httpMessage.start",
+        "match-keys": ["attackData", "httpMessage", "attackData.rules"],
+        "line-format": [
+            { "field": "httpMessage.start" },
+            " ",
+            { "field": "attackData.ruleActions" },
+            " ",
+            { "field": "attackData.clientIP" },
+            " ",
+            { "field": "httpMessage.requestUri" },
+            " ",
+            { "field": "httpMessage.status" }
+        ],
+        "url": "https://techdocs.akamai.com/siem-integration/docs/json-data-structure",
+        "body-field": "httpMessage.requestUri",
+        "sample": [
+            {
+                "line": "{\"type\":\"akamai_siem\",\"attackData\":{\"clientIP\":\"1.2.3.4\",\"configId\":\"12345\",\"policyId\":\"policy1\",\"ruleActions\":\"alert\",\"rules\":\"950002\",\"ruleMessages\":\"Internal Server Error\",\"ruleData\":\"\",\"ruleSelectors\":\"\",\"ruleVersions\":\"\",\"ruleTags\":\"OWASP_CRS/WEB_ATTACK/SQL_INJECTION\"},\"httpMessage\":{\"start\":\"1577836800\",\"requestId\":\"abc123\",\"method\":\"GET\",\"host\":\"www.example.com\",\"port\":\"443\",\"path\":\"/search\",\"requestUri\":\"/search?q=1%27+OR+1%3D1\",\"query\":\"q=1'+OR+1=1\",\"status\":\"403\",\"bytes\":\"1234\",\"protocol\":\"HTTPS\"}}"
+            }
+        ]
+    }
+}

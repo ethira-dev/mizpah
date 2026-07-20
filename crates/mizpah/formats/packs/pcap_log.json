@@ -1,0 +1,22 @@
+{
+    "pcap_log": {
+        "title": "pcap / pcapng",
+        "description": "Packet capture records converted via tshark -T ek (Mizpah file ingest)",
+        "file-type": "json",
+        "json": true,
+        "match-keys": ["pcap_source", "layers"],
+        "line-format": [
+            { "field": "timestamp" },
+            " ",
+            { "field": "layers" },
+            " ",
+            { "field": "pcap_source" }
+        ],
+        "url": "https://www.wireshark.org/docs/man-pages/tshark.html",
+        "sample": [
+            {
+                "line": "{\"timestamp\":\"1577836800.000000000\",\"layers\":{\"frame\":{\"frame_frame_time\":\"Jan  1, 2020 00:00:00.000000000 UTC\",\"frame_frame_len\":\"74\"},\"ip\":{\"ip_ip_src\":\"10.0.0.1\",\"ip_ip_dst\":\"1.2.3.4\"},\"tcp\":{\"tcp_tcp_srcport\":\"54321\",\"tcp_tcp_dstport\":\"443\"}},\"pcap_source\":true}"
+            }
+        ]
+    }
+}

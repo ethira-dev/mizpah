@@ -1,0 +1,44 @@
+{
+    "cassandra_log": {
+        "title": "Cassandra / ScyllaDB",
+        "description": "Apache Cassandra and ScyllaDB system.log style lines (logback)",
+        "url": "https://cassandra.apache.org/doc/latest/cassandra/operating/logs.html",
+        "regex": {
+            "std": {
+                "pattern": "^(?<level>INFO|WARN|ERROR|DEBUG|TRACE)\\s+\\[(?<thread>[^\\]]+)\\]\\s+(?<timestamp>\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2},\\d{3})\\s+(?<logger>\\S+)\\s+-\\s+(?<body>.*)$"
+            },
+            "scylla": {
+                "pattern": "^(?<timestamp>\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2},\\d{3})\\s+(?<level>INFO|WARN|ERROR|DEBUG|TRACE)\\s+(?<logger>\\S+)\\s+\\[(?<thread>[^\\]]+)\\]\\s+(?<body>.*)$"
+            }
+        },
+        "level-field": "level",
+        "body-field": "body",
+        "timestamp-field": "timestamp",
+        "level": {
+            "error": "ERROR",
+            "warn": "WARN",
+            "info": "INFO",
+            "debug": "DEBUG|TRACE"
+        },
+        "value": {
+            "level": { "kind": "string" },
+            "thread": { "kind": "string", "identifier": true },
+            "logger": { "kind": "string", "identifier": true },
+            "timestamp": { "kind": "string" }
+        },
+        "sample": [
+            {
+                "line": "INFO  [main] 2020-01-01 00:00:00,000 CassandraDaemon.java:543 - Starting up server gossip",
+                "level": "info"
+            },
+            {
+                "line": "ERROR [Native-Transport-Requests-1] 2020-01-01 00:00:01,123 Message.java:291 - Unexpected exception during request",
+                "level": "error"
+            },
+            {
+                "line": "2020-01-01 00:00:00,000 INFO  init [shard-0] Seastar is initializing...",
+                "level": "info"
+            }
+        ]
+    }
+}

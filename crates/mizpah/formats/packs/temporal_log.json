@@ -1,0 +1,27 @@
+{
+    "temporal_log": {
+        "title": "Temporal history event",
+        "description": "Temporal / Cadence workflow history event JSON exports",
+        "url": "https://docs.temporal.io/workflows#event-history",
+        "file-type": "json",
+        "json": true,
+        "timestamp-field": "eventTime",
+        "match-keys": ["eventId", "eventType", "eventTime"],
+        "body-field": "eventType",
+        "line-format": [
+            { "field": "eventTime" },
+            " ",
+            { "field": "eventType" },
+            " ",
+            { "field": "eventId" }
+        ],
+        "sample": [
+            {
+                "line": "{\"eventId\":\"1\",\"eventTime\":\"2020-01-01T00:00:00.000Z\",\"eventType\":\"WorkflowExecutionStarted\",\"version\":\"1\",\"taskId\":\"12345\",\"workflowExecutionStartedEventAttributes\":{\"workflowType\":{\"name\":\"OrderWorkflow\"},\"taskQueue\":{\"name\":\"orders\"}}}"
+            },
+            {
+                "line": "{\"eventId\":\"5\",\"eventTime\":\"2020-01-01T00:00:01.000Z\",\"eventType\":\"ActivityTaskFailed\",\"version\":\"1\",\"taskId\":\"12349\",\"activityTaskFailedEventAttributes\":{\"failure\":{\"message\":\"timeout\"},\"scheduledEventId\":\"3\",\"startedEventId\":\"4\"}}"
+            }
+        ]
+    }
+}

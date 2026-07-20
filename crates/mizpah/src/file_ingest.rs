@@ -1,6 +1,7 @@
 //! Local (and optional SSH) file ingest into a hub (Phase D + L).
 
 use crate::config::MizpahConfig;
+use crate::file_convert::{self, is_convertible_path};
 use crate::ingest_forward::{http_client, BatchError, BATCH_MAX};
 use crate::mzp_meta::MzpMeta;
 use bzip2::read::BzDecoder;
@@ -210,6 +211,30 @@ async fn flush_lines(
     }
 }
 
+async fn ingest_converted_lines(
+    client: &reqwest::Client,
+    url: &str,
+    service: &str,
+    mzp: &MzpMeta,
+    lines: &[String],
+    format_hint: &str,
+) -> Result<usize, IngestError> {
+    let mut buf = Vec::new();
+    let mut total = 0usize;
+    for line in lines {
+        if line.is_empty() {
+            continue;
+        }
+        buf.push(line.clone());
+        total += 1;
+        if buf.len() >= BATCH_MAX {
+            flush_lines(client, url, service, mzp, &mut buf, Some(format_hint)).await?;
+        }
+    }
+    flush_lines(client, url, service, mzp, &mut buf, Some(format_hint)).await?;
+    Ok(total)
+}
+
 async fn ingest_reader<R: BufRead + Send>(
     client: &reqwest::Client,
     url: &str,
@@ -358,6 +383,12 @@ pub async fn run_ingest(
             "--follow is not supported for remote paths".into(),
         ));
     }
+    if follow && expanded.iter().any(|p| is_convertible_path(p)) {
+        return Err(IngestError::Message(
+            "--follow is not supported for binary logs (EVTX/pcap/NetFlow); ingest completed files only"
+                .into(),
+        ));
+    }
     let mut offsets: HashMap<PathBuf, u64> = HashMap::new();
     let mut format_hints: HashMap<PathBuf, Option<String>> = HashMap::new();
 
@@ -368,10 +399,27 @@ pub async fn run_ingest(
         } else {
             path.clone()
         };
-        let reader = open_reader(&local)?;
-        let (n, hint) = ingest_reader(&client, &url, &service, &mzp, reader).await?;
+        let (n, hint) = if is_convertible_path(&local) {
+            let converted = file_convert::convert_file(&local)?;
+            let n = ingest_converted_lines(
+                &client,
+                &url,
+                &service,
+                &mzp,
+                &converted.lines,
+                converted.format_hint,
+            )
+            .await?;
+            (n, Some(converted.format_hint.to_string()))
+        } else {
+            let reader = open_reader(&local)?;
+            ingest_reader(&client, &url, &service, &mzp, reader).await?
+        };
         eprintln!("ingested {n} lines from {}", path.display());
-        if !is_remote_path(&path_str) && !is_compressed_path(&local) {
+        if !is_remote_path(&path_str)
+            && !is_compressed_path(&local)
+            && !is_convertible_path(&local)
+        {
             if let Ok(len) = file_len(&local) {
                 offsets.insert(local.clone(), len);
             }
@@ -942,6 +990,28 @@ mod tests {
         assert!(result.is_err());
         let err = result.unwrap_err().to_string();
         assert!(err.contains("--follow") && err.contains("remote"));
+    }
+
+    #[cfg(not(miri))]
+    #[tokio::test]
+    async fn run_ingest_rejects_follow_on_binary() {
+        let (url, _store) = crate::test_support::spawn_test_hub().await;
+        let port: u16 = url.rsplit(':').next().unwrap().parse().unwrap();
+        let evtx = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("testdata/sample.evtx");
+        let result = run_ingest(
+            vec![evtx.to_string_lossy().into_owned()],
+            "test".into(),
+            true,
+            "127.0.0.1",
+            port,
+        )
+        .await;
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("--follow") && err.contains("binary"),
+            "{err}"
+        );
     }
 
     #[cfg(not(miri))]

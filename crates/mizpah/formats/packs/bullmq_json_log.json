@@ -1,0 +1,30 @@
+{
+    "bullmq_json_log": {
+        "title": "BullMQ JSON",
+        "description": "BullMQ structured JSON job lifecycle events",
+        "url": "https://docs.bullmq.io/",
+        "file-type": "json",
+        "json": true,
+        "timestamp-field": "timestamp",
+        "match-keys": ["jobId", "queue", "event"],
+        "body-field": "event",
+        "level-field": "level",
+        "line-format": [
+            { "field": "timestamp" },
+            " ",
+            { "field": "event" },
+            " ",
+            { "field": "queue" },
+            " ",
+            { "field": "jobId" }
+        ],
+        "sample": [
+            {
+                "line": "{\"timestamp\":\"2020-01-01T00:00:00.000Z\",\"event\":\"completed\",\"queue\":\"email-queue\",\"jobId\":\"123\",\"level\":\"info\",\"name\":\"sendWelcome\",\"returnvalue\":null}"
+            },
+            {
+                "line": "{\"timestamp\":\"2020-01-01T00:00:01.000Z\",\"event\":\"failed\",\"queue\":\"email-queue\",\"jobId\":\"456\",\"level\":\"error\",\"failedReason\":\"Connection refused\",\"name\":\"sendWelcome\"}"
+            }
+        ]
+    }
+}

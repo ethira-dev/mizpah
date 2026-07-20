@@ -1,0 +1,27 @@
+{
+    "rabbitmq_json_log": {
+        "title": "RabbitMQ JSON",
+        "description": "RabbitMQ structured JSON logging (newer JSON formatter)",
+        "url": "https://www.rabbitmq.com/docs/logging#json-logging",
+        "file-type": "json",
+        "json": true,
+        "timestamp-field": "time",
+        "match-keys": ["time", "level", "msg", "pid", "domain"],
+        "level-field": "level",
+        "body-field": "msg",
+        "line-format": [
+            { "field": "time" },
+            " ",
+            { "field": "level" },
+            " ",
+            { "field": "msg" },
+            " ",
+            { "field": "pid" }
+        ],
+        "sample": [
+            {
+                "line": "{\"time\":\"2020-01-01T00:00:00.000Z\",\"level\":\"info\",\"msg\":\"Starting RabbitMQ 3.13.0 on Erlang 26.0\",\"pid\":\"<0.123.0>\",\"domain\":[\"rabbitmq\"]}"
+            }
+        ]
+    }
+}

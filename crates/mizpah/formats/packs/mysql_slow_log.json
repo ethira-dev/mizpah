@@ -1,19 +1,53 @@
 {
     "mysql_slow_log": {
         "title": "MySQL Slow Query",
-        "description": "Format for the MySQL slow query log",
+        "description": "Format for the MySQL slow query log (per-line headers and stats; multi-line search-table retained for tools that support it)",
         "regex": {
             "std": {
                 "pattern": "^# Time: (?<timestamp>\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{6}.*)$"
             },
             "abbrev": {
                 "pattern": "^# Time: (?<timestamp>\\d{6} \\d{2}:\\d{2}:\\d{2})$"
+            },
+            "user_host": {
+                "pattern": "^# User@Host: (?<user>[^\\s]+)\\s+@\\s*(?<host>[^ ]*)\\s*\\[(?<ip>[^\\]]*)\\]\\s+Id:\\s*(?<conn_id>\\d+)\\s*$"
+            },
+            "query_stats": {
+                "pattern": "^# Query_time: (?<query_time>\\d+(?:\\.\\d+)?)\\s+Lock_time: (?<lock_time>\\d+(?:\\.\\d+)?)\\s+Rows_sent: (?<rows_sent>\\d+)\\s+Rows_examined: (?<rows_examined>\\d+)(?:\\s+Rows_affected: (?<rows_affected>\\d+))?\\s*$"
+            },
+            "schema": {
+                "pattern": "^#\\s+Schema: (?<schema>\\S+)\\s+Last_errno: (?<last_errno>\\d+)\\s+Killed: (?<killed>\\d+)\\s*$"
+            },
+            "bytes_sent": {
+                "pattern": "^#\\s+Bytes_sent: (?<bytes_sent>\\d+)\\s*$"
+            },
+            "set_timestamp": {
+                "pattern": "^SET timestamp=(?<unix_time>\\d+);\\s*$"
+            },
+            "use_db": {
+                "pattern": "^use (?<database>[^;]+);\\s*$"
             }
         },
+        "timestamp-field": "timestamp",
+        "duration-field": "query_time",
+        "body-field": "user",
         "value": {
-            "timestamp": {
-                "kind": "string"
-            }
+            "timestamp": { "kind": "string" },
+            "user": { "kind": "string", "identifier": true },
+            "host": { "kind": "string", "identifier": true },
+            "ip": { "kind": "string", "identifier": true },
+            "conn_id": { "kind": "string", "identifier": true },
+            "query_time": { "kind": "string", "collate": "measure_with_units" },
+            "lock_time": { "kind": "string", "collate": "measure_with_units" },
+            "rows_sent": { "kind": "integer" },
+            "rows_examined": { "kind": "integer" },
+            "rows_affected": { "kind": "integer" },
+            "schema": { "kind": "string", "identifier": true },
+            "database": { "kind": "string", "identifier": true },
+            "last_errno": { "kind": "string" },
+            "killed": { "kind": "string" },
+            "bytes_sent": { "kind": "integer" },
+            "unix_time": { "kind": "string" }
         },
         "search-table": {
             "mysql_slow_stats": {
@@ -26,6 +60,24 @@
             },
             {
                 "line": "# Time: 170213 16:00:33"
+            },
+            {
+                "line": "# User@Host: root[root] @ localhost []  Id: 123"
+            },
+            {
+                "line": "# Query_time: 2.345678  Lock_time: 0.000101  Rows_sent: 1  Rows_examined: 1000"
+            },
+            {
+                "line": "# Schema: appdb  Last_errno: 0  Killed: 0"
+            },
+            {
+                "line": "# Bytes_sent: 128"
+            },
+            {
+                "line": "SET timestamp=1611704757;"
+            },
+            {
+                "line": "use appdb;"
             }
         ]
     }

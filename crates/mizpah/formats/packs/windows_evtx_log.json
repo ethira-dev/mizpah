@@ -1,0 +1,28 @@
+{
+    "windows_evtx_log": {
+        "title": "Windows EVTX",
+        "description": "Windows Event Log records converted from .evtx (Mizpah file ingest)",
+        "file-type": "json",
+        "json": true,
+        "timestamp-field": "@timestamp",
+        "match-keys": ["Event", "event_record_id"],
+        "line-format": [
+            { "field": "@timestamp" },
+            " ",
+            { "field": "event_id" },
+            " ",
+            { "field": "channel" },
+            " ",
+            { "field": "provider" },
+            " ",
+            { "field": "event_record_id" }
+        ],
+        "url": "https://learn.microsoft.com/en-us/windows/win32/wes/windows-event-log",
+        "body-field": "channel",
+        "sample": [
+            {
+                "line": "{\"@timestamp\":\"2020-01-01T00:00:00.000Z\",\"event_id\":4624,\"channel\":\"Security\",\"provider\":\"Microsoft-Windows-Security-Auditing\",\"event_record_id\":1,\"Event\":{\"System\":{\"EventID\":4624,\"Channel\":\"Security\",\"Provider\":{\"#attributes\":{\"Name\":\"Microsoft-Windows-Security-Auditing\"}},\"TimeCreated\":{\"#attributes\":{\"SystemTime\":\"2020-01-01T00:00:00.000Z\"}}},\"EventData\":{\"TargetUserName\":\"alice\"}}}"
+            }
+        ]
+    }
+}

@@ -1,0 +1,50 @@
+{
+    "bullmq_log": {
+        "title": "BullMQ",
+        "description": "Bull / BullMQ worker log lines and structured job events",
+        "url": "https://docs.bullmq.io/",
+        "regex": {
+            "std": {
+                "pattern": "^(?:BullMQ:?\\s+)?(?<level>INFO|WARN|ERROR|DEBUG|error|warn|info|debug):?\\s+(?<body>(?:Worker|Queue|Job)\\b.*)$"
+            },
+            "processing": {
+                "pattern": "^(?<body>Processing job (?<job_id>\\S+)(?: in (?<queue>\\S+))?.*)$"
+            },
+            "completed": {
+                "pattern": "^(?<body>Completed job (?<job_id>\\S+)(?: in (?<queue>\\S+))?.*)$"
+            },
+            "failed": {
+                "pattern": "^(?<body>Failed job (?<job_id>\\S+)(?: in (?<queue>\\S+)?)?:\\s*(?<error>.*))$"
+            }
+        },
+        "level-field": "level",
+        "body-field": "body",
+        "level": {
+            "error": "ERROR|error|Failed",
+            "warn": "WARN|warn",
+            "info": "INFO|info",
+            "debug": "DEBUG|debug"
+        },
+        "value": {
+            "job_id": { "kind": "string", "identifier": true },
+            "queue": { "kind": "string", "identifier": true },
+            "error": { "kind": "string" },
+            "level": { "kind": "string" }
+        },
+        "sample": [
+            {
+                "line": "BullMQ: INFO Worker jobs processing job 123",
+                "level": "info"
+            },
+            {
+                "line": "Processing job 123 in email-queue"
+            },
+            {
+                "line": "Completed job 123 in email-queue"
+            },
+            {
+                "line": "Failed job 456 in email-queue: Connection refused"
+            }
+        ]
+    }
+}

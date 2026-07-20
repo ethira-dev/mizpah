@@ -1,0 +1,22 @@
+{
+    "aws_sqs_log": {
+        "title": "Amazon SQS message",
+        "description": "Amazon SQS ReceiveMessage-shaped JSON (messageId, receiptHandle, body)",
+        "url": "https://docs.aws.amazon.com/AWSSimpleQueueService/latest/APIReference/API_Message.html",
+        "file-type": "json",
+        "json": true,
+        "timestamp-field": "Attributes.SentTimestamp",
+        "match-keys": ["MessageId", "ReceiptHandle", "Body"],
+        "body-field": "Body",
+        "line-format": [
+            { "field": "MessageId" },
+            " ",
+            { "field": "Body" }
+        ],
+        "sample": [
+            {
+                "line": "{\"MessageId\":\"12345678-1234-1234-1234-123456789012\",\"ReceiptHandle\":\"AQEBwJnKyrHigUMZj6rYigCgxlaS3SLy0a...\",\"MD5OfBody\":\"7b270e59b47ff90a553787216d55d91d\",\"Body\":\"Hello from SQS\",\"Attributes\":{\"SentTimestamp\":\"1577836800000\",\"ApproximateReceiveCount\":\"1\"}}"
+            }
+        ]
+    }
+}

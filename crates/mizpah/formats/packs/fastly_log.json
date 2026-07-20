@@ -1,0 +1,30 @@
+{
+    "fastly_log": {
+        "title": "Fastly real-time log",
+        "description": "Fastly CDN / compute real-time logging JSON",
+        "file-type": "json",
+        "json": true,
+        "timestamp-field": "timestamp",
+        "match-keys": ["fastly_is_edge", "client_as_name", "req_http_Host"],
+        "line-format": [
+            { "field": "timestamp" },
+            " ",
+            { "field": "client_ip" },
+            " ",
+            { "field": "req_http_Host" },
+            " ",
+            { "field": "req_url" },
+            " ",
+            { "field": "status" },
+            " ",
+            { "field": "fastly_is_edge" }
+        ],
+        "url": "https://www.fastly.com/documentation/guides/integrations/logging/",
+        "body-field": "req_url",
+        "sample": [
+            {
+                "line": "{\"timestamp\":\"2020-01-01T00:00:00Z\",\"client_ip\":\"1.2.3.4\",\"client_as_name\":\"Example ISP\",\"req_http_Host\":\"www.example.com\",\"req_http_X-Timer\":\"S1577836800.123456,VS0,VE12\",\"req_method\":\"GET\",\"req_url\":\"/index.html\",\"status\":200,\"bytes_written\":1234,\"fastly_is_edge\":true,\"geo_country\":\"US\"}"
+            }
+        ]
+    }
+}

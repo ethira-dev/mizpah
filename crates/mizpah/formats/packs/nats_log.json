@@ -1,0 +1,43 @@
+{
+    "nats_log": {
+        "title": "NATS / JetStream",
+        "description": "NATS server and JetStream process log lines",
+        "url": "https://docs.nats.io/running-a-nats-service/configuration/logging",
+        "regex": {
+            "std": {
+                "pattern": "^\\[(?<timestamp>\\d{4}/\\d{2}/\\d{2} \\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?)\\]\\s+\\[?(?<level>TRC|DBG|INF|WRN|ERR|FTL|NOTICE|DEBUG|INFO|WARN|ERROR)\\]?\\s+(?<body>.*)$"
+            },
+            "jetstream": {
+                "pattern": "^\\[(?<timestamp>\\d{4}/\\d{2}/\\d{2} \\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?)\\]\\s+\\[?(?<level>TRC|DBG|INF|WRN|ERR)\\]?\\s+(?:\\[(?<component>JS|JT)\\]\\s+)?(?<body>.*)$"
+            }
+        },
+        "level-field": "level",
+        "body-field": "body",
+        "timestamp-field": "timestamp",
+        "level": {
+            "error": "ERR|FTL|ERROR",
+            "warn": "WRN|WARN",
+            "info": "INF|INFO|NOTICE",
+            "debug": "DBG|DEBUG|TRC"
+        },
+        "value": {
+            "component": { "kind": "string", "identifier": true },
+            "level": { "kind": "string" },
+            "timestamp": { "kind": "string" }
+        },
+        "sample": [
+            {
+                "line": "[2020/01/01 00:00:00.000000] [INF] Server is ready",
+                "level": "info"
+            },
+            {
+                "line": "[2020/01/01 00:00:01.000000] [ERR] Error trying to connect to route",
+                "level": "error"
+            },
+            {
+                "line": "[2020/01/01 00:00:02.000000] [INF] [JS] Starting JetStream cluster",
+                "level": "info"
+            }
+        ]
+    }
+}

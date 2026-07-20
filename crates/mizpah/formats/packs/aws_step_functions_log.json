@@ -1,0 +1,29 @@
+{
+    "aws_step_functions_log": {
+        "title": "AWS Step Functions",
+        "description": "AWS Step Functions execution history event JSON",
+        "url": "https://docs.aws.amazon.com/step-functions/latest/dg/concepts-history.html",
+        "file-type": "json",
+        "json": true,
+        "timestamp-field": "timestamp",
+        "match-keys": ["id", "type", "previousEventId", "timestamp"],
+        "body-field": "type",
+        "line-format": [
+            { "field": "timestamp" },
+            " ",
+            { "field": "type" },
+            " ",
+            { "field": "id" },
+            " ",
+            { "field": "previousEventId" }
+        ],
+        "sample": [
+            {
+                "line": "{\"id\":1,\"type\":\"ExecutionStarted\",\"timestamp\":\"2020-01-01T00:00:00.000Z\",\"previousEventId\":0,\"executionStartedEventDetails\":{\"input\":\"{\\\"orderId\\\":123}\",\"roleArn\":\"arn:aws:iam::123456789012:role/StepFunctionsRole\"}}"
+            },
+            {
+                "line": "{\"id\":3,\"type\":\"TaskStateEntered\",\"timestamp\":\"2020-01-01T00:00:01.000Z\",\"previousEventId\":2,\"stateEnteredEventDetails\":{\"name\":\"ProcessOrder\",\"input\":\"{\\\"orderId\\\":123}\"}}"
+            }
+        ]
+    }
+}

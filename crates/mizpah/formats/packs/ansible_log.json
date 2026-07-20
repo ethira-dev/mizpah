@@ -1,0 +1,27 @@
+{
+    "ansible_log": {
+        "title": "Ansible",
+        "description": "Ansible playbook PLAY/TASK/ok/changed/failed console output",
+        "regex": {
+            "play_task": {
+                "pattern": "^(?<body>PLAY (?:\\[[^\\]]+\\]|RECAP)\\s*.*|TASK \\[[^\\]]+\\]\\s*.*|ok: \\[[^\\]]+\\].*|changed: \\[[^\\]]+\\].*|failed: \\[[^\\]]+\\].*|skipping: \\[[^\\]]+\\].*|FATAL! .*|ERROR! .*)$"
+            }
+        },
+        "body-field": "body",
+        "url": "https://docs.ansible.com/ansible/latest/reference_appendices/logging.html",
+        "sample": [
+            {
+                "line": "PLAY [Configure webservers] ****************************************************"
+            },
+            {
+                "line": "TASK [Install nginx] ***********************************************************"
+            },
+            {
+                "line": "ok: [web1]"
+            },
+            {
+                "line": "changed: [web2]"
+            }
+        ]
+    }
+}

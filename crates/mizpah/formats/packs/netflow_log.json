@@ -1,0 +1,27 @@
+{
+    "netflow_log": {
+        "title": "NetFlow / IPFIX",
+        "description": "NetFlow/IPFIX records converted via nfdump -o json (Mizpah file ingest)",
+        "file-type": "json",
+        "json": true,
+        "match-keys": ["netflow_source"],
+        "line-format": [
+            { "field": "first" },
+            " ",
+            { "field": "src4_addr" },
+            " ",
+            { "field": "dst4_addr" },
+            " ",
+            { "field": "proto" },
+            " ",
+            { "field": "netflow_source" }
+        ],
+        "url": "https://github.com/phaag/nfdump",
+        "body-field": "src4_addr",
+        "sample": [
+            {
+                "line": "{\"first\":\"2020-01-01T00:00:00\",\"last\":\"2020-01-01T00:00:01\",\"src4_addr\":\"10.0.0.1\",\"dst4_addr\":\"1.2.3.4\",\"src_port\":54321,\"dst_port\":443,\"proto\":6,\"packets\":10,\"bytes\":1200,\"netflow_source\":true}"
+            }
+        ]
+    }
+}

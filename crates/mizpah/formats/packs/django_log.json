@@ -1,0 +1,28 @@
+{
+    "django_log": {
+        "title": "Django",
+        "description": "Django request, security, and runserver log lines",
+        "regex": {
+            "request": {
+                "pattern": "^(?:(?<timestamp>\\d{4}-\\d{2}-\\d{2}[ T]\\d{2}:\\d{2}:\\d{2}(?:,\\d{3})?)\\s+)?(?<level>DEBUG|INFO|WARNING|ERROR|CRITICAL)\\s+(?<logger>django\\.(?:request|security|server|db(?:\\.[\\w.]+)?))\\s+(?<body>.*)$"
+            },
+            "runserver": {
+                "pattern": "^(?:\\[(?<timestamp>\\d{2}/\\w{3}/\\d{4} \\d{2}:\\d{2}:\\d{2})\\]\\s+)?(?<body>(?:Invalid HTTP_HOST header|Watching for file changes with StatReloader|Starting development server at|Quit the server with).*)"
+            },
+            "request_line": {
+                "pattern": "^(?<logger>django\\.request):\\s+(?<body>(?:Invalid HTTP_HOST header|Bad Request|Forbidden|Not Found|Method Not Allowed).*)"
+            }
+        },
+        "level-field": "level",
+        "body-field": "body",
+        "url": "https://docs.djangoproject.com/en/stable/howto/logging/",
+        "sample": [
+            {
+                "line": "2020-01-01 00:00:00,000 ERROR django.request Invalid HTTP_HOST header: 'evil.example'. You may need to add 'evil.example' to ALLOWED_HOSTS."
+            },
+            {
+                "line": "Watching for file changes with StatReloader"
+            }
+        ]
+    }
+}

@@ -1,0 +1,39 @@
+{
+    "elasticsearch_slow_log": {
+        "title": "Elasticsearch / OpenSearch slowlog",
+        "description": "Index search/indexing slowlog lines from Elasticsearch and OpenSearch",
+        "url": "https://www.elastic.co/guide/en/elasticsearch/reference/current/index-modules-slowlog.html",
+        "regex": {
+            "std": {
+                "pattern": "^\\[(?<timestamp>[^\\]]+)\\]\\[(?<level>[A-Z]+)\\s*\\]\\[(?<component>index\\.(?:search|indexing)\\.slowlog[^\\]]*)\\]\\s+(?<body>.*)$"
+            },
+            "take": {
+                "pattern": "^\\[(?<timestamp>[^\\]]+)\\]\\[(?<level>[A-Z]+)\\s*\\]\\[(?<component>[^\\]]+)\\]\\s+\\[(?<node>[^\\]]+)\\]\\s+(?<took>\\[[^\\]]+\\])\\s+(?<took_millis>\\[[^\\]]+\\])\\s+(?<total_hits>\\[[^\\]]+\\])\\s+(?<types>\\[[^\\]]+\\])\\s+(?<stats>\\[[^\\]]+\\])\\s+(?<search_type>\\[[^\\]]+\\])\\s+(?<total_shards>\\[[^\\]]+\\])\\s+(?<source>\\[[\\s\\S]*\\])\\s*$"
+            }
+        },
+        "level-field": "level",
+        "body-field": "body",
+        "timestamp-field": "timestamp",
+        "level": {
+            "warn": "WARN",
+            "info": "INFO",
+            "debug": "DEBUG|TRACE"
+        },
+        "value": {
+            "component": { "kind": "string", "identifier": true },
+            "node": { "kind": "string", "identifier": true },
+            "took": { "kind": "string" },
+            "took_millis": { "kind": "string" }
+        },
+        "sample": [
+            {
+                "line": "[2020-01-01T00:00:00,000][WARN ][index.search.slowlog.query] [node-1] [orders][0] took[1.2s], took_millis[1200], total_hits[10], types[], stats[], search_type[QUERY_THEN_FETCH], total_shards[1], source[{\"query\":{\"match_all\":{}}}]",
+                "level": "warn"
+            },
+            {
+                "line": "[2020-01-01T00:00:01,000][INFO ][index.indexing.slowlog.index] [node-1] [orders/abc] took[500ms], took_millis[500], type[_doc], id[1], routing[], source[{\"name\":\"x\"}]",
+                "level": "info"
+            }
+        ]
+    }
+}

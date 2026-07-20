@@ -1,0 +1,42 @@
+{
+    "pgaudit_log": {
+        "title": "PostgreSQL pgAudit",
+        "description": "pgAudit AUDIT: lines (standalone or as PostgreSQL log body)",
+        "url": "https://www.pgaudit.org/",
+        "regex": {
+            "embedded": {
+                "pattern": "^(?<timestamp>\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})? \\S+) \\[(?<pid>[\\d\\-]+)\\](?:\\s+(?<user>[^@ ]+)@(?<db_name>\\S+))? (?<level>LOG|ERROR|FATAL):\\s*AUDIT:\\s*(?<audit_type>SESSION|OBJECT),(?<statement_id>\\d+),(?<substatement_id>\\d+),(?<class>[^,]*),(?<command>[^,]*),(?<object_type>[^,]*),(?<object_name>[^,]*),(?<statement>\".*?\"|[^,]*),(?<parameter>.*)$"
+            },
+            "audit_only": {
+                "pattern": "^AUDIT:\\s*(?<audit_type>SESSION|OBJECT),(?<statement_id>\\d+),(?<substatement_id>\\d+),(?<class>[^,]*),(?<command>[^,]*),(?<object_type>[^,]*),(?<object_name>[^,]*),(?<statement>\".*?\"|[^,]*),(?<parameter>.*)$"
+            }
+        },
+        "level-field": "level",
+        "timestamp-field": "timestamp",
+        "body-field": "statement",
+        "level": {
+            "error": "ERROR|FATAL",
+            "info": "LOG"
+        },
+        "value": {
+            "pid": { "kind": "string", "identifier": true },
+            "user": { "kind": "string", "identifier": true },
+            "db_name": { "kind": "string", "identifier": true },
+            "audit_type": { "kind": "string", "identifier": true },
+            "class": { "kind": "string", "identifier": true },
+            "command": { "kind": "string", "identifier": true },
+            "object_name": { "kind": "string", "identifier": true },
+            "statement_id": { "kind": "string" },
+            "substatement_id": { "kind": "string" }
+        },
+        "sample": [
+            {
+                "line": "2020-01-01 00:00:00.000 UTC [1234] alice@appdb LOG:  AUDIT: SESSION,1,1,READ,SELECT,TABLE,public.users,\"SELECT * FROM users\",<none>",
+                "level": "info"
+            },
+            {
+                "line": "AUDIT: OBJECT,2,1,WRITE,INSERT,TABLE,public.orders,\"INSERT INTO orders VALUES (1)\",<none>"
+            }
+        ]
+    }
+}

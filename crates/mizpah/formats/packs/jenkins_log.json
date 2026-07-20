@@ -1,0 +1,28 @@
+{
+    "jenkins_log": {
+        "title": "Jenkins",
+        "description": "Jenkins controller / Pipeline console log lines",
+        "regex": {
+            "pipeline": {
+                "pattern": "^(?<body>\\[(?:Pipeline)\\](?:\\s+(?:Start|End) of Pipeline)?.*|Started by user\\s+\\S+|Finished: (?:SUCCESS|FAILURE|ABORTED|UNSTABLE).*)$"
+            },
+            "jenkins_level": {
+                "pattern": "^(?<timestamp>\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?)\\s+(?<level>FINEST|FINER|FINE|CONFIG|INFO|WARNING|SEVERE)\\s+(?<logger>hudson\\.[\\w.]+|jenkins\\.[\\w.]+|org\\.jenkinsci\\.[\\w.]+)\\s+#(?<thread>\\w+)\\s+(?<body>.*)$"
+            }
+        },
+        "level-field": "level",
+        "body-field": "body",
+        "url": "https://www.jenkins.io/doc/book/system-administration/viewing-logs/",
+        "sample": [
+            {
+                "line": "[Pipeline] Start of Pipeline"
+            },
+            {
+                "line": "Started by user alice"
+            },
+            {
+                "line": "Finished: SUCCESS"
+            }
+        ]
+    }
+}

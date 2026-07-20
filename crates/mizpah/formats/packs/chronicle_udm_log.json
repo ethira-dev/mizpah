@@ -1,0 +1,26 @@
+{
+    "chronicle_udm_log": {
+        "title": "Google Chronicle UDM",
+        "description": "Chronicle / SecOps Unified Data Model event JSON",
+        "file-type": "json",
+        "json": true,
+        "timestamp-field": "metadata.eventTimestamp",
+        "match-keys": ["metadata.eventType", "metadata.eventTimestamp"],
+        "line-format": [
+            { "field": "metadata.eventTimestamp" },
+            " ",
+            { "field": "metadata.eventType" },
+            " ",
+            { "field": "metadata.productName" },
+            " ",
+            { "field": "metadata.vendorName" }
+        ],
+        "url": "https://cloud.google.com/chronicle/docs/reference/udm-field-list",
+        "body-field": "metadata.description",
+        "sample": [
+            {
+                "line": "{\"metadata\":{\"eventTimestamp\":\"2020-01-01T00:00:00.000Z\",\"eventType\":\"NETWORK_CONNECTION\",\"vendorName\":\"Acme\",\"productName\":\"Firewall\",\"description\":\"Allowed outbound connection\",\"id\":\"udm-event-001\"},\"principal\":{\"ip\":[\"10.0.0.1\"],\"hostname\":\"workstation01\"},\"target\":{\"ip\":[\"1.2.3.4\"],\"port\":443}}"
+            }
+        ]
+    }
+}

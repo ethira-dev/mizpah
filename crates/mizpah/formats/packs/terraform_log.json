@@ -1,0 +1,25 @@
+{
+    "terraform_log": {
+        "title": "Terraform",
+        "description": "Terraform TF_LOG and CLI apply/plan lines",
+        "regex": {
+            "tf_log": {
+                "pattern": "^(?<timestamp>\\d{4}/\\d{2}/\\d{2} \\d{2}:\\d{2}:\\d{2})\\s+\\[(?<level>TRACE|DEBUG|INFO|WARN|ERROR)\\]\\s+(?<body>.*)$"
+            },
+            "cli": {
+                "pattern": "^(?<body>(?:Terraform (?:used|has been successfully initialized|will perform the following actions)|Apply complete! Resources: \\d+ added, \\d+ changed, \\d+ destroyed\\.|Plan: \\d+ to add, \\d+ to change, \\d+ to destroy\\.|Error: .*))$"
+            }
+        },
+        "level-field": "level",
+        "body-field": "body",
+        "url": "https://developer.hashicorp.com/terraform/internals/debugging",
+        "sample": [
+            {
+                "line": "2020/01/01 00:00:00 [INFO] Terraform version: 1.5.0"
+            },
+            {
+                "line": "Apply complete! Resources: 1 added, 0 changed, 0 destroyed."
+            }
+        ]
+    }
+}

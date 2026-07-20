@@ -37,6 +37,11 @@ impl LogFormat for SyslogFormat {
 
     fn detect(&self, line: &str) -> f32 {
         let t = line.trim();
+        // Spring Boot console: `timestamp  LEVEL pid --- [thread] logger : msg`
+        // ISO timestamps otherwise look like RFC3339 syslog and steal `java_log`.
+        if t.contains(" --- [") {
+            return 0.0;
+        }
         if t.starts_with('<') && t.contains('>') {
             if rfc3164_re().is_match(t) {
                 return 0.9;

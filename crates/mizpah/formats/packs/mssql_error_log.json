@@ -1,0 +1,35 @@
+{
+    "mssql_error_log": {
+        "title": "SQL Server ERRORLOG",
+        "description": "Microsoft SQL Server ERRORLOG process lines (spid / Server / Logon)",
+        "url": "https://learn.microsoft.com/en-us/sql/database-engine/configure-windows/mssql-conf-configuration-file#errorlog",
+        "regex": {
+            "std": {
+                "pattern": "^(?<timestamp>\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}\\.\\d{2})\\s+(?<process>spid\\d+|Server|Logon|Backup|Error:\\s*\\d+)\\s+(?<body>.*)$"
+            },
+            "error_num": {
+                "pattern": "^(?<timestamp>\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}\\.\\d{2})\\s+Error:\\s*(?<error_number>\\d+),\\s*Severity:\\s*(?<severity>\\d+),\\s*State:\\s*(?<state>\\d+)\\s+(?<body>.*)$"
+            }
+        },
+        "timestamp-field": "timestamp",
+        "body-field": "body",
+        "value": {
+            "timestamp": { "kind": "string" },
+            "process": { "kind": "string", "identifier": true },
+            "error_number": { "kind": "string", "identifier": true },
+            "severity": { "kind": "string" },
+            "state": { "kind": "string" }
+        },
+        "sample": [
+            {
+                "line": "2020-01-01 00:00:00.00 Server      Microsoft SQL Server 2019 (RTM) - 15.0.2000.5 (X64)"
+            },
+            {
+                "line": "2020-01-01 00:00:01.12 spid51      Starting up database 'master'."
+            },
+            {
+                "line": "2020-01-01 00:00:02.00 Error: 18456, Severity: 14, State: 8 Login failed for user 'sa'."
+            }
+        ]
+    }
+}

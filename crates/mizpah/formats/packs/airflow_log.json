@@ -1,0 +1,25 @@
+{
+    "airflow_log": {
+        "title": "Apache Airflow",
+        "description": "Airflow task and scheduler log lines",
+        "regex": {
+            "task": {
+                "pattern": "^(?:\\[(?<timestamp>\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:[+-]\\d{4}|Z)?)\\]\\s+)?\\{(?<logger>[^}]+)\\}\\s+(?<level>DEBUG|INFO|WARNING|ERROR|CRITICAL)\\s+-\\s+(?<body>.*)$"
+            },
+            "logging": {
+                "pattern": "^(?<timestamp>\\d{4}-\\d{2}-\\d{2}[ T]\\d{2}:\\d{2}:\\d{2}(?:,\\d{3})?)\\s+(?<level>DEBUG|INFO|WARNING|ERROR|CRITICAL)\\s+-\\s+(?<logger>airflow(?:\\.[\\w.]+)?)\\s+-\\s+(?<body>.*)$"
+            }
+        },
+        "level-field": "level",
+        "body-field": "body",
+        "url": "https://airflow.apache.org/docs/apache-airflow/stable/administration-and-deployment/logging-monitoring/logging-tasks.html",
+        "sample": [
+            {
+                "line": "[2020-01-01T00:00:00.000+0000] {taskinstance.py:1234} INFO - Marking task as SUCCESS. dag_id=example_dag, task_id=hello, execution_date=20200101T000000, start_date=20200101T000000, end_date=20200101T000001"
+            },
+            {
+                "line": "2020-01-01 00:00:00,000 INFO - airflow.jobs.scheduler_job_runner - Starting the scheduler"
+            }
+        ]
+    }
+}

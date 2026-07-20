@@ -1,0 +1,26 @@
+{
+    "azure_event_grid_log": {
+        "title": "Azure Event Grid",
+        "description": "Azure Event Grid event schema JSON",
+        "url": "https://learn.microsoft.com/en-us/azure/event-grid/event-schema",
+        "file-type": "json",
+        "json": true,
+        "timestamp-field": "eventTime",
+        "match-keys": ["eventType", "subject", "data", "eventTime", "id"],
+        "body-field": "eventType",
+        "line-format": [
+            { "field": "eventTime" },
+            " ",
+            { "field": "eventType" },
+            " ",
+            { "field": "subject" },
+            " ",
+            { "field": "topic" }
+        ],
+        "sample": [
+            {
+                "line": "{\"id\":\"9aeb0fdf-c01e-0131-0922-9eb54906e209\",\"eventType\":\"Microsoft.Storage.BlobCreated\",\"subject\":\"/blobServices/default/containers/oc2d2817345/blobs/test\",\"eventTime\":\"2020-01-01T00:00:00.0000000Z\",\"data\":{\"api\":\"PutBlob\",\"clientRequestId\":\"6d79dbfb-0e37-4fc4-981f-442c9ca65760\",\"requestId\":\"831e1650-001e-001b-66ab-eeb76e000000\",\"eTag\":\"0x8D4BCC2E4835CD0\",\"contentType\":\"application/octet-stream\",\"contentLength\":524288,\"blobType\":\"BlockBlob\"},\"dataVersion\":\"\",\"metadataVersion\":\"1\",\"topic\":\"/subscriptions/.../resourceGroups/.../providers/Microsoft.Storage/storageAccounts/test\"}"
+            }
+        ]
+    }
+}

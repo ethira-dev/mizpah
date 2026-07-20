@@ -1,0 +1,38 @@
+{
+    "cockroachdb_log": {
+        "title": "CockroachDB",
+        "description": "CockroachDB crdb text logs and structured JSON logs",
+        "url": "https://www.cockroachlabs.com/docs/stable/logging-overview",
+        "regex": {
+            "crdb": {
+                "pattern": "^(?<level>[IWEF])(?<timestamp>\\d{6} \\d{2}:\\d{2}:\\d{2}\\.\\d{6})\\s+(?<goroutine>\\d+)\\s+(?<file>[^:]+):(?<line>\\d+)\\s+\\[[^\\]]*\\]\\s+(?<channel>\\d+)\\s+\\s*(?<body>.*)$"
+            }
+        },
+        "level-field": "level",
+        "body-field": "body",
+        "timestamp-field": "timestamp",
+        "level": {
+            "error": "E|F",
+            "warn": "W",
+            "info": "I"
+        },
+        "value": {
+            "level": { "kind": "string" },
+            "goroutine": { "kind": "string", "identifier": true },
+            "file": { "kind": "string" },
+            "line": { "kind": "string" },
+            "channel": { "kind": "string" },
+            "timestamp": { "kind": "string" }
+        },
+        "sample": [
+            {
+                "line": "I200101 00:00:00.000000 1 server/server.go:123  [-] 1  starting cockroach node",
+                "level": "info"
+            },
+            {
+                "line": "E200101 00:00:01.123456 42 sql/conn_executor.go:999  [n1,client=1.2.3.4] 22  error executing query",
+                "level": "error"
+            }
+        ]
+    }
+}

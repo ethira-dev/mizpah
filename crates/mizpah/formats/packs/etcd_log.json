@@ -1,0 +1,32 @@
+{
+    "etcd_log": {
+        "title": "etcd",
+        "description": "etcd server log lines (capnslog / structured text)",
+        "regex": {
+            "capnslog": {
+                "pattern": "^(?<timestamp>\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}\\.\\d{6})\\s+(?<level>D|I|W|E|F)\\s+\\|\\s+(?<logger>[\\w./]+):\\s+(?<body>.*)$"
+            },
+            "etcd_msg": {
+                "pattern": "^(?<timestamp>\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z)\\s+(?<level>DEBUG|INFO|WARN|ERROR|FATAL)\\s+\\|\\s+(?<logger>etcdserver(?:/[\\w.]+)?|embed|rafthttp|wal):\\s+(?<body>.*)$"
+            }
+        },
+        "level-field": "level",
+        "level": {
+            "debug": "D|DEBUG",
+            "info": "I|INFO",
+            "warn": "W|WARN",
+            "error": "E|ERROR",
+            "fatal": "F|FATAL"
+        },
+        "body-field": "body",
+        "url": "https://etcd.io/docs/latest/op-guide/configuration/",
+        "sample": [
+            {
+                "line": "2020-01-01 00:00:00.000000 I | etcdserver/api: enabled capabilities for version 3.5"
+            },
+            {
+                "line": "2020-01-01T00:00:00.000Z INFO | etcdserver: published {Name:default ClientURLs:[http://localhost:2379]} to cluster a1b2c3d4"
+            }
+        ]
+    }
+}

@@ -1,0 +1,28 @@
+{
+    "guardduty_log": {
+        "title": "AWS GuardDuty finding",
+        "description": "GuardDuty finding JSON (EventBridge / GetFindings camelCase shape)",
+        "file-type": "json",
+        "json": true,
+        "timestamp-field": "createdAt",
+        "match-keys": ["arn", "severity", "type", "accountId"],
+        "line-format": [
+            { "field": "createdAt" },
+            " ",
+            { "field": "type" },
+            " ",
+            { "field": "severity" },
+            " ",
+            { "field": "title" },
+            " ",
+            { "field": "accountId" }
+        ],
+        "url": "https://docs.aws.amazon.com/guardduty/latest/ug/guardduty_finding-format.html",
+        "body-field": "title",
+        "sample": [
+            {
+                "line": "{\"accountId\":\"111122223333\",\"arn\":\"arn:aws:guardduty:us-east-1:111122223333:detector/d4b040365221be2b54a6264dcexample/finding/1ab92989eaf0e742df4a014d5example\",\"createdAt\":\"2020-05-26T22:21:48.385Z\",\"updatedAt\":\"2020-05-26T22:55:21.703Z\",\"severity\":5,\"schemaVersion\":\"2.0\",\"id\":\"1ab92989eaf0e742df4a014d5example\",\"type\":\"Recon:IAMUser/UserPermissions\",\"title\":\"Unusual user permission reconnaissance activity by testuser.\",\"region\":\"us-east-1\",\"partition\":\"aws\"}"
+            }
+        ]
+    }
+}

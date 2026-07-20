@@ -1,0 +1,35 @@
+{
+    "mysql_audit_log": {
+        "title": "MySQL / MariaDB Audit",
+        "description": "MySQL Enterprise Audit and MariaDB Audit Plugin server_audit lines",
+        "url": "https://mariadb.com/kb/en/mariadb-audit-plugin-log-format/",
+        "regex": {
+            "mariadb": {
+                "pattern": "^(?<timestamp>\\d{4}\\d{2}\\d{2} \\d{2}:\\d{2}:\\d{2}),(?<serverhost>[^,]*),(?<username>[^,]*),(?<host>[^,]*),(?<connection_id>\\d+),(?<query_id>\\d+),(?<operation>CONNECT|DISCONNECT|QUERY|QUERY_DDL|QUERY_DML|QUERY_DCL|CREATE|READ|WRITE|CHANGEUSER|CONNECT_FAILED|AUTHENTICATE),(?<database>[^,]*),(?<object>.*)$"
+            }
+        },
+        "timestamp-field": "timestamp",
+        "body-field": "object",
+        "value": {
+            "timestamp": { "kind": "string" },
+            "username": { "kind": "string", "identifier": true },
+            "host": { "kind": "string", "identifier": true },
+            "connection_id": { "kind": "string", "identifier": true },
+            "query_id": { "kind": "string", "identifier": true },
+            "operation": { "kind": "string", "identifier": true },
+            "database": { "kind": "string", "identifier": true },
+            "serverhost": { "kind": "string", "identifier": true }
+        },
+        "sample": [
+            {
+                "line": "20200101 00:00:00,db1,alice,10.0.0.1,123,456,QUERY,appdb,\"SELECT * FROM users\""
+            },
+            {
+                "line": "20200101 00:00:01,db1,alice,10.0.0.1,123,0,CONNECT,appdb,"
+            },
+            {
+                "line": "20200101 00:00:02,db1,bob,10.0.0.2,124,0,CONNECT_FAILED,,\"Access denied\""
+            }
+        ]
+    }
+}

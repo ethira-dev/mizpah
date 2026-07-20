@@ -1,0 +1,26 @@
+{
+    "azure_event_hubs_log": {
+        "title": "Azure Event Hubs",
+        "description": "Azure Event Hubs event data JSON (offset, sequenceNumber, enqueuedTime)",
+        "url": "https://learn.microsoft.com/en-us/azure/event-hubs/event-hubs-event-processor-overview",
+        "file-type": "json",
+        "json": true,
+        "timestamp-field": "enqueuedTime",
+        "match-keys": ["sequenceNumber", "offset", "enqueuedTime", "partitionId"],
+        "body-field": "body",
+        "line-format": [
+            { "field": "enqueuedTime" },
+            " ",
+            { "field": "partitionId" },
+            " ",
+            { "field": "sequenceNumber" },
+            " ",
+            { "field": "offset" }
+        ],
+        "sample": [
+            {
+                "line": "{\"partitionId\":\"0\",\"sequenceNumber\":1045,\"offset\":\"123456\",\"enqueuedTime\":\"2020-01-01T00:00:00.000Z\",\"body\":\"hello event hubs\",\"properties\":{\"type\":\"order.created\"}}"
+            }
+        ]
+    }
+}

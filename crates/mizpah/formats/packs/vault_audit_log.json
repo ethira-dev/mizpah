@@ -1,0 +1,26 @@
+{
+    "vault_audit_log": {
+        "title": "HashiCorp Vault audit",
+        "description": "Vault audit device JSON (request/response entries with auth and request objects)",
+        "file-type": "json",
+        "json": true,
+        "timestamp-field": "time",
+        "match-keys": ["type", "auth", "request"],
+        "line-format": [
+            { "field": "time" },
+            " ",
+            { "field": "type" },
+            " ",
+            { "field": "request.path" },
+            " ",
+            { "field": "request.operation" }
+        ],
+        "url": "https://developer.hashicorp.com/vault/docs/audit/schema",
+        "body-field": "request.path",
+        "sample": [
+            {
+                "line": "{\"time\":\"2020-01-01T00:00:00.000Z\",\"type\":\"request\",\"auth\":{\"display_name\":\"token\",\"policies\":[\"default\"],\"token_type\":\"service\"},\"request\":{\"id\":\"a1b2c3d4-e5f6-7890-abcd-ef1234567890\",\"operation\":\"read\",\"path\":\"auth/token/lookup-self\",\"remote_address\":\"10.0.0.1\"}}"
+            }
+        ]
+    }
+}

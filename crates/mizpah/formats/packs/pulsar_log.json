@@ -1,0 +1,37 @@
+{
+    "pulsar_log": {
+        "title": "Apache Pulsar",
+        "description": "Apache Pulsar broker / bookie log4j-style process logs",
+        "url": "https://pulsar.apache.org/docs/administration-dashboard/",
+        "regex": {
+            "std": {
+                "pattern": "^(?<timestamp>\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2},\\d{3})\\s+(?<level>INFO|WARN|ERROR|DEBUG|TRACE)\\s+\\[(?<thread>[^\\]]+)\\]\\s+(?<logger>\\S+)\\s+-\\s+(?<body>.*)$"
+            }
+        },
+        "level-field": "level",
+        "body-field": "body",
+        "timestamp-field": "timestamp",
+        "level": {
+            "error": "ERROR",
+            "warn": "WARN",
+            "info": "INFO",
+            "debug": "DEBUG|TRACE"
+        },
+        "value": {
+            "thread": { "kind": "string", "identifier": true },
+            "logger": { "kind": "string", "identifier": true },
+            "level": { "kind": "string" },
+            "timestamp": { "kind": "string" }
+        },
+        "sample": [
+            {
+                "line": "2020-01-01 00:00:00,000 INFO  [main] org.apache.pulsar.broker.PulsarService - Starting Pulsar Broker",
+                "level": "info"
+            },
+            {
+                "line": "2020-01-01 00:00:01,123 ERROR [pulsar-io-1-1] org.apache.pulsar.broker.service.ServerCnx - [/127.0.0.1:12345] Got exception",
+                "level": "error"
+            }
+        ]
+    }
+}

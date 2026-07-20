@@ -1,0 +1,24 @@
+{
+    "gcp_pubsub_log": {
+        "title": "GCP Pub/Sub message",
+        "description": "Google Cloud Pub/Sub push and pull message envelopes",
+        "url": "https://cloud.google.com/pubsub/docs/push",
+        "file-type": "json",
+        "json": true,
+        "timestamp-field": "message.publishTime",
+        "match-keys": ["message", "subscription"],
+        "body-field": "subscription",
+        "line-format": [
+            { "field": "message.publishTime" },
+            " ",
+            { "field": "subscription" },
+            " ",
+            { "field": "message.messageId" }
+        ],
+        "sample": [
+            {
+                "line": "{\"message\":{\"data\":\"SGVsbG8gQ2xvdWQgUHViL1N1YiE=\",\"messageId\":\"1234567890123456\",\"publishTime\":\"2020-01-01T00:00:00.000Z\",\"attributes\":{\"key\":\"value\"}},\"subscription\":\"projects/my-project/subscriptions/my-sub\"}"
+            }
+        ]
+    }
+}

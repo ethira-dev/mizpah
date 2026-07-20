@@ -1,0 +1,27 @@
+{
+    "gitlab_ci_log": {
+        "title": "GitLab CI",
+        "description": "GitLab Runner job log lines (section markers and job status)",
+        "regex": {
+            "section": {
+                "pattern": "^(?<body>section_(?:start|end):\\d+:[\\w_]+(?:\\r)?|Job (?:succeeded|failed)|Running with gitlab-runner .*|Preparing the \"[^\"]+\" executor)$"
+            },
+            "ansi_section": {
+                "pattern": "^\\x1b\\[[0-9;]*msection_(?:start|end):(?<epoch>\\d+):(?<section>[\\w_]+).*\\x1b\\[[0-9;]*m\\s*$"
+            }
+        },
+        "body-field": "body",
+        "url": "https://docs.gitlab.com/ee/ci/jobs/job_logs.html",
+        "sample": [
+            {
+                "line": "section_start:1577836800:prepare_script"
+            },
+            {
+                "line": "Running with gitlab-runner 16.0.0 (abc123de)"
+            },
+            {
+                "line": "Job succeeded"
+            }
+        ]
+    }
+}

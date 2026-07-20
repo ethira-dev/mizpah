@@ -1,0 +1,27 @@
+{
+    "github_actions_log": {
+        "title": "GitHub Actions",
+        "description": "GitHub Actions workflow command / runner log lines",
+        "regex": {
+            "workflow_cmd": {
+                "pattern": "^(?<body>##\\[(?:group|endgroup|error|warning|notice|debug|command)(?::[^\\]]*)?\\].*)$"
+            },
+            "runner": {
+                "pattern": "^(?<body>(?:Current runner version:|Runner name:|Runner group name:|Job is about to start running on the hosted runner:|Cleaning up orphan processes).*)$"
+            }
+        },
+        "body-field": "body",
+        "url": "https://docs.github.com/en/actions/using-workflows/workflow-commands-for-github-actions",
+        "sample": [
+            {
+                "line": "##[group]Run actions/checkout@v4"
+            },
+            {
+                "line": "##[error]Process completed with exit code 1."
+            },
+            {
+                "line": "Current runner version: '2.311.0'"
+            }
+        ]
+    }
+}

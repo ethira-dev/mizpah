@@ -1,0 +1,27 @@
+{
+    "cockroachdb_json_log": {
+        "title": "CockroachDB JSON",
+        "description": "CockroachDB structured JSON log entries (fluent / JSON file sinks)",
+        "url": "https://www.cockroachlabs.com/docs/stable/log-formats#json",
+        "file-type": "json",
+        "json": true,
+        "timestamp-field": "timestamp",
+        "match-keys": ["tag", "channel", "severity", "goroutine"],
+        "level-field": "severity",
+        "body-field": "message",
+        "line-format": [
+            { "field": "timestamp" },
+            " ",
+            { "field": "severity" },
+            " ",
+            { "field": "channel" },
+            " ",
+            { "field": "message" }
+        ],
+        "sample": [
+            {
+                "line": "{\"timestamp\":\"2020-01-01T00:00:00.000000Z\",\"severity\":\"INFO\",\"channel\":\"DEV\",\"goroutine\":1,\"file\":\"server/server.go\",\"line\":123,\"message\":\"starting cockroach node\",\"tag\":\"cockroach.server\",\"version\":\"v23.1.0\"}"
+            }
+        ]
+    }
+}

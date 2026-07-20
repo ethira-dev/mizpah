@@ -1,0 +1,26 @@
+{
+    "azure_service_bus_log": {
+        "title": "Azure Service Bus",
+        "description": "Azure Service Bus brokered message metadata JSON commonly logged by SDKs",
+        "url": "https://learn.microsoft.com/en-us/azure/service-bus-messaging/service-bus-messages-payloads",
+        "file-type": "json",
+        "json": true,
+        "timestamp-field": "enqueuedTimeUtc",
+        "match-keys": ["messageId", "enqueuedTimeUtc", "sequenceNumber", "body"],
+        "body-field": "messageId",
+        "line-format": [
+            { "field": "enqueuedTimeUtc" },
+            " ",
+            { "field": "messageId" },
+            " ",
+            { "field": "sequenceNumber" },
+            " ",
+            { "field": "subject" }
+        ],
+        "sample": [
+            {
+                "line": "{\"messageId\":\"a1b2c3d4-e5f6-7890-abcd-ef1234567890\",\"sequenceNumber\":42,\"enqueuedTimeUtc\":\"2020-01-01T00:00:00.000Z\",\"subject\":\"orders\",\"contentType\":\"application/json\",\"body\":\"{\\\"orderId\\\":123}\",\"deliveryCount\":1,\"partitionKey\":\"pk1\"}"
+            }
+        ]
+    }
+}
