@@ -5,7 +5,10 @@ use crate::browser_attach;
 use crate::file_ingest;
 use crate::hub;
 use crate::mcp;
+use crate::run_cmd::{self, RunOpts};
 use crate::script;
+use crate::service::resolve_service;
+use crate::setup::{self, SetupOpts};
 use crate::shell_attach;
 use crate::shell_forward;
 use crate::store::{DEFAULT_MAX_BYTES, DEFAULT_TTL_HOURS};
@@ -88,8 +91,8 @@ pub struct Cli {
     #[command(subcommand)]
     pub command: Option<Commands>,
 
-    /// Service name for this ingest stream (defaults to absolute cwd)
-    #[arg(short, long, global = false)]
+    /// Service name for this ingest stream (default: MIZPAH_SERVICE / OTEL_SERVICE_NAME / project manifests / git / dir)
+    #[arg(short, long, env = "MIZPAH_SERVICE", global = false)]
     pub service: Option<String>,
 
     #[command(flatten)]
@@ -181,8 +184,8 @@ pub enum Commands {
         /// File paths, globs, or `user@host:path` remotes
         paths: Vec<String>,
 
-        /// Service name for ingested lines
-        #[arg(short, long)]
+        /// Service name for ingested lines (default: inferred project name)
+        #[arg(short, long, env = "MIZPAH_SERVICE")]
         service: Option<String>,
 
         /// Follow files for new data (local only)
@@ -250,6 +253,54 @@ pub enum Commands {
     Tui {
         #[command(flatten)]
         hub: HubArgs,
+    },
+    /// One-shot agent readiness: ensure hub, install MCP configs, print next steps
+    Setup {
+        #[command(flatten)]
+        hub: HubArgs,
+
+        /// Project directory for the hub (defaults to cwd)
+        #[arg(long, env = "MIZPAH_PROJECT")]
+        project: Option<PathBuf>,
+
+        /// Also run `npx skills add ethira-dev/mizpah`
+        #[arg(long, default_value_t = false)]
+        with_skill: bool,
+
+        /// Skip writing MCP client configs
+        #[arg(long, default_value_t = false)]
+        skip_mcp_install: bool,
+    },
+    /// Read-only readiness checks (hub, MCP configs, PATH)
+    Doctor {
+        #[command(flatten)]
+        hub: HubArgs,
+    },
+    /// Summarize what broke in the last N minutes
+    Why {
+        /// Lookback window in minutes
+        #[arg(long, default_value_t = 15)]
+        minutes: u64,
+
+        #[command(flatten)]
+        hub: HubArgs,
+    },
+    /// Ensure hub, run a command, and stream its output into Mizpah
+    Run {
+        /// Service name (default: MIZPAH_SERVICE / OTEL_SERVICE_NAME / project manifests / git / dir)
+        #[arg(short, long, env = "MIZPAH_SERVICE")]
+        service: Option<String>,
+
+        #[command(flatten)]
+        hub: HubArgs,
+
+        /// Do not open the browser
+        #[arg(long, default_value_t = false)]
+        no_open: bool,
+
+        /// Command and args (use `--` before the command)
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
     },
     /// Print shell init snippet for rc files (internal)
     #[command(name = "__shell-init", hide = true)]
@@ -372,10 +423,7 @@ pub enum BrowserAction {
 
 /// Default service name for file ingest when `--service` is omitted.
 pub(crate) fn default_ingest_service() -> String {
-    std::env::current_dir()
-        .ok()
-        .and_then(|d| d.canonicalize().ok())
-        .map_or_else(|| "default".into(), |d| d.display().to_string())
+    resolve_service(None)
 }
 
 /// Apply config.toml defaults when CLI still has clap defaults.
@@ -436,6 +484,10 @@ pub struct CliDeps {
     hook_forward: Option<Result<(), String>>,
     update_resume: Option<Result<(), String>>,
     run_pipe: Option<i32>,
+    setup: Option<i32>,
+    doctor: Option<i32>,
+    why: Option<Result<String, String>>,
+    run_cmd: Option<i32>,
 }
 
 impl CliDeps {
@@ -449,11 +501,14 @@ impl CliDeps {
         }
     }
 
-    async fn mcp_stdio(&self, base_url: String) -> Result<(), String> {
+    async fn mcp_stdio(&self, host: &str, port: u16) -> Result<(), String> {
         if let Some(r) = &self.mcp_stdio {
             return r.clone();
         }
-        mcp::run_stdio(base_url).await.map_err(|e| e.to_string())
+        let base_url = mcp::hub_base_url(host, port);
+        mcp::run_stdio(base_url)
+            .await
+            .map_err(|e| e.to_string())
     }
 
     fn mcp_install(&self) -> i32 {
@@ -714,6 +769,39 @@ impl CliDeps {
             Err(code) => code,
         }
     }
+
+    async fn setup(&self, opts: SetupOpts) -> i32 {
+        if let Some(code) = self.setup {
+            return code;
+        }
+        setup::run_setup(opts).await
+    }
+
+    async fn doctor(&self, host: &str, port: u16) -> i32 {
+        if let Some(code) = self.doctor {
+            return code;
+        }
+        setup::run_doctor(host, port).await
+    }
+
+    async fn why(&self, host: &str, port: u16, minutes: u64) -> Result<String, String> {
+        if let Some(r) = &self.why {
+            return r.clone();
+        }
+        let client = mcp::HubClient::new(hub_http_base(host, port));
+        client
+            .get_incident(minutes)
+            .await
+            .map(|v| serde_json::to_string_pretty(&v).unwrap_or_default())
+            .map_err(|e| e.to_string())
+    }
+
+    async fn run_cmd(&self, opts: RunOpts) -> i32 {
+        if let Some(code) = self.run_cmd {
+            return code;
+        }
+        run_cmd::run_command(opts).await
+    }
 }
 
 /// Dispatch parsed CLI. Returns process exit code (0 = success).
@@ -722,8 +810,7 @@ pub async fn run_parsed(cli: Cli, deps: &CliDeps) -> i32 {
         Some(Commands::Mcp { action, hub }) => match action {
             None => {
                 deps.maybe_init_tracing();
-                let base_url = mcp::hub_base_url(&hub.host, hub.port);
-                match deps.mcp_stdio(base_url).await {
+                match deps.mcp_stdio(&hub.host, hub.port).await {
                     Ok(()) => 0,
                     Err(err) => {
                         error!(error = %err, "MCP server failed");
@@ -929,6 +1016,56 @@ pub async fn run_parsed(cli: Cli, deps: &CliDeps) -> i32 {
                     1
                 }
             }
+        }
+        Some(Commands::Setup {
+            hub,
+            project,
+            with_skill,
+            skip_mcp_install,
+        }) => {
+            deps.maybe_init_tracing();
+            deps.setup(SetupOpts {
+                host: hub.host,
+                port: hub.port,
+                project,
+                with_skill,
+                skip_mcp_install,
+            })
+            .await
+        }
+        Some(Commands::Doctor { hub }) => {
+            deps.maybe_init_tracing();
+            deps.doctor(&hub.host, hub.port).await
+        }
+        Some(Commands::Why { minutes, hub }) => {
+            deps.maybe_init_tracing();
+            match deps.why(&hub.host, hub.port, minutes).await {
+                Ok(text) => {
+                    println!("{text}");
+                    0
+                }
+                Err(err) => {
+                    eprintln!("error: {err}");
+                    1
+                }
+            }
+        }
+        Some(Commands::Run {
+            service,
+            hub,
+            no_open,
+            args,
+        }) => {
+            deps.maybe_init_tracing();
+            let service = resolve_service(service.as_deref());
+            deps.run_cmd(RunOpts {
+                service,
+                host: hub.host,
+                port: hub.port,
+                no_open,
+                args,
+            })
+            .await
         }
         Some(Commands::ShellInit { shell }) => match deps.shell_init(&shell) {
             Ok(()) => 0,
@@ -1390,6 +1527,66 @@ mod tests {
     fn default_ingest_service_non_empty() {
         let s = default_ingest_service();
         assert!(!s.is_empty());
+        assert!(!s.contains('/'));
+    }
+
+    #[test]
+    fn clap_parses_setup_doctor_why_run() {
+        let setup = parse(&[
+            "mizpah",
+            "setup",
+            "--with-skill",
+            "--skip-mcp-install",
+            "--port",
+            "4000",
+        ]);
+        match setup.command {
+            Some(Commands::Setup {
+                hub,
+                with_skill,
+                skip_mcp_install,
+                ..
+            }) => {
+                assert!(with_skill);
+                assert!(skip_mcp_install);
+                assert_eq!(hub.port, 4000);
+            }
+            other => panic!("expected Setup, got {other:?}"),
+        }
+
+        let doctor = parse(&["mizpah", "doctor", "--host", "127.0.0.1"]);
+        assert!(matches!(doctor.command, Some(Commands::Doctor { .. })));
+
+        let why = parse(&["mizpah", "why", "--minutes", "30"]);
+        match why.command {
+            Some(Commands::Why { minutes, .. }) => assert_eq!(minutes, 30),
+            other => panic!("expected Why, got {other:?}"),
+        }
+
+        let run = parse(&[
+            "mizpah",
+            "run",
+            "--service",
+            "api",
+            "--no-open",
+            "--",
+            "npm",
+            "test",
+            "--watch",
+        ]);
+        match run.command {
+            Some(Commands::Run {
+                service,
+                no_open,
+                args,
+                ..
+            }) => {
+                assert_eq!(service.as_deref(), Some("api"));
+                assert!(no_open);
+                assert_eq!(args, vec!["npm", "test", "--watch"]);
+            }
+            other => panic!("expected Run, got {other:?}"),
+        }
     }
 
     #[test]

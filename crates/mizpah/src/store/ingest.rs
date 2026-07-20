@@ -123,11 +123,7 @@ mod tests {
             Some(ts - ChronoDuration::hours(1)),
             Some(ts + ChronoDuration::hours(1))
         ));
-        assert!(!in_time_range(
-            ts,
-            Some(ts + ChronoDuration::seconds(1)),
-            None
-        ));
+        assert!(!in_time_range(ts, Some(ts + ChronoDuration::seconds(1)), None));
         assert!(!in_time_range(ts, None, Some(ts)));
     }
 
@@ -136,7 +132,10 @@ mod tests {
         assert_eq!(parse_line("").get("_raw"), Some(&json!("")));
         assert_eq!(parse_line("42").get("_value"), Some(&json!(42)));
         assert_eq!(parse_line(r#"{"a":1}"#).get("a"), Some(&json!(1)));
-        assert_eq!(parse_line("plain").get("_raw"), Some(&json!("plain")));
+        assert_eq!(
+            parse_line("plain").get("_raw"),
+            Some(&json!("plain"))
+        );
     }
 
     #[test]

@@ -7,6 +7,7 @@ mod json_pack;
 mod logfmt;
 mod packs;
 mod syslog;
+mod vendor_specialized;
 mod w3c;
 
 use serde_json::{Map, Value};
@@ -18,6 +19,7 @@ pub use json_pack::classify_json_object;
 pub use logfmt::LogfmtFormat;
 pub use packs::{classify_pack_json, detect_pack_text, parse_pack_text, parse_with_format_hint};
 pub use syslog::SyslogFormat;
+pub use vendor_specialized::{ConsulFormat, F5Format, HerokuRouterFormat, NomadFormat};
 pub use w3c::W3cFormat;
 
 /// Normalized parse result before store commit.
@@ -35,8 +37,13 @@ pub trait LogFormat: Send + Sync {
     fn parse(&self, line: &str) -> Option<NormalizedLog>;
 }
 
-fn existing_specialized() -> [&'static dyn LogFormat; 5] {
+fn existing_specialized() -> [&'static dyn LogFormat; 9] {
     [
+        // Vendor wrappers before syslog/logfmt so they win on wrapped lines.
+        &HerokuRouterFormat,
+        &F5Format,
+        &ConsulFormat,
+        &NomadFormat,
         &LogfmtFormat,
         &SyslogFormat,
         &AccessLogFormat,
@@ -104,6 +111,35 @@ pub fn parse_ingest_line_with_hint(
             "w3c_log" => {
                 if let Some(norm) = W3cFormat.parse(trimmed) {
                     return (attach_format(norm.data, "w3c_log"), Some("w3c_log".into()));
+                }
+            }
+            "heroku_router_log" => {
+                if let Some(norm) = HerokuRouterFormat.parse(trimmed) {
+                    return (
+                        attach_format(norm.data, "heroku_router_log"),
+                        Some("heroku_router_log".into()),
+                    );
+                }
+            }
+            "f5_log" => {
+                if let Some(norm) = F5Format.parse(trimmed) {
+                    return (attach_format(norm.data, "f5_log"), Some("f5_log".into()));
+                }
+            }
+            "consul_log" => {
+                if let Some(norm) = ConsulFormat.parse(trimmed) {
+                    return (
+                        attach_format(norm.data, "consul_log"),
+                        Some("consul_log".into()),
+                    );
+                }
+            }
+            "nomad_log" => {
+                if let Some(norm) = NomadFormat.parse(trimmed) {
+                    return (
+                        attach_format(norm.data, "nomad_log"),
+                        Some("nomad_log".into()),
+                    );
                 }
             }
             "generic" => {
@@ -302,8 +338,39 @@ mod tests {
     #[test]
     fn loaded_packs_are_registered() {
         let ids = packs::loaded_pack_ids();
-        assert!(ids.len() >= 172);
-        assert!(!ids.iter().any(|id| id == "pcap_log"));
+        assert!(ids.len() >= 195);
+        assert!(ids.iter().any(|id| id == "otel_collector_log"));
+    }
+
+    #[test]
+    fn heroku_router_wins_over_syslog_logfmt() {
+        let line = r#"Jan  1 00:00:00 host heroku[router]: at=info method=GET path="/" host=example.com request_id=abc fwd="1.2.3.4" dyno=web.1 connect=1ms service=2ms status=200 bytes=123"#;
+        let (v, id) = parse_ingest_line(line);
+        assert_eq!(id.as_deref(), Some("heroku_router_log"));
+        assert_eq!(v["method"], "GET");
+        assert_eq!(v["status"], 200);
+    }
+
+    #[test]
+    fn vault_audit_json_pack() {
+        let line = r#"{"time":"2020-01-01T00:00:00.000Z","type":"request","auth":{"display_name":"token","policies":["default"],"token_type":"service"},"request":{"id":"a1b2c3d4-e5f6-7890-abcd-ef1234567890","operation":"read","path":"auth/token/lookup-self","remote_address":"10.0.0.1"}}"#;
+        let (v, id) = parse_ingest_line(line);
+        assert_eq!(id.as_deref(), Some("vault_audit_log"));
+        assert!(v.get("msg").is_some() || v.get("request").is_some());
+    }
+
+    #[test]
+    fn spring_boot_still_java_log() {
+        let line = "2025-01-23T03:42:36.681-0800  INFO 125873 --- [myapp] [           main] o.s.b.d.f.logexample.MyApplication       : Starting MyApplication using Java 17.0.14 with PID 125873 (/opt/apps/myapp.jar started by myuser in /opt/apps/)";
+        let (_, id) = parse_ingest_line(line);
+        assert_eq!(id.as_deref(), Some("java_log"));
+    }
+
+    #[test]
+    fn match_keys_block_vault_false_positive() {
+        let line = r#"{"time":"2020-01-01T00:00:00Z","type":"request","data":{"x":1}}"#;
+        let (_, id) = parse_ingest_line(line);
+        assert_ne!(id.as_deref(), Some("vault_audit_log"));
     }
 
     #[test]

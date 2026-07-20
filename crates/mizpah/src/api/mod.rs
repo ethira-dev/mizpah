@@ -38,6 +38,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/nav/level", get(routes::nav_level))
         .route("/api/traces", get(routes::list_traces))
         .route("/api/trace/{opid}", get(routes::get_trace))
+        .route("/api/incident", get(routes::get_incident))
         .route(
             "/api/bookmarks",
             get(routes::list_bookmarks).post(routes::set_bookmark),
@@ -86,7 +87,6 @@ mod tests {
         router(test_state(Arc::new(Store::new(1_000_000))))
     }
 
-    #[cfg(not(miri))]
     #[tokio::test]
     async fn ingest_single_line() {
         let store = Arc::new(Store::new(1_000_000));
@@ -118,7 +118,6 @@ mod tests {
         assert!(mzp.get("exe").is_some());
     }
 
-    #[cfg(not(miri))]
     #[tokio::test]
     async fn ingest_batch_ordered() {
         let store = Arc::new(Store::new(1_000_000));
@@ -164,7 +163,6 @@ mod tests {
         assert!(entries.iter().all(|e| e.data.get("_mzp").is_some()));
     }
 
-    #[cfg(not(miri))]
     #[tokio::test]
     async fn ingest_batch_injects_cmd() {
         let store = Arc::new(Store::new(1_000_000));
@@ -209,7 +207,6 @@ mod tests {
         assert_eq!(entries[1].data["msg"], json!("hi"));
     }
 
-    #[cfg(not(miri))]
     #[tokio::test]
     async fn ingest_batch_rejects_empty_service() {
         let app = test_app();
@@ -227,7 +224,6 @@ mod tests {
         assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
     }
 
-    #[cfg(not(miri))]
     #[tokio::test]
     async fn ingest_batch_rejects_oversized() {
         let app = test_app();
@@ -248,7 +244,6 @@ mod tests {
         assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
     }
 
-    #[cfg(not(miri))]
     #[tokio::test]
     async fn investigate_missing_entry_is_404() {
         let app = test_app();
@@ -328,7 +323,6 @@ mod tests {
         assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
     }
 
-    #[cfg(not(miri))]
     #[tokio::test]
     async fn disconnect_blocks_ingest_and_lists_blocked() {
         let store = Arc::new(Store::new(1_000_000));
@@ -430,7 +424,6 @@ mod tests {
         assert_eq!(store.stats().await.count, 1);
     }
 
-    #[cfg(not(miri))]
     #[tokio::test]
     async fn aggregate_nav_bookmarks_spectrogram() {
         let store = Arc::new(Store::new(1_000_000));
@@ -500,9 +493,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method("GET")
-                    .uri(format!(
-                        "/api/nav/level?fromId={err_id}&direction=next&levels=error,warn"
-                    ))
+                    .uri(format!("/api/nav/level?fromId={err_id}&direction=next&levels=error,warn"))
                     .body(Body::empty())
                     .unwrap(),
             )

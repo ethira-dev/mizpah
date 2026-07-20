@@ -9,13 +9,14 @@ mizpah exposes the live hub as a stdio MCP server (`mzp mcp`). Agents get struct
 ## Install
 
 ```bash
-# hub must be reachable (pipe a process or mzp hub start)
+mzp setup           # ensure hub + mcp install (+ optional --with-skill)
+# or:
 mzp mcp install     # merges config into Cursor, Claude Desktop, Claude Code, Codex when present
 # restart clients
 mzp mcp uninstall   # remove those entries
 ```
 
-First hub start also attempts registration. Homebrew / release installs: run `mzp mcp install` once after install if tools do not appear.
+`mzp mcp` auto-starts a loopback hub if none is healthy. First hub start also attempts registration.
 
 Override hub URL with `MIZPAH_URL` (default `http://127.0.0.1:3149`).
 
@@ -28,18 +29,9 @@ Workflow skill aimed at **token and cost savings**: pipe into Mizpah, prefer JSO
 ### Install the skill
 
 ```bash
-# 1. Install mizpah (if you have not already)
 brew install ethira-dev/mizpah/mizpah
-
-# 2. Start a hub with a stream
-my-app 2>&1 | mzp --service api
-
-# 3. Install the agent skill (Cursor, Claude Code, Codex, …)
-npx skills add ethira-dev/mizpah
-
-# 4. Register MCP tools (search_logs, aggregate_logs, get_trace, query_sql, …)
-mzp mcp install
-# restart the agent client
+mzp setup --with-skill
+# restart the agent client, then pipe or: mzp run -s api -- npm test
 ```
 
 List skills in the package without installing:
@@ -64,7 +56,8 @@ Also available as a Cursor plugin (repo-root `.cursor-plugin/` + `skills/mizpah/
 | `list_services` | (none) | Service names in the buffer |
 | `get_stats` | (none) | Entry count, approx bytes, max bytes, per-service counts |
 | `list_properties` | `service?`, `q?` | Discovered paths + sample values (for writing CEL) |
-| `search_logs` | `q?` (CEL), `service?`, `limit?`, `cursor?` | Newest-first; **default limit 20, max 50**; `hasMore` for pagination |
+| `search_logs` | `q?` (CEL), `nl?` (natural language → CEL), `service?`, `limit?`, `cursor?` | Newest-first; **default limit 20, max 50**; `hasMore` for pagination |
+| `summarize_incident` | `minutes?` (default 15) | What broke? — levels, top services/messages, sample ids, traces |
 | `get_logs_around` | `id`, `before?` (default 5), `after?` (default 5), `service?`, `q?` | Window around an entry for stack/context |
 | `aggregate_logs` | `group_by?`, `q?`, `service?`, `limit?` | Top-N counts (GROUP BY); default `group_by=["service"]`; **default limit 20, max 50** |
 | `get_trace` | `opid`, `limit?` | All buffered rows for a trace/request id (oldest-first); hard-capped |
@@ -74,7 +67,7 @@ Also available as a Cursor plugin (repo-root `.cursor-plugin/` + `skills/mizpah/
 | `nav_level` | `from_id`, `direction?`, `levels?` | Next/prev error or warn (hub-wide) |
 | `spectrogram` | `field?`, `time_buckets?` | Time × field heat-map (default `field=level`) |
 
-Server instructions tell the model to keep limits small and never dump the full buffer. If the hub is down, start a stream: `my-app 2>&1 | mzp --service <name>`.
+Server instructions tell the model to keep limits small and never dump the full buffer. If tools fail, run `mzp setup` or `mzp run -- …`.
 
 Bookmarks, spectrogram, SQL, and aggregates are also available in the web UI Tools sheet and via REST/CLI.
 

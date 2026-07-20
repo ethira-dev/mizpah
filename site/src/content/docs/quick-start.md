@@ -18,7 +18,7 @@ api-server 2>&1 | mzp --service api
 worker | mzp --service worker   # joins the same hub
 ```
 
-`--service` tags the stream (default: absolute cwd). Prefer NDJSON. Non-JSON lines become `{ "_raw": "…" }`; pretty Nest / `util.inspect` blocks are reassembled when possible.
+`--service` tags the stream (default: `MIZPAH_SERVICE` / `OTEL_SERVICE_NAME` / `SERVICE_NAME`, else a short name from project manifests such as `package.json`, `Cargo.toml`, `pyproject.toml`, `go.mod`, …, then git root / directory). Prefer NDJSON. Non-JSON lines become `{ "_raw": "…" }`; pretty Nest / `util.inspect` blocks are reassembled when possible.
 
 ## Or attach a source
 

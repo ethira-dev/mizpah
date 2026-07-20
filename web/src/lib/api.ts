@@ -307,6 +307,32 @@ export async function fetchStats(): Promise<Stats> {
   return res.json()
 }
 
+export type IncidentSummary = {
+  minutes: number
+  total: number
+  byLevel: { level: string; count: number }[]
+  topServices: { service: string; count: number }[]
+  topMessages: {
+    msg: string
+    count: number
+    sampleId?: number | null
+  }[]
+  topTraces: { opid: string; errorCount: number }[]
+  notes: string[]
+}
+
+/** `GET /api/incident?minutes=` — "what broke?" summary. */
+export async function fetchIncident(minutes = 15): Promise<IncidentSummary> {
+  const params = new URLSearchParams()
+  params.set("minutes", String(minutes))
+  const res = await fetch(`/api/incident?${params}`)
+  if (!res.ok) {
+    const body = await res.text().catch(() => "")
+    throw new Error(body || `incident: ${res.status}`)
+  }
+  return res.json()
+}
+
 export async function startInvestigate(
   target: InvestigateTarget,
   id: number

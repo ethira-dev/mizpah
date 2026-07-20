@@ -109,6 +109,12 @@ impl HubClient {
         self.get_json("/api/stats", &[]).await
     }
 
+    /// Incident / "what broke?" summary for the last `minutes`.
+    pub async fn get_incident(&self, minutes: u64) -> Result<Value, HubClientError> {
+        self.get_json("/api/incident", &[("minutes", minutes.max(1).to_string())])
+            .await
+    }
+
     pub async fn list_properties(
         &self,
         service: Option<&str>,
@@ -171,31 +177,34 @@ impl HubClient {
         opid: &str,
         limit: Option<usize>,
     ) -> Result<LogsResponse, HubClientError> {
-        let query = vec![("limit", Self::clamp_limit(limit).to_string())];
+        let mut query = Vec::new();
+        query.push(("limit", Self::clamp_limit(limit).to_string()));
         let path = format!("/api/trace/{}", urlencoding_encode(opid));
         self.get_json(&path, &query).await
     }
 
-    pub async fn query_sql(
-        &self,
-        sql: &str,
-        limit: Option<usize>,
-    ) -> Result<Value, HubClientError> {
+    pub async fn query_sql(&self, sql: &str, limit: Option<usize>) -> Result<Value, HubClientError> {
         let url = format!("{}/api/sql", self.base_url);
         let body = serde_json::json!({
             "sql": sql,
             "limit": Self::clamp_limit(limit),
         });
-        let response = self.http.post(&url).json(&body).send().await.map_err(|e| {
-            if e.is_connect() || e.is_timeout() {
-                HubClientError::Unreachable {
-                    url: self.base_url.clone(),
-                    source: e,
+        let response = self
+            .http
+            .post(&url)
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| {
+                if e.is_connect() || e.is_timeout() {
+                    HubClientError::Unreachable {
+                        url: self.base_url.clone(),
+                        source: e,
+                    }
+                } else {
+                    HubClientError::Request(e)
                 }
-            } else {
-                HubClientError::Request(e)
-            }
-        })?;
+            })?;
         let status = response.status();
         if !status.is_success() {
             let body = response.text().await.unwrap_or_default();
@@ -359,12 +368,9 @@ mod tests {
         let client = HubClient::new(url);
         let all = client.search_logs(None, None, Some(1), None).await.unwrap();
         let id = all.entries[0]["id"].as_u64().unwrap();
-
+        
         // Request huge window - should be clamped
-        let window = client
-            .get_logs_around(id, 1000, 1000, None, None)
-            .await
-            .unwrap();
+        let window = client.get_logs_around(id, 1000, 1000, None, None).await.unwrap();
         assert!(!window.entries.is_empty());
     }
 
@@ -377,12 +383,7 @@ mod tests {
 
         let client = HubClient::new(url);
         let resp = client
-            .aggregate_logs(
-                Some("api"),
-                Some(r#"level == "error""#),
-                &["level".into()],
-                Some(10),
-            )
+            .aggregate_logs(Some("api"), Some(r#"level == "error""#), &["level".into()], Some(10))
             .await
             .unwrap();
         assert!(resp.is_object());
@@ -392,24 +393,18 @@ mod tests {
     #[tokio::test]
     async fn nav_level_prev() {
         let (url, store) = spawn_test_hub().await;
-        store
-            .push_line("api", r#"{"level":"error","msg":"1"}"#)
-            .await;
-        store
-            .push_line("api", r#"{"level":"info","msg":"2"}"#)
-            .await;
-        store
-            .push_line("api", r#"{"level":"error","msg":"3"}"#)
-            .await;
+        store.push_line("api", r#"{"level":"error","msg":"1"}"#).await;
+        store.push_line("api", r#"{"level":"info","msg":"2"}"#).await;
+        store.push_line("api", r#"{"level":"error","msg":"3"}"#).await;
 
         let client = HubClient::new(url);
-        let all = client
-            .search_logs(None, None, Some(50), None)
-            .await
-            .unwrap();
+        let all = client.search_logs(None, None, Some(50), None).await.unwrap();
         let last_id = all.entries[0]["id"].as_u64().unwrap();
 
-        let result = client.nav_level(last_id, "prev", &["error"]).await.unwrap();
+        let result = client
+            .nav_level(last_id, "prev", &["error"])
+            .await
+            .unwrap();
         assert!(result.is_some());
     }
 
@@ -417,12 +412,8 @@ mod tests {
     #[tokio::test]
     async fn list_traces_with_limit() {
         let (url, store) = spawn_test_hub().await;
-        store
-            .push_line("api", r#"{"opid":"req-1","msg":"test"}"#)
-            .await;
-        store
-            .push_line("api", r#"{"opid":"req-2","msg":"test"}"#)
-            .await;
+        store.push_line("api", r#"{"opid":"req-1","msg":"test"}"#).await;
+        store.push_line("api", r#"{"opid":"req-2","msg":"test"}"#).await;
 
         let client = HubClient::new(url);
         let resp = client.list_traces(Some(1)).await.unwrap();
@@ -444,12 +435,8 @@ mod tests {
     #[tokio::test]
     async fn get_trace_with_limit() {
         let (url, store) = spawn_test_hub().await;
-        store
-            .push_line("api", r#"{"opid":"req-123","msg":"1"}"#)
-            .await;
-        store
-            .push_line("api", r#"{"opid":"req-123","msg":"2"}"#)
-            .await;
+        store.push_line("api", r#"{"opid":"req-123","msg":"1"}"#).await;
+        store.push_line("api", r#"{"opid":"req-123","msg":"2"}"#).await;
 
         let client = HubClient::new(url);
         let resp = client.get_trace("req-123", Some(1)).await.unwrap();
@@ -460,15 +447,10 @@ mod tests {
     #[tokio::test]
     async fn list_properties_with_search() {
         let (url, store) = spawn_test_hub().await;
-        store
-            .push_line("api", r#"{"level":"error","msg":"boom"}"#)
-            .await;
+        store.push_line("api", r#"{"level":"error","msg":"boom"}"#).await;
 
         let client = HubClient::new(url);
-        let resp = client
-            .list_properties(Some("api"), Some("level"))
-            .await
-            .unwrap();
+        let resp = client.list_properties(Some("api"), Some("level")).await.unwrap();
         assert!(!resp.properties.is_empty());
     }
 
@@ -483,12 +465,9 @@ mod tests {
         let client = HubClient::new(url);
         let page1 = client.search_logs(None, None, Some(2), None).await.unwrap();
         assert_eq!(page1.entries.len(), 2);
-
+        
         let cursor = page1.entries.last().unwrap()["id"].as_u64().unwrap();
-        let page2 = client
-            .search_logs(None, None, Some(2), Some(cursor))
-            .await
-            .unwrap();
+        let page2 = client.search_logs(None, None, Some(2), Some(cursor)).await.unwrap();
         assert!(!page2.entries.is_empty());
     }
 

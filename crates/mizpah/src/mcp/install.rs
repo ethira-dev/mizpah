@@ -138,7 +138,7 @@ fn apply_all(command: &Path, uninstall: bool) -> InstallReport {
     report
 }
 
-fn discover_clients() -> Vec<(ClientKind, Option<PathBuf>)> {
+pub fn discover_clients() -> Vec<(ClientKind, Option<PathBuf>)> {
     vec![
         (ClientKind::Cursor, cursor_mcp_path()),
         (ClientKind::ClaudeDesktop, claude_desktop_config_path()),
@@ -657,10 +657,9 @@ command = "npx"
         with_isolated_home(|_home| {
             let report = install_all(Path::new("/opt/mizpah/bin"));
             assert!(report.errors.is_empty());
-            assert!(report
-                .results
-                .iter()
-                .all(|r| { matches!(r.action, InstallAction::SkippedMissingProduct) }));
+            assert!(report.results.iter().all(|r| {
+                matches!(r.action, InstallAction::SkippedMissingProduct)
+            }));
         });
     }
 
@@ -736,10 +735,9 @@ command = "npx"
                 .find(|r| r.client == ClientKind::ClaudeDesktop)
                 .expect("claude desktop result");
             assert_eq!(desktop.action, InstallAction::Updated);
-            let content = fs::read_to_string(
-                home.join("Library/Application Support/Claude/claude_desktop_config.json"),
-            )
-            .unwrap();
+            let content =
+                fs::read_to_string(home.join("Library/Application Support/Claude/claude_desktop_config.json"))
+                    .unwrap();
             assert!(content.contains("mizpah"));
         });
     }

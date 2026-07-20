@@ -7,7 +7,8 @@ mod server;
 
 pub use client::HubClient;
 pub use install::{
-    ensure_registered_on_hub_start, install_all, resolve_binary_path, uninstall_all,
+    discover_clients, ensure_registered_on_hub_start, install_all, resolve_binary_path,
+    uninstall_all, ClientKind,
 };
 
 use rmcp::transport::stdio;
@@ -107,10 +108,7 @@ mod tests {
         temp_env::with_vars(
             &[
                 ("HOME", Some(temp_home.path().to_str().unwrap())),
-                (
-                    "MIZPAH_CONFIG_DIR",
-                    Some(temp_config.path().to_str().unwrap()),
-                ),
+                ("MIZPAH_CONFIG_DIR", Some(temp_config.path().to_str().unwrap())),
             ],
             || {
                 // Create a fake cursor directory
@@ -119,7 +117,7 @@ mod tests {
 
                 let bin = std::env::current_exe().unwrap();
                 let report = install_all(&bin);
-
+                
                 // Should have attempted to install
                 assert!(!report.results.is_empty());
             },

@@ -14,7 +14,9 @@ Local JSON log hub: pipe any process into **`mzp`**, get a searchable UI on `:31
 
 ```bash
 brew install ethira-dev/mizpah/mizpah
+mzp setup --with-skill
 my-app 2>&1 | mzp --service api
+# or: mzp run -s api -- npm test
 # UI: http://127.0.0.1:3149
 ```
 
@@ -53,27 +55,30 @@ MCP (stdio) ──► GET /api/logs|properties|stats|… against the hub
 ```
 
 - Default bind: `127.0.0.1:3149`. Ring buffer default: 1 GiB (`--max-bytes`).
-- Prefer NDJSON. Pretty Nest / `util.inspect` blocks are reassembled when possible; other non-JSON becomes `{ "_raw": "…" }`.
+- Prefer NDJSON. Pretty Nest / `util.inspect` blocks are reassembled when possible; plain text is promoted to `msg` / level when heuristics match.
 - Every entry gets `_mzp` (`cwd`, `user`, `pid`, `exe`).
+- Default `--service` is a short project slug from env (`MIZPAH_SERVICE` / `OTEL_SERVICE_NAME`) or manifests (`package.json`, `Cargo.toml`, …), not absolute cwd.
 
 Full reference: [streaming](https://ethira-dev.github.io/mizpah/docs/streaming/), [attach](https://ethira-dev.github.io/mizpah/docs/attach/), [CEL](https://ethira-dev.github.io/mizpah/docs/cel/), [MCP](https://ethira-dev.github.io/mizpah/docs/mcp/), [CLI](https://ethira-dev.github.io/mizpah/docs/cli/).
 
 ## Quick commands
 
 ```bash
+mzp setup                  # hub + MCP (+ --with-skill)
 api-server 2>&1 | mzp --service api
-worker | mzp --service worker
+mzp run -s api -- npm test
+mzp why                    # incident summary
+mzp doctor
 
 mzp attach                 # shell tee for new interactive shells
 mzp attach browser --launch
 mzp attach cursor          # observe-only Cursor hooks
 mzp attach claude
 mzp open
-mzp mcp install            # Cursor / Claude / Codex
 mzp hub stop               # also: start | restart
 ```
 
-MCP tools (keep `search_logs` limits small: default 20, max 50; results in TOON): `list_services`, `get_stats`, `list_properties`, `search_logs`, `get_logs_around`.
+MCP tools (keep `search_logs` limits small: default 20, max 50; results in TOON): `list_services`, `get_stats`, `list_properties`, `search_logs` (optional `nl`), `get_logs_around`, `summarize_incident`, plus aggregates/traces/SQL.
 
 ## Agent skill
 

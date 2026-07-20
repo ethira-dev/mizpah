@@ -70,7 +70,7 @@ pub(crate) struct IngestBatchRequest {
     cmd: Option<String>,
     #[serde(default)]
     mzp: Option<MzpMeta>,
-    /// Optional locked format id for file ingest (pack or stable Mizpah id).
+    /// Optional locked format id for file ingest (lnav or stable Mizpah id).
     #[serde(default)]
     format_hint: Option<String>,
 }
@@ -578,14 +578,25 @@ pub(crate) async fn get_trace(
     axum::extract::Path(opid): axum::extract::Path<String>,
     Query(params): Query<TraceListQuery>,
 ) -> Json<LogsResponse> {
-    let entries = state
-        .store
-        .get_trace(&opid, params.limit.unwrap_or(100))
-        .await;
+    let entries = state.store.get_trace(&opid, params.limit.unwrap_or(100)).await;
     Json(LogsResponse {
         entries,
         has_more: false,
     })
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct IncidentQuery {
+    minutes: Option<u64>,
+}
+
+/// `GET /api/incident?minutes=15` — "what broke?" summary.
+pub(crate) async fn get_incident(
+    State(state): State<AppState>,
+    Query(params): Query<IncidentQuery>,
+) -> Json<crate::incident::IncidentSummary> {
+    let minutes = params.minutes.unwrap_or(15);
+    Json(crate::incident::summarize_incident(&state.store, minutes).await)
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -610,9 +621,7 @@ pub(crate) async fn set_bookmark(
         .set_bookmark(body.id, body.marked, body.tags, Some(body.comment))
         .await
         .ok_or_else(|| ApiError::not_found("entry not found"))?;
-    Ok(Json(
-        serde_json::json!({ "id": body.id, "annotation": ann }),
-    ))
+    Ok(Json(serde_json::json!({ "id": body.id, "annotation": ann })))
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -692,7 +701,9 @@ pub(crate) struct ThemeQuery {
     name: Option<String>,
 }
 
-pub(crate) async fn get_themes(Query(params): Query<ThemeQuery>) -> Json<serde_json::Value> {
+pub(crate) async fn get_themes(
+    Query(params): Query<ThemeQuery>,
+) -> Json<serde_json::Value> {
     let _ = crate::keymap::themes::ensure_default_themes();
     let names = crate::keymap::themes::list_theme_names();
     if let Some(name) = params.name.as_deref() {
@@ -736,8 +747,8 @@ mod tests {
 
     #[tokio::test]
     async fn peer_addr_from_connect_info() {
-        use axum::extract::FromRequestParts;
         use axum::http::Request;
+        use axum::extract::FromRequestParts;
         let mut req = Request::builder().body(()).unwrap();
         let addr: SocketAddr = "127.0.0.1:1234".parse().unwrap();
         req.extensions_mut().insert(ConnectInfo(addr));
@@ -750,8 +761,8 @@ mod tests {
 
     #[tokio::test]
     async fn peer_addr_missing_connect_info() {
-        use axum::extract::FromRequestParts;
         use axum::http::Request;
+        use axum::extract::FromRequestParts;
         let req = Request::builder().body(()).unwrap();
         let (mut parts, _) = req.into_parts();
         let result = PeerAddr::from_request_parts(&mut parts, &()).await;
@@ -762,7 +773,9 @@ mod tests {
 
     #[tokio::test]
     async fn ingest_response_serialization() {
-        let resp = IngestResponse { entries: vec![] };
+        let resp = IngestResponse {
+            entries: vec![],
+        };
         let json = serde_json::to_string(&resp).unwrap();
         assert!(json.contains("entries"));
     }
@@ -807,9 +820,7 @@ mod tests {
     async fn ingest_batch_route_rejects_oversized() {
         let (url, _store) = spawn_test_hub().await;
         let client = reqwest::Client::new();
-        let lines: Vec<String> = (0..200)
-            .map(|i| format!("{{\"msg\":\"line{i}\"}}"))
-            .collect();
+        let lines: Vec<String> = (0..200).map(|i| format!("{{\"msg\":\"line{}\"}}", i)).collect();
         let req = IngestBatchRequest {
             service: "api".into(),
             lines,
@@ -870,12 +881,8 @@ mod tests {
     #[tokio::test]
     async fn aggregate_post_route() {
         let (url, store) = spawn_test_hub().await;
-        store
-            .push_line("api", r#"{"level":"error","msg":"a"}"#)
-            .await;
-        store
-            .push_line("api", r#"{"level":"info","msg":"b"}"#)
-            .await;
+        store.push_line("api", r#"{"level":"error","msg":"a"}"#).await;
+        store.push_line("api", r#"{"level":"info","msg":"b"}"#).await;
         let client = reqwest::Client::new();
         let req = AggregateBody {
             service: None,
@@ -930,9 +937,7 @@ mod tests {
     #[tokio::test]
     async fn tag_logs_route() {
         let (url, store) = spawn_test_hub().await;
-        store
-            .push_line("api", r#"{"level":"error","msg":"test"}"#)
-            .await;
+        store.push_line("api", r#"{"level":"error","msg":"test"}"#).await;
         let client = reqwest::Client::new();
         let req = TagBody {
             q: r#"level == "error""#.into(),
@@ -1079,10 +1084,7 @@ mod tests {
             .unwrap();
         assert!(logs.status().is_success());
         let body: serde_json::Value = logs.json().await.unwrap();
-        assert!(body
-            .get("entries")
-            .and_then(|v| v.as_array())
-            .is_some_and(|a| !a.is_empty()));
+        assert!(body.get("entries").and_then(|v| v.as_array()).is_some_and(|a| !a.is_empty()));
         let stats = client.get(format!("{url}/api/stats")).send().await.unwrap();
         assert!(stats.status().is_success());
     }
@@ -1099,11 +1101,7 @@ mod tests {
             .await
             .unwrap();
         assert!(activity.status().is_success());
-        let services = client
-            .get(format!("{url}/api/services"))
-            .send()
-            .await
-            .unwrap();
+        let services = client.get(format!("{url}/api/services")).send().await.unwrap();
         assert!(services.status().is_success());
         let body: serde_json::Value = services.json().await.unwrap();
         assert!(body
@@ -1142,17 +1140,9 @@ mod tests {
             .push_line("api", r#"{"level":"error","msg":"x","trace_id":"t1"}"#)
             .await;
         let client = reqwest::Client::new();
-        let traces = client
-            .get(format!("{url}/api/traces?limit=5"))
-            .send()
-            .await
-            .unwrap();
+        let traces = client.get(format!("{url}/api/traces?limit=5")).send().await.unwrap();
         assert!(traces.status().is_success());
-        let bookmarks = client
-            .get(format!("{url}/api/bookmarks"))
-            .send()
-            .await
-            .unwrap();
+        let bookmarks = client.get(format!("{url}/api/bookmarks")).send().await.unwrap();
         assert!(bookmarks.status().is_success());
         let spec = client
             .get(format!("{url}/api/spectrogram?field=level"))

@@ -19,7 +19,10 @@ mod models;
 mod mzp_meta;
 mod pretty_ingest;
 mod properties;
+mod run_cmd;
 mod script;
+mod service;
+mod setup;
 mod shell_attach;
 mod shell_forward;
 mod sql;
@@ -29,6 +32,9 @@ mod tui;
 mod unix_process;
 mod update;
 mod util;
+mod nl_cel;
+mod incident;
+mod session;
 
 #[cfg(test)]
 mod test_support;
@@ -41,8 +47,6 @@ use std::sync::Arc;
 use store::Store;
 use tracing::{error, info};
 use tracing_subscriber::EnvFilter;
-
-const DEFAULT_SERVICE: &str = "default";
 
 #[tokio::main]
 async fn main() {
@@ -99,26 +103,7 @@ pub(crate) fn ensure_bind_allowed_result(host: &str, allow_remote: bool) -> Resu
     })
 }
 
-fn resolve_service(service: Option<&str>) -> String {
-    if let Some(s) = service {
-        let trimmed = s.trim();
-        if !trimmed.is_empty() {
-            return trimmed.to_string();
-        }
-    }
-    service_from_cwd()
-}
-
-fn service_from_cwd() -> String {
-    match std::env::current_dir() {
-        Ok(dir) => match dir.canonicalize() {
-            Ok(canon) => canon.display().to_string(),
-            Err(_) if dir.is_absolute() => dir.display().to_string(),
-            Err(_) => DEFAULT_SERVICE.to_string(),
-        },
-        Err(_) => DEFAULT_SERVICE.to_string(),
-    }
-}
+pub(crate) use service::resolve_service;
 
 fn resolve_project_dir(project: Option<PathBuf>) -> PathBuf {
     if let Some(p) = project {
@@ -342,6 +327,39 @@ mod tests {
     use super::*;
     use clap::Parser;
     use cli::Cli;
+    use std::sync::Mutex;
+
+    static SERVICE_ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    struct EnvGuard {
+        key: &'static str,
+        old: Option<std::ffi::OsString>,
+    }
+
+    impl EnvGuard {
+        fn clear(key: &'static str) -> Self {
+            let old = std::env::var_os(key);
+            std::env::remove_var(key);
+            Self { key, old }
+        }
+    }
+
+    impl Drop for EnvGuard {
+        fn drop(&mut self) {
+            match self.old.take() {
+                Some(v) => std::env::set_var(self.key, v),
+                None => std::env::remove_var(self.key),
+            }
+        }
+    }
+
+    fn clear_service_env() -> (EnvGuard, EnvGuard, EnvGuard) {
+        (
+            EnvGuard::clear("MIZPAH_SERVICE"),
+            EnvGuard::clear("OTEL_SERVICE_NAME"),
+            EnvGuard::clear("SERVICE_NAME"),
+        )
+    }
 
     #[test]
     fn clap_accepts_project_flag_resolves() {
@@ -352,23 +370,23 @@ mod tests {
 
     #[test]
     fn clap_pipe_mode_without_service_defaults_to_cwd() {
+        let _lock = SERVICE_ENV_LOCK.lock().unwrap();
+        let _env = clear_service_env();
         let cli = Cli::try_parse_from(["mizpah", "--no-open"]).unwrap();
         assert!(cli.command.is_none());
         assert!(cli.service.is_none());
         let resolved = resolve_service(cli.service.as_deref());
-        let cwd = std::env::current_dir()
-            .ok()
-            .and_then(|d| d.canonicalize().ok())
-            .map(|d| d.display().to_string());
-        if let Some(cwd) = cwd {
-            assert_eq!(resolved, cwd);
-        } else {
-            assert_eq!(resolved, DEFAULT_SERVICE);
-        }
+        assert!(!resolved.is_empty());
+        assert!(
+            !resolved.contains('/'),
+            "expected short inferred slug, got {resolved:?}"
+        );
     }
 
     #[test]
     fn resolve_service_trims_and_falls_back_to_cwd() {
+        let _lock = SERVICE_ENV_LOCK.lock().unwrap();
+        let _env = clear_service_env();
         assert_eq!(resolve_service(Some("api")), "api");
         assert_eq!(resolve_service(Some("  api  ")), "api");
         let from_empty = resolve_service(Some(""));
@@ -377,6 +395,10 @@ mod tests {
         assert_eq!(from_empty, from_none);
         assert_eq!(from_ws, from_none);
         assert!(!from_none.is_empty());
+        assert!(
+            !from_none.contains('/'),
+            "expected short inferred slug, got {from_none:?}"
+        );
     }
 
     #[test]
@@ -468,9 +490,12 @@ mod tests {
     }
 
     #[test]
-    fn service_from_cwd_non_empty() {
-        let svc = service_from_cwd();
+    fn inferred_service_from_cwd_non_empty() {
+        let _lock = SERVICE_ENV_LOCK.lock().unwrap();
+        let _env = clear_service_env();
+        let svc = resolve_service(None);
         assert!(!svc.is_empty());
+        assert!(!svc.contains('/'));
     }
 
     #[test]

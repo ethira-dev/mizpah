@@ -10,7 +10,7 @@ order: 7
 
 | Flag | Description |
 |------|-------------|
-| `--service` / `-s` | Service name for this stdin stream (default: absolute cwd) |
+| `--service` / `-s` / `MIZPAH_SERVICE` | Service name for this stdin stream (default: `OTEL_SERVICE_NAME` / `SERVICE_NAME` / project manifests such as package.json, Cargo.toml, pyproject.toml, go.mod, … / git root / directory) |
 | `--host` | Bind/connect host (default `127.0.0.1`) |
 | `--port` / `-p` | Bind/connect port (default `3149`) |
 | `--max-bytes` | Ring buffer cap in bytes (default `1073741824`, hub only) |
@@ -35,7 +35,11 @@ order: 7
 | `mzp sql` | Run a `SELECT` against the hub snapshot |
 | `mzp script` | Run a line-oriented script (`query` / `aggregate`) |
 | `mzp tui` | Minimal terminal UI against a running hub |
-| `mzp mcp` | Stdio MCP server (hub at `:3149`, or `MIZPAH_URL`) |
+| `mzp setup` | Ensure hub, install MCP configs, print skill next steps (`--with-skill`, `--skip-mcp-install`) |
+| `mzp doctor` | Readiness checks (binary, hub, MCP configs, npx) |
+| `mzp why` | Incident summary for the last N minutes (`--minutes`, default 15) |
+| `mzp run -- <cmd…>` | Ensure hub, run command, forward stdout/stderr, emit `process.exit` |
+| `mzp mcp` | Stdio MCP server (auto-starts loopback hub; or `MIZPAH_URL`) |
 | `mzp mcp install` | Merge MCP config into Cursor / Claude / Codex |
 | `mzp mcp uninstall` | Remove those MCP entries |
 

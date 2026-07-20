@@ -8,6 +8,8 @@ The UI filter bar and `GET /api/logs?q=` evaluate [CEL](https://cel.dev/) agains
 
 Empty `q` matches everything.
 
+**Natural language:** the UI and `POST /api/nl-cel` compile phrases like `errors from api last 15 minutes` into CEL. MCP `search_logs` accepts the same via `nl`. Prefer CEL when you already know the expression.
+
 ## Bindings
 
 | Binding | Meaning |
