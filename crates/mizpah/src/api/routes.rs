@@ -1176,6 +1176,7 @@ mod tests {
                 max_bytes: 1024,
                 ttl_hours: 0,
             }),
+            auth: None,
         };
         let peer = PeerAddr("203.0.113.1:0".parse().unwrap());
         let result = post_update(peer, State(state)).await;

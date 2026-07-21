@@ -19,6 +19,56 @@ pub const DEFAULT_TRACE_FIELDS: &[&str] = &[
     "opid",
 ];
 
+/// Opt-in OIDC / token auth for shared hubs. Disabled by default.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct AuthConfig {
+    /// When false (default), the hub stays unauthenticated.
+    pub enabled: bool,
+    /// OIDC issuer URL (discovery base).
+    pub issuer_url: String,
+    /// Confidential OIDC client id.
+    pub client_id: String,
+    /// Client secret (prefer `MIZPAH_OIDC_CLIENT_SECRET` env).
+    pub client_secret: String,
+    /// Registered redirect URI (must match IdP app config).
+    pub redirect_uri: String,
+    /// OIDC scopes requested at login.
+    pub scopes: Vec<String>,
+    /// Exact email allowlist (union with [`Self::allowed_domains`]).
+    pub allowed_emails: Vec<String>,
+    /// Email domain allowlist (e.g. `example.com`).
+    pub allowed_domains: Vec<String>,
+    /// Bearer token for machine ingest (prefer `MIZPAH_INGEST_TOKEN`).
+    pub ingest_token: String,
+    /// Bearer token for MCP / API query (prefer `MIZPAH_API_TOKEN`).
+    pub api_token: String,
+    /// Session cookie lifetime in hours.
+    pub session_ttl_hours: u64,
+}
+
+impl Default for AuthConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            issuer_url: String::new(),
+            client_id: String::new(),
+            client_secret: String::new(),
+            redirect_uri: String::new(),
+            scopes: vec![
+                "openid".into(),
+                "profile".into(),
+                "email".into(),
+            ],
+            allowed_emails: Vec::new(),
+            allowed_domains: Vec::new(),
+            ingest_token: String::new(),
+            api_token: String::new(),
+            session_ttl_hours: 12,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct MizpahConfig {
@@ -36,6 +86,8 @@ pub struct MizpahConfig {
     pub persist_dir: Option<String>,
     /// Refuse remote/SSH ingest helpers when set (Phase L).
     pub secure: bool,
+    /// Optional OIDC / token auth (see [`AuthConfig`]).
+    pub auth: AuthConfig,
 }
 
 impl Default for MizpahConfig {
@@ -51,6 +103,7 @@ impl Default for MizpahConfig {
                 .collect(),
             persist_dir: None,
             secure: false,
+            auth: AuthConfig::default(),
         }
     }
 }
@@ -205,6 +258,30 @@ mod tests {
         let back: MizpahConfig = toml::from_str(&s).unwrap();
         assert_eq!(back.port, 4000);
         assert!(!back.trace_fields.is_empty());
+        assert!(!back.auth.enabled);
+    }
+
+    #[test]
+    fn auth_section_roundtrip() {
+        let c = MizpahConfig {
+            auth: AuthConfig {
+                enabled: true,
+                issuer_url: "https://idp.example".into(),
+                client_id: "mizpah".into(),
+                client_secret: "s".into(),
+                redirect_uri: "https://logs.example/api/auth/callback".into(),
+                allowed_domains: vec!["example.com".into()],
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let s = toml::to_string_pretty(&c).unwrap();
+        assert!(s.contains("[auth]"));
+        assert!(s.contains("issuerUrl"));
+        let back: MizpahConfig = toml::from_str(&s).unwrap();
+        assert!(back.auth.enabled);
+        assert_eq!(back.auth.issuer_url, "https://idp.example");
+        assert_eq!(back.auth.allowed_domains, vec!["example.com".to_string()]);
     }
 
     #[test]

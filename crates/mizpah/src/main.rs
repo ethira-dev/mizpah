@@ -76,29 +76,46 @@ fn is_bind_loopback(host: &str) -> bool {
 }
 
 /// Validate bind host policy. Returns `Err(message)` when bind must be refused.
-pub(crate) fn check_bind_allowed(host: &str, allow_remote: bool) -> Result<(), String> {
+pub(crate) fn check_bind_allowed(
+    host: &str,
+    allow_remote: bool,
+    auth_enabled: bool,
+) -> Result<(), String> {
     if is_bind_loopback(host) {
         return Ok(());
     }
     if allow_remote {
-        eprintln!(
-            "warning: binding hub on non-loopback address {host:?}\n\
-             The hub has no authentication: anyone who can reach it can ingest logs,\n\
-             query data, and trigger investigate/update. Prefer SSH tunnels or a reverse\n\
-             proxy with auth when exposing Mizpah beyond this machine."
-        );
+        if auth_enabled {
+            eprintln!(
+                "warning: binding hub on non-loopback address {host:?}\n\
+                 OIDC protects the UI/query APIs; machine ingest still needs loopback or\n\
+                 MIZPAH_INGEST_TOKEN. Prefer TLS termination (reverse proxy) in front of the hub."
+            );
+        } else {
+            eprintln!(
+                "warning: binding hub on non-loopback address {host:?}\n\
+                 The hub has no authentication: anyone who can reach it can ingest logs,\n\
+                 query data, and trigger investigate/update. Prefer SSH tunnels, enable\n\
+                 [auth] in config.toml, or a reverse proxy with auth when exposing Mizpah\n\
+                 beyond this machine."
+            );
+        }
         return Ok(());
     }
     Err(format!(
         "error: refusing to bind hub on non-loopback address {host:?}\n\
          hint: use --host 127.0.0.1 (default), or pass --allow-remote if you understand\n\
-         that ingest/API are unauthenticated on the bound interface"
+         that ingest/API are exposed on the bound interface"
     ))
 }
 
 /// Validate bind policy, printing the refusal message on error (no process exit).
-pub(crate) fn ensure_bind_allowed_result(host: &str, allow_remote: bool) -> Result<(), String> {
-    check_bind_allowed(host, allow_remote).map_err(|msg| {
+pub(crate) fn ensure_bind_allowed_result(
+    host: &str,
+    allow_remote: bool,
+    auth_enabled: bool,
+) -> Result<(), String> {
+    check_bind_allowed(host, allow_remote, auth_enabled).map_err(|msg| {
         eprintln!("{msg}");
         msg
     })
@@ -178,7 +195,8 @@ where
 
     match bind(addr) {
         Ok(listener) => {
-            if ensure_bind_allowed_result(&host, allow_remote).is_err() {
+            let auth_enabled = crate::config::MizpahConfig::load().auth.enabled;
+            if ensure_bind_allowed_result(&host, allow_remote, auth_enabled).is_err() {
                 return Err(2);
             }
             if let Err(err) = on_hub(
@@ -246,6 +264,7 @@ async fn run_hub(
     service: String,
     project_dir: PathBuf,
 ) -> Result<(), error::HubLifecycleError> {
+    unix_process::harden_process();
     std_listener.set_nonblocking(true)?;
     let listener = tokio::net::TcpListener::from_std(std_listener)?;
 
@@ -277,10 +296,17 @@ async fn run_hub(
         ttl_hours,
     });
     update_mgr.spawn_background_checker();
+    let auth = match api::try_build_auth_state(&crate::config::MizpahConfig::load().auth).await {
+        Ok(auth) => auth,
+        Err(err) => {
+            return Err(error::HubLifecycleError::msg(format!("auth config: {err}")));
+        }
+    };
     let state = AppState {
         store: Arc::clone(&store),
         project_dir,
         update: update_mgr,
+        auth,
     };
     let app = api::router(state);
 
@@ -413,9 +439,10 @@ mod tests {
 
     #[test]
     fn check_bind_allowed_policy() {
-        assert!(check_bind_allowed("127.0.0.1", false).is_ok());
-        assert!(check_bind_allowed("0.0.0.0", true).is_ok());
-        assert!(check_bind_allowed("0.0.0.0", false).is_err());
+        assert!(check_bind_allowed("127.0.0.1", false, false).is_ok());
+        assert!(check_bind_allowed("0.0.0.0", true, false).is_ok());
+        assert!(check_bind_allowed("0.0.0.0", true, true).is_ok());
+        assert!(check_bind_allowed("0.0.0.0", false, false).is_err());
     }
 
     #[test]
@@ -642,9 +669,9 @@ mod tests {
 
     #[test]
     fn ensure_bind_allowed_result_ok_and_err() {
-        assert!(ensure_bind_allowed_result("127.0.0.1", false).is_ok());
-        assert!(ensure_bind_allowed_result("0.0.0.0", true).is_ok());
-        assert!(ensure_bind_allowed_result("0.0.0.0", false).is_err());
+        assert!(ensure_bind_allowed_result("127.0.0.1", false, false).is_ok());
+        assert!(ensure_bind_allowed_result("0.0.0.0", true, false).is_ok());
+        assert!(ensure_bind_allowed_result("0.0.0.0", false, false).is_err());
     }
 
     #[test]

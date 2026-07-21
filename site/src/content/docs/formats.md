@@ -54,6 +54,8 @@ When a pack overlaps a stable Mizpah id (`syslog_log` → `syslog`, `bunyan_log`
 
 ### SIEM / SOC
 
+Recipe for pushing several of these into one hub: [SIEM → one hub](../siem-ingest/).
+
 | Pack | Notes |
 |------|--------|
 | `cef_log`, `leef_log`, `ocsf_log`, `gelf_log`, `splunk_hec_log`, `sentinel_common_log` | Interchange |

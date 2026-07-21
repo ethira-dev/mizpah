@@ -185,6 +185,12 @@ mod tests {
 
     #[tokio::test]
     async fn partial_update_persists_when_annotation_remains() {
+        let _guard = crate::test_support::env_lock();
+        let cfg = tempfile::tempdir().unwrap();
+        let old_cfg = std::env::var_os("MIZPAH_CONFIG_DIR");
+        let old_file = std::env::var_os("MIZPAH_USE_FILE_DEK");
+        std::env::set_var("MIZPAH_CONFIG_DIR", cfg.path());
+        std::env::set_var("MIZPAH_USE_FILE_DEK", "1");
         let dir = tempfile::tempdir().unwrap();
         let store = Store::new(1_000_000);
         store.enable_persist(dir.path()).await.unwrap();
@@ -201,5 +207,13 @@ mod tests {
         let ann = store.get_annotation(id).await.unwrap();
         assert!(ann.marked);
         assert_eq!(ann.tags, vec!["tag".to_string()]);
+        match old_cfg {
+            Some(v) => std::env::set_var("MIZPAH_CONFIG_DIR", v),
+            None => std::env::remove_var("MIZPAH_CONFIG_DIR"),
+        }
+        match old_file {
+            Some(v) => std::env::set_var("MIZPAH_USE_FILE_DEK", v),
+            None => std::env::remove_var("MIZPAH_USE_FILE_DEK"),
+        }
     }
 }

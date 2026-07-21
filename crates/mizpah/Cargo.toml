@@ -37,8 +37,11 @@ clap = { version = "4", features = ["derive", "env"] }
 directories = "6"
 flate2 = "1.1.9"
 futures-util = "0.3"
+aes-gcm = "0.10"
 getrandom = "0.3"
+hkdf = "0.12"
 hmac = "0.12"
+keyring = "3"
 libc = "0.2"
 open = "5"
 reqwest = { version = "0.13", default-features = false, features = ["json", "query", "rustls-no-provider", "stream"] }
@@ -82,6 +85,11 @@ tower-http = { version = "0.7", features = ["cors"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 url = "2"
+openidconnect = { version = "4", features = ["reqwest", "rustls-tls"] }
+zeroize = { version = "1", features = ["derive"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+security-framework = "3"
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }

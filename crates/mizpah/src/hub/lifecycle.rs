@@ -20,7 +20,7 @@ pub fn hub_url(host: &str, port: u16) -> String {
 
 pub async fn probe_hub(host: &str, port: u16) -> bool {
     crate::util::ensure_rustls_crypto_provider();
-    let url = format!("{}/api/stats", hub_url(host, port));
+    let url = format!("{}/api/health", hub_url(host, port));
     let Ok(client) = reqwest::Client::builder()
         .timeout(Duration::from_secs(2))
         .build()
@@ -41,7 +41,7 @@ fn is_loopback_host(host: &str) -> bool {
 }
 
 /// Ensure a healthy hub is reachable. Spawns a detached hub for loopback hosts, or for
-/// non-loopback hosts when `allow_remote` is set (unauthenticated bind — use with care).
+/// non-loopback hosts when `allow_remote` is set (expose with care; enable `[auth]` for OIDC).
 /// When `project` is `None`, the current working directory is used (same as attach).
 pub async fn ensure_hub(
     host: &str,

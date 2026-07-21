@@ -35,6 +35,7 @@ pub enum HubClientError {
 pub struct HubClient {
     http: Client,
     base_url: String,
+    api_token: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -62,14 +63,26 @@ impl HubClient {
     pub fn new(base_url: impl Into<String>) -> Self {
         crate::util::ensure_rustls_crypto_provider();
         let base = base_url.into().trim_end_matches('/').to_string();
+        let api_token = std::env::var("MIZPAH_API_TOKEN")
+            .ok()
+            .map(|t| t.trim().to_string())
+            .filter(|t| !t.is_empty());
         Self {
             http: Client::new(),
             base_url: base,
+            api_token,
         }
     }
 
     pub fn clamp_limit(limit: Option<usize>) -> usize {
         limit.unwrap_or(DEFAULT_LIMIT).clamp(1, MAX_LIMIT)
+    }
+
+    fn apply_auth(&self, req: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
+        match &self.api_token {
+            Some(token) => req.bearer_auth(token),
+            None => req,
+        }
     }
 
     async fn get_json<T: for<'de> Deserialize<'de>>(
@@ -78,7 +91,11 @@ impl HubClient {
         query: &[(&str, String)],
     ) -> Result<T, HubClientError> {
         let url = format!("{}{path}", self.base_url);
-        let response = self.http.get(&url).query(query).send().await.map_err(|e| {
+        let response = self
+            .apply_auth(self.http.get(&url).query(query))
+            .send()
+            .await
+            .map_err(|e| {
             if e.is_connect() || e.is_timeout() {
                 HubClientError::Unreachable {
                     url: self.base_url.clone(),
@@ -190,9 +207,7 @@ impl HubClient {
             "limit": Self::clamp_limit(limit),
         });
         let response = self
-            .http
-            .post(&url)
-            .json(&body)
+            .apply_auth(self.http.post(&url).json(&body))
             .send()
             .await
             .map_err(|e| {

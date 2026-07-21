@@ -14,7 +14,7 @@ struct IngestBody<'a> {
 type AttachError = Box<dyn std::error::Error + Send + Sync>;
 
 async fn health_check(client: &reqwest::Client, base_url: &str) -> Result<(), AttachError> {
-    let health = format!("{base_url}/api/stats");
+    let health = format!("{base_url}/api/health");
     let resp = client
         .get(&health)
         .send()
@@ -26,6 +26,13 @@ async fn health_check(client: &reqwest::Client, base_url: &str) -> Result<(), At
     Ok(())
 }
 
+fn apply_ingest_auth(req: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
+    match std::env::var("MIZPAH_INGEST_TOKEN") {
+        Ok(token) if !token.trim().is_empty() => req.bearer_auth(token.trim()),
+        _ => req,
+    }
+}
+
 async fn forward_line(
     client: &reqwest::Client,
     ingest_url: &str,
@@ -34,7 +41,10 @@ async fn forward_line(
     mzp: &MzpMeta,
 ) -> Result<(), AttachError> {
     let body = IngestBody { service, line, mzp };
-    match client.post(ingest_url).json(&body).send().await {
+    match apply_ingest_auth(client.post(ingest_url).json(&body))
+        .send()
+        .await
+    {
         Ok(r) if r.status().is_success() => Ok(()),
         Ok(r) if r.status() == reqwest::StatusCode::CONFLICT => {
             warn!(%service, "service disconnected on hub; attach exiting");
@@ -172,7 +182,7 @@ mod tests {
 
         crate::util::ensure_rustls_crypto_provider();
         let app = Router::new().route(
-            "/api/stats",
+            "/api/health",
             get(|| async { axum::http::StatusCode::INTERNAL_SERVER_ERROR }),
         );
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -197,7 +207,7 @@ mod tests {
         crate::util::ensure_rustls_crypto_provider();
         let app = Router::new()
             .route(
-                "/api/stats",
+                "/api/health",
                 axum::routing::get(|| async { axum::http::StatusCode::OK }),
             )
             .route(

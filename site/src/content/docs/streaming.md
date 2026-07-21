@@ -21,10 +21,14 @@ worker | mzp --service worker
 
 Useful flags: `--no-open`, `--max-bytes` (default `1073741824`), `--ttl-hours` (default `24`; `0` disables), `--project` / `MIZPAH_PROJECT` (cwd for Check with Claude / Cursor).
 
+The ring is memory-only unless you set `persistDir` in `config.toml`. Persist segments and the temporary self-update spill are **encrypted at rest** automatically (OS keychain DEK; no crypto setup). Details: [Storage security](../storage-security/).
+
 ## HTTP surface (hub)
 
 | Method | Path | Purpose |
 |--------|------|---------|
+| `GET` | `/api/health` | Liveness probe (always public; used by hub discovery) |
+| `GET`/`POST` | `/api/auth/*` | OIDC login / callback / logout / me (when `[auth]` enabled) |
 | `POST` | `/api/ingest` | Single line (`service`, `line`, optional `cmd`, `mzp`) |
 | `POST` | `/api/ingest/batch` | Up to 128 lines per request |
 | `GET` | `/api/logs` | Newest-first entries; `q` (CEL), `service`, `cursor`, `limit`, `from`, `to` |
@@ -71,7 +75,13 @@ Each stored entry is roughly:
 - `data`: parsed JSON object, or `{ "_raw": "…" }` for non-JSON.
 - `_mzp`: receiver metadata (always present; client may supply it on ingest).
 
-Config lives under the Mizpah config dir (`MIZPAH_CONFIG_DIR` or the platform project config path): `config.toml`, plus `formats/`, `themes/`, `scripts/`.
+Config lives under the Mizpah config dir (`MIZPAH_CONFIG_DIR` or the platform project config path): `config.toml`, plus `formats/`, `themes/`, `scripts/`. Optional durable buffer:
+
+```toml
+persistDir = "persist"   # encrypted NDJSON segments; relative paths resolve under the config dir
+```
+
+See [Storage security](../storage-security/) for encryption, retention, and threat model.
 
 ## Normalization
 
@@ -91,4 +101,4 @@ Config lives under the Mizpah config dir (`MIZPAH_CONFIG_DIR` or the platform pr
 - CEL filter bar with autocomplete from discovered properties.
 - Row click opens detail: JSON tree/raw, neighbor context, Check with Claude / Cursor.
 
-See [CEL](../cel/) for query bindings, [Log formats](../formats/) for detection and packs, [SQL & aggregations](../sql/) for analytics, and [MCP](../mcp/) for agent access to the same APIs.
+See [CEL](../cel/) for query bindings, [Log formats](../formats/) for detection and packs, [SIEM → one hub](../siem-ingest/) for multi-source SOC recipes, [SQL & aggregations](../sql/) for analytics, [Storage security](../storage-security/) for at-rest encryption, and [MCP](../mcp/) for agent access to the same APIs. Optional shared-hub login: [Custom auth (OIDC)](../auth/).

@@ -18,6 +18,8 @@ order: 7
 | `--no-open` | Do not open a browser when starting as hub |
 | `--project` / `MIZPAH_PROJECT` | Project directory for Check with Claude/Cursor (default: hub cwd) |
 
+Durable on-disk buffer (optional) is configured in `config.toml` as `persistDir` — not a CLI flag. Segments are encrypted at rest automatically; see [Storage security](../storage-security/).
+
 ## Subcommands
 
 | Command | Description |
@@ -43,4 +45,4 @@ order: 7
 | `mzp mcp install` | Merge MCP config into Cursor / Claude / Codex |
 | `mzp mcp uninstall` | Remove those MCP entries |
 
-See [attach](../attach/), [streaming](../streaming/), and [MCP](../mcp/) for behavior details.
+See [attach](../attach/), [streaming](../streaming/), [storage security](../storage-security/), and [MCP](../mcp/) for behavior details.

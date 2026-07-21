@@ -47,6 +47,7 @@ Works with Cursor, Claude Code, Codex, and other [Agent Skills](https://agentski
 
 - [Install](../install/)
 - [Streaming & hub protocol](../streaming/)
+- [Storage security](../storage-security/)
 - [Attach sources](../attach/)
 - [CEL](../cel/)
 - [Log formats](../formats/)

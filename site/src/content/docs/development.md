@@ -31,10 +31,17 @@ CI: `.github/workflows/ci.yml` (fmt, clippy, test, cargo-deny, machete, miri, au
 
 ## Hub trust model
 
-The hub exposes unauthenticated ingest, query, investigate, and update APIs. Binding defaults to `127.0.0.1`.
+By default the hub is **unauthenticated**: anyone who can reach the bind address can ingest, query, investigate, and update. Binding defaults to `127.0.0.1`.
 
 - Loopback binds (`127.0.0.1`, `::1`, `localhost`) are always allowed.
-- Non-loopback binds require `--allow-remote` and print a warning. Prefer an SSH tunnel or an authenticating reverse proxy if you expose Mizpah beyond the machine.
+- Non-loopback binds require `--allow-remote` and print a warning.
+- For a shared server, enable **[Custom auth (OIDC)](../auth/)**, or put an authenticating reverse proxy / SSH tunnel in front.
+
+`POST /api/update` remains **loopback-only** even when OIDC is enabled.
+
+**Disk vs network:** persist segments and the self-update spill are encrypted at rest with a zero-config OS keychain DEK (see [Storage security](../storage-security/)). That protects files on disk from other local users; it does **not** replace bind policy or OIDC for the HTTP API.
+
+Full setup guide (IdP app, `config.toml`, TLS, ingest/API tokens, troubleshooting): **[Custom auth (OIDC)](../auth/)**.
 
 ## Architecture
 

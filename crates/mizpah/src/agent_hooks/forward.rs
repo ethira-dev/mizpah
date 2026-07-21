@@ -74,15 +74,18 @@ pub(crate) async fn forward_event_to_hub(
         mzp: &'a MzpMeta,
     }
 
-    let _ = client
-        .post(&url)
-        .json(&Body {
-            service: &src.service,
-            line: &line,
-            mzp: &mzp,
-        })
-        .send()
-        .await;
+    let mut req = client.post(&url).json(&Body {
+        service: &src.service,
+        line: &line,
+        mzp: &mzp,
+    });
+    if let Ok(token) = std::env::var("MIZPAH_INGEST_TOKEN") {
+        let token = token.trim();
+        if !token.is_empty() {
+            req = req.bearer_auth(token);
+        }
+    }
+    let _ = req.send().await;
     Ok(())
 }
 

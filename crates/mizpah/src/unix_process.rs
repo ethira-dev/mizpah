@@ -6,6 +6,29 @@ use std::process::Command;
 #[cfg(windows)]
 use std::process::{Command, Stdio};
 
+/// Best-effort process hardening for the hub: disable core dumps and (on Linux)
+/// mark the process non-dumpable so casual same-user `ptrace` attach fails.
+///
+/// Does not stop root / `CAP_SYS_PTRACE` or a determined same-user attacker who
+/// replaces the binary. Safe to call multiple times.
+pub fn harden_process() {
+    #[cfg(unix)]
+    {
+        // SAFETY: setrlimit with RLIMIT_CORE is a standard hardening call.
+        let lim = libc::rlimit {
+            rlim_cur: 0,
+            rlim_max: 0,
+        };
+        let _ = unsafe { libc::setrlimit(libc::RLIMIT_CORE, &lim) };
+
+        #[cfg(target_os = "linux")]
+        {
+            // SAFETY: prctl(PR_SET_DUMPABLE) has well-defined args.
+            let _ = unsafe { libc::prctl(libc::PR_SET_DUMPABLE, 0, 0, 0, 0) };
+        }
+    }
+}
+
 /// Return whether `pid` refers to a live process (or one we may signal).
 pub fn process_exists(pid: u32) -> bool {
     #[cfg(unix)]
@@ -120,6 +143,12 @@ pub fn apply_pre_exec_setsid(cmd: &mut Command) {
 #[cfg(all(test, not(miri)))]
 mod ffi_tests {
     use super::*;
+
+    #[test]
+    fn harden_process_is_idempotent() {
+        harden_process();
+        harden_process();
+    }
 
     #[test]
     fn process_exists_current_pid() {

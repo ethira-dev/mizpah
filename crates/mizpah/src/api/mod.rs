@@ -1,14 +1,19 @@
 //! Axum HTTP / WebSocket API for the hub.
 
+mod auth;
 mod routes;
 mod static_files;
 mod ws;
 
+pub use auth::{try_build_auth_state, AuthState};
+
+use axum::http::{header, Method};
+use axum::middleware;
 use axum::routing::{get, post};
 use axum::Router;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tower_http::cors::CorsLayer;
+use tower_http::cors::{AllowOrigin, CorsLayer};
 
 use crate::store::Store;
 use crate::update::UpdateManager;
@@ -18,12 +23,28 @@ pub struct AppState {
     pub store: Arc<Store>,
     pub project_dir: PathBuf,
     pub update: Arc<UpdateManager>,
+    pub auth: Option<AuthState>,
 }
 
 pub fn router(state: AppState) -> Router {
-    Router::new()
+    let auth_enabled = state.auth.is_some();
+
+    let public_auth = Router::new()
+        .route("/api/health", get(auth::health))
+        .route("/api/auth/login", get(auth::login))
+        .route("/api/auth/callback", get(auth::callback))
+        .route("/api/auth/logout", post(auth::logout))
+        .route("/api/auth/me", get(auth::me));
+
+    let ingest = Router::new()
         .route("/api/ingest", post(routes::ingest))
         .route("/api/ingest/batch", post(routes::ingest_batch))
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            auth::require_ingest,
+        ));
+
+    let protected = Router::new()
         .route("/api/logs", get(routes::list_logs))
         .route("/api/services", get(routes::list_services))
         .route("/api/services/disconnect", post(routes::disconnect_service))
@@ -54,8 +75,33 @@ pub fn router(state: AppState) -> Router {
             get(routes::get_update).post(routes::post_update),
         )
         .route("/ws", get(ws::ws_handler))
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            auth::require_session,
+        ));
+
+    let cors = if auth_enabled {
+        // Same-origin SPA + cookie sessions: mirror Origin, no wildcards with credentials.
+        CorsLayer::new()
+            .allow_origin(AllowOrigin::mirror_request())
+            .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
+            .allow_headers([
+                header::AUTHORIZATION,
+                header::CONTENT_TYPE,
+                header::ACCEPT,
+                header::COOKIE,
+            ])
+            .allow_credentials(true)
+    } else {
+        CorsLayer::permissive()
+    };
+
+    Router::new()
+        .merge(public_auth)
+        .merge(ingest)
+        .merge(protected)
         .fallback(static_files::static_handler)
-        .layer(CorsLayer::permissive())
+        .layer(cors)
         .with_state(state)
 }
 
@@ -80,11 +126,117 @@ mod tests {
                 max_bytes: 1_000_000,
                 ttl_hours: 0,
             }),
+            auth: None,
         }
     }
 
     fn test_app() -> Router {
         router(test_state(Arc::new(Store::new(1_000_000))))
+    }
+
+    fn auth_app(api_token: &str, ingest_token: &str) -> Router {
+        let mut state = test_state(Arc::new(Store::new(1_000_000)));
+        state.auth = Some(auth::test_auth_state(Some(api_token), Some(ingest_token)));
+        router(state)
+    }
+
+    #[tokio::test]
+    async fn health_always_public() {
+        let app = auth_app("api-secret", "ingest-secret");
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/health")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn protected_route_requires_auth_when_enabled() {
+        let app = auth_app("api-secret", "ingest-secret");
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/logs")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+
+        let app = auth_app("api-secret", "ingest-secret");
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/logs")
+                    .header("authorization", "Bearer api-secret")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn ingest_allows_loopback_without_token() {
+        use axum::extract::ConnectInfo;
+        use std::net::SocketAddr;
+
+        let app = auth_app("api-secret", "ingest-secret");
+        let mut req = Request::builder()
+            .method("POST")
+            .uri("/api/ingest")
+            .header("content-type", "application/json")
+            .body(Body::from(
+                json!({"service":"api","line":"{\"msg\":\"hi\"}"}).to_string(),
+            ))
+            .unwrap();
+        req.extensions_mut()
+            .insert(ConnectInfo(SocketAddr::from(([127, 0, 0, 1], 9))));
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn ingest_remote_requires_token() {
+        let app = auth_app("api-secret", "ingest-secret");
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/ingest")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({"service":"api","line":"{\"msg\":\"hi\"}"}).to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+
+        let app = auth_app("api-secret", "ingest-secret");
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/ingest")
+                    .header("content-type", "application/json")
+                    .header("authorization", "Bearer ingest-secret")
+                    .body(Body::from(
+                        json!({"service":"api","line":"{\"msg\":\"hi\"}"}).to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
     }
 
     #[tokio::test]

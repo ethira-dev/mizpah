@@ -51,6 +51,7 @@ pub(crate) mod hub {
                 max_bytes: 1024 * 1024,
                 ttl_hours: 0,
             }),
+            auth: None,
         };
         let app = api::router(state);
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -95,7 +96,7 @@ mod tests {
         store.push_line("api", r#"{"msg":"hi"}"#).await;
         let client = reqwest::Client::new();
         let resp = client
-            .get(format!("{base}/api/stats"))
+            .get(format!("{base}/api/health"))
             .send()
             .await
             .unwrap();

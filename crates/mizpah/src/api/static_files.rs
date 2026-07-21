@@ -76,6 +76,7 @@ mod tests {
                 max_bytes: 1_000_000,
                 ttl_hours: 0,
             }),
+            auth: None,
         })
     }
 

@@ -114,7 +114,7 @@ pub struct Cli {
     #[arg(long, env = "MIZPAH_PROJECT")]
     pub project: Option<PathBuf>,
 
-    /// Allow binding the hub on a non-loopback address (unauthenticated ingest).
+    /// Allow binding the hub on a non-loopback address (prefer `[auth]` OIDC when exposing).
     /// Without this flag, only 127.0.0.1 / ::1 / localhost are accepted.
     #[arg(long, default_value_t = false)]
     pub allow_remote: bool,
@@ -165,7 +165,7 @@ pub enum Commands {
         #[arg(long, env = "MIZPAH_PROJECT", global = true)]
         project: Option<PathBuf>,
 
-        /// Allow binding on a non-loopback address (unauthenticated ingest)
+        /// Allow binding on a non-loopback address (prefer `[auth]` OIDC when exposing)
         #[arg(long, default_value_t = false, global = true)]
         allow_remote: bool,
     },
@@ -629,7 +629,8 @@ impl CliDeps {
         if let Some(r) = &self.bind_check {
             return r.clone();
         }
-        crate::check_bind_allowed(host, allow_remote)
+        let auth_enabled = crate::config::MizpahConfig::load().auth.enabled;
+        crate::check_bind_allowed(host, allow_remote, auth_enabled)
     }
 
     fn resolve_open_target(

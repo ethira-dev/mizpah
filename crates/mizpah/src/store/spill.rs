@@ -1,22 +1,21 @@
-//! Secure on-disk spill of the log buffer across self-update restarts.
+//! Encrypted on-disk spill of the log buffer across self-update restarts.
 
 use super::annotate::{AnnotatedEntry, Annotation};
+use super::crypto::{load_log_crypto_at, LogCrypto};
 use super::ingest::estimate_bytes;
 use super::Store;
 use crate::models::LogEntry;
 use crate::properties::{rebuild_properties_by_service, rebuild_properties_from_entries};
 use crate::util;
 use chrono::Utc;
-use hmac::{Hmac, Mac};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use sha2::Sha256;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fs::{self, File, OpenOptions};
-use std::io::{self, BufRead, BufReader, Read, Write};
+use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering;
-type HmacSha256 = Hmac<Sha256>;
+use std::sync::Arc;
 
 const SPILL_KIND_ANNOTATION: &str = "annotation";
 
@@ -29,12 +28,12 @@ struct SpillAnnotationLine {
     annotation: Annotation,
 }
 
-const SPILL_BODY: &str = "update-spill.ndjson";
-const SPILL_KEY: &str = "update-spill.key";
-const SPILL_HMAC: &str = "update-spill.hmac";
-/// Per-line cap to limit attacker-controlled JSON bombs during restore.
-const MAX_LINE_BYTES: u64 = 16 * 1024 * 1024;
-/// Slack above `max_bytes` for NDJSON framing overhead.
+const SPILL_BODY: &str = "update-spill.mzp";
+/// Legacy plaintext spill artifacts (cleaned up on restore/spill).
+const LEGACY_SPILL_BODY: &str = "update-spill.ndjson";
+const LEGACY_SPILL_KEY: &str = "update-spill.key";
+const LEGACY_SPILL_HMAC: &str = "update-spill.hmac";
+/// Cap sealed spill size (plaintext was capped similarly).
 const SIZE_SLACK: u64 = 1024 * 1024;
 
 #[derive(Debug, thiserror::Error)]
@@ -51,19 +50,19 @@ impl SpillError {
     }
 }
 
-fn spill_paths(dir: &Path) -> (PathBuf, PathBuf, PathBuf) {
-    (
-        dir.join(SPILL_BODY),
-        dir.join(SPILL_KEY),
-        dir.join(SPILL_HMAC),
-    )
+fn spill_body_path(dir: &Path) -> PathBuf {
+    dir.join(SPILL_BODY)
 }
 
 /// Remove spill artifacts if present. Best-effort.
 pub fn cleanup_spill_artifacts(dir: &Path) {
-    let (body, key, mac) = spill_paths(dir);
-    for path in [body, key, mac] {
-        let _ = fs::remove_file(path);
+    for name in [
+        SPILL_BODY,
+        LEGACY_SPILL_BODY,
+        LEGACY_SPILL_KEY,
+        LEGACY_SPILL_HMAC,
+    ] {
+        let _ = fs::remove_file(dir.join(name));
     }
 }
 
@@ -141,64 +140,12 @@ fn private_temp_path(final_path: &Path) -> PathBuf {
     final_path.with_file_name(format!(".{name}.tmp.{}", std::process::id()))
 }
 
-fn write_private_bytes(path: &Path, bytes: &[u8]) -> Result<(), SpillError> {
-    let tmp = private_temp_path(path);
-    {
-        let mut f = open_new_private_file(&tmp)?;
-        f.write_all(bytes)?;
-        f.sync_all()?;
-    }
-    if path.exists() {
-        refuse_symlink(path)?;
-    }
-    fs::rename(&tmp, path)?;
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let _ = fs::set_permissions(path, fs::Permissions::from_mode(0o600));
-    }
-    Ok(())
-}
-
-fn hex_encode(bytes: &[u8]) -> String {
-    const HEX: &[u8; 16] = b"0123456789abcdef";
-    let mut out = String::with_capacity(bytes.len() * 2);
-    for &b in bytes {
-        out.push(HEX[(b >> 4) as usize] as char);
-        out.push(HEX[(b & 0xf) as usize] as char);
-    }
-    out
-}
-
-fn hex_decode(s: &str) -> Result<Vec<u8>, SpillError> {
-    let s = s.trim();
-    if s.len() % 2 != 0 {
-        return Err(SpillError::msg("invalid hex length"));
-    }
-    let mut out = Vec::with_capacity(s.len() / 2);
-    let bytes = s.as_bytes();
-    let nibble = |c: u8| -> Result<u8, SpillError> {
-        match c {
-            b'0'..=b'9' => Ok(c - b'0'),
-            b'a'..=b'f' => Ok(c - b'a' + 10),
-            b'A'..=b'F' => Ok(c - b'A' + 10),
-            _ => Err(SpillError::msg("invalid hex digit")),
-        }
-    };
-    for chunk in bytes.chunks(2) {
-        out.push((nibble(chunk[0])? << 4) | nibble(chunk[1])?);
-    }
-    Ok(out)
-}
-
-fn random_key() -> Result<[u8; 32], SpillError> {
-    let mut key = [0u8; 32];
-    getrandom::fill(&mut key).map_err(|e| SpillError::msg(format!("getrandom failed: {e}")))?;
-    Ok(key)
+fn disk_crypto_at(dir: &Path) -> Result<Arc<LogCrypto>, SpillError> {
+    load_log_crypto_at(dir).map_err(|e| SpillError::msg(e.to_string()))
 }
 
 impl Store {
-    /// Spill the current buffer for a self-update restart (HMAC-protected).
+    /// Spill the current buffer for a self-update restart (encrypted at rest).
     pub async fn spill_for_update(&self) -> Result<(), SpillError> {
         let dir = util::config_dir()?;
         self.spill_for_update_to(&dir).await
@@ -215,9 +162,7 @@ impl Store {
 
     pub(crate) async fn spill_for_update_to(&self, dir: &Path) -> Result<(), SpillError> {
         ensure_secure_config_dir(dir)?;
-        let (body_path, key_path, hmac_path) = spill_paths(dir);
-
-        // Clear any previous artifacts first.
+        let body_path = spill_body_path(dir);
         cleanup_spill_artifacts(dir);
 
         let (entries, annotations): (Vec<LogEntry>, Vec<AnnotatedEntry>) = {
@@ -234,41 +179,36 @@ impl Store {
             (entries, annotations)
         };
 
-        let tmp_body = private_temp_path(&body_path);
-        let key = random_key()?;
-        let mut mac =
-            HmacSha256::new_from_slice(&key).map_err(|e| SpillError::msg(e.to_string()))?;
-
-        {
-            let mut file = open_new_private_file(&tmp_body)?;
-            for entry in &entries {
-                let line = serde_json::to_vec(entry)
-                    .map_err(|e| SpillError::msg(format!("serialize spill entry: {e}")))?;
-                file.write_all(&line)?;
-                file.write_all(b"\n")?;
-                mac.update(&line);
-                mac.update(b"\n");
-            }
-            for ann in &annotations {
-                let line = SpillAnnotationLine {
-                    spill_kind: SPILL_KIND_ANNOTATION.into(),
-                    id: ann.id,
-                    annotation: ann.annotation.clone(),
-                };
-                let bytes = serde_json::to_vec(&line)
-                    .map_err(|e| SpillError::msg(format!("serialize spill annotation: {e}")))?;
-                file.write_all(&bytes)?;
-                file.write_all(b"\n")?;
-                mac.update(&bytes);
-                mac.update(b"\n");
-            }
-            file.sync_all()?;
+        let mut plain = Vec::new();
+        for entry in &entries {
+            let line = serde_json::to_vec(entry)
+                .map_err(|e| SpillError::msg(format!("serialize spill entry: {e}")))?;
+            plain.extend_from_slice(&line);
+            plain.push(b'\n');
+        }
+        for ann in &annotations {
+            let line = SpillAnnotationLine {
+                spill_kind: SPILL_KIND_ANNOTATION.into(),
+                id: ann.id,
+                annotation: ann.annotation.clone(),
+            };
+            let bytes = serde_json::to_vec(&line)
+                .map_err(|e| SpillError::msg(format!("serialize spill annotation: {e}")))?;
+            plain.extend_from_slice(&bytes);
+            plain.push(b'\n');
         }
 
-        let digest = mac.finalize().into_bytes();
-        write_private_bytes(&key_path, hex_encode(&key).as_bytes())?;
-        write_private_bytes(&hmac_path, hex_encode(&digest).as_bytes())?;
+        let crypto = disk_crypto_at(dir)?;
+        let sealed = crypto
+            .seal(&plain)
+            .map_err(|e| SpillError::msg(e.to_string()))?;
 
+        let tmp_body = private_temp_path(&body_path);
+        {
+            let mut file = open_new_private_file(&tmp_body)?;
+            file.write_all(&sealed)?;
+            file.sync_all()?;
+        }
         if body_path.exists() {
             refuse_symlink(&body_path)?;
         }
@@ -278,7 +218,6 @@ impl Store {
             use std::os::unix::fs::PermissionsExt;
             let _ = fs::set_permissions(&body_path, fs::Permissions::from_mode(0o600));
         }
-
         Ok(())
     }
 
@@ -286,8 +225,13 @@ impl Store {
         &self,
         dir: &Path,
     ) -> Result<usize, SpillError> {
-        let (body_path, key_path, hmac_path) = spill_paths(dir);
-        if !body_path.exists() && !key_path.exists() && !hmac_path.exists() {
+        let body_path = spill_body_path(dir);
+        let legacy = dir.join(LEGACY_SPILL_BODY);
+        if !body_path.exists() && !legacy.exists() {
+            // Clean stray legacy key/hmac if present.
+            if dir.join(LEGACY_SPILL_KEY).exists() || dir.join(LEGACY_SPILL_HMAC).exists() {
+                cleanup_spill_artifacts(dir);
+            }
             return Ok(0);
         }
 
@@ -297,16 +241,14 @@ impl Store {
     }
 
     async fn restore_update_spill_inner(&self, dir: &Path) -> Result<usize, SpillError> {
-        let (body_path, key_path, hmac_path) = spill_paths(dir);
-        for path in [&body_path, &key_path, &hmac_path] {
-            if !path.exists() {
-                return Err(SpillError::msg(format!(
-                    "incomplete spill package (missing {})",
-                    path.display()
-                )));
-            }
-            refuse_symlink(path)?;
+        let body_path = spill_body_path(dir);
+        if !body_path.exists() {
+            return Err(SpillError::msg(format!(
+                "incomplete spill package (missing {})",
+                body_path.display()
+            )));
         }
+        refuse_symlink(&body_path)?;
 
         let max_bytes = {
             let inner = self.inner.read().await;
@@ -321,64 +263,38 @@ impl Store {
             )));
         }
 
-        let mut key_hex = String::new();
-        open_existing_private_file(&key_path)?.read_to_string(&mut key_hex)?;
-        let key = hex_decode(&key_hex)?;
-        if key.len() != 32 {
-            return Err(SpillError::msg("spill key must be 32 bytes"));
-        }
+        let mut sealed = Vec::new();
+        open_existing_private_file(&body_path)?.read_to_end(&mut sealed)?;
+        let crypto = disk_crypto_at(dir)?;
+        let plain = crypto
+            .open(&sealed)
+            .map_err(|_| SpillError::msg("spill decrypt/auth failed"))?;
 
-        let mut expected_hex = String::new();
-        open_existing_private_file(&hmac_path)?.read_to_string(&mut expected_hex)?;
-        let expected = hex_decode(&expected_hex)?;
-
-        let mut mac =
-            HmacSha256::new_from_slice(&key).map_err(|e| SpillError::msg(e.to_string()))?;
         let mut entries = Vec::new();
         let mut annotations = Vec::new();
-        {
-            let file = open_existing_private_file(&body_path)?;
-            let mut reader = BufReader::new(file);
-            let mut line_buf = Vec::new();
-            loop {
-                line_buf.clear();
-                let n = reader.read_until(b'\n', &mut line_buf)?;
-                if n == 0 {
-                    break;
-                }
-                mac.update(&line_buf);
-                // Trim trailing newline for parse; keep original bytes in mac.
-                let trimmed = if line_buf.last() == Some(&b'\n') {
-                    &line_buf[..line_buf.len() - 1]
-                } else {
-                    line_buf.as_slice()
-                };
-                if trimmed.is_empty() {
-                    continue;
-                }
-                if trimmed.len() as u64 > MAX_LINE_BYTES {
-                    return Err(SpillError::msg("spill line exceeds size limit"));
-                }
-                let value: Value = serde_json::from_slice(trimmed)
-                    .map_err(|e| SpillError::msg(format!("invalid spill line: {e}")))?;
-                if value.get("_spillKind").and_then(|v| v.as_str()) == Some(SPILL_KIND_ANNOTATION) {
-                    let ann: SpillAnnotationLine = serde_json::from_value(value)
-                        .map_err(|e| SpillError::msg(format!("invalid spill annotation: {e}")))?;
-                    annotations.push(AnnotatedEntry {
-                        id: ann.id,
-                        annotation: ann.annotation,
-                    });
-                    continue;
-                }
-                let mut entry: LogEntry = serde_json::from_value(value)
-                    .map_err(|e| SpillError::msg(format!("invalid spill entry: {e}")))?;
-                entry.approx_bytes = estimate_bytes(&entry.service, &entry.data);
-                entries.push(entry);
+        for line in plain.split(|&b| b == b'\n') {
+            if line.is_empty() {
+                continue;
             }
+            if line.len() as u64 > 16 * 1024 * 1024 {
+                return Err(SpillError::msg("spill line exceeds size limit"));
+            }
+            let value: Value = serde_json::from_slice(line)
+                .map_err(|e| SpillError::msg(format!("invalid spill line: {e}")))?;
+            if value.get("_spillKind").and_then(|v| v.as_str()) == Some(SPILL_KIND_ANNOTATION) {
+                let ann: SpillAnnotationLine = serde_json::from_value(value)
+                    .map_err(|e| SpillError::msg(format!("invalid spill annotation: {e}")))?;
+                annotations.push(AnnotatedEntry {
+                    id: ann.id,
+                    annotation: ann.annotation,
+                });
+                continue;
+            }
+            let mut entry: LogEntry = serde_json::from_value(value)
+                .map_err(|e| SpillError::msg(format!("invalid spill entry: {e}")))?;
+            entry.approx_bytes = estimate_bytes(&entry.service, &entry.data);
+            entries.push(entry);
         }
-
-        mac.verify_slice(&expected)
-            .map_err(|_| SpillError::msg("spill HMAC verification failed"))?;
 
         let count = self.load_spilled_entries(entries).await;
         self.load_spilled_annotations(annotations).await;
@@ -450,14 +366,12 @@ impl Store {
             inner.services = services;
             inner.properties = properties;
             inner.properties_by_service = properties_by_service;
-            // Keep any blocked set empty on fresh hub; pretty buffers stay empty.
         }
         self.next_id.store(next_id.max(1), Ordering::Relaxed);
         count
     }
 }
 
-/// Test helpers and unit tests for spill security.
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -506,6 +420,8 @@ mod tests {
             .unwrap();
 
         store.spill_for_update_to(dir.path()).await.expect("spill");
+        let raw = fs::read(dir.path().join(SPILL_BODY)).unwrap();
+        assert!(!String::from_utf8_lossy(&raw).contains("\"msg\":\"one\""));
 
         let restored = Store::new(1_000_000);
         let n = restored
@@ -530,8 +446,6 @@ mod tests {
         }
         assert_eq!(restored.next_id.load(Ordering::Relaxed), 3);
         assert!(!dir.path().join(SPILL_BODY).exists());
-        assert!(!dir.path().join(SPILL_KEY).exists());
-        assert!(!dir.path().join(SPILL_HMAC).exists());
     }
 
     #[tokio::test]
@@ -545,14 +459,20 @@ mod tests {
         store.spill_for_update_to(dir.path()).await.unwrap();
 
         let body = dir.path().join(SPILL_BODY);
-        fs::write(&body, b"{\"id\":1,\"receivedAt\":\"2020-01-01T00:00:00Z\",\"service\":\"x\",\"data\":{\"msg\":\"pwned\"}}\n").unwrap();
+        let mut raw = fs::read(&body).unwrap();
+        let last = raw.len() - 1;
+        raw[last] ^= 0xff;
+        fs::write(&body, raw).unwrap();
 
         let restored = Store::new(1_000_000);
         let err = restored
             .restore_update_spill_from_dir(dir.path())
             .await
             .unwrap_err();
-        assert!(err.to_string().contains("HMAC"), "{err}");
+        assert!(
+            err.to_string().contains("decrypt") || err.to_string().contains("auth"),
+            "{err}"
+        );
         assert!(restored.inner.read().await.entries.is_empty());
         assert!(!body.exists());
     }
@@ -569,7 +489,6 @@ mod tests {
         }
         tiny.spill_for_update_to(dir.path()).await.unwrap();
 
-        // Inflate body beyond tiny max + slack (size check runs before HMAC).
         let body = dir.path().join(SPILL_BODY);
         let padding = vec![b'x'; (SIZE_SLACK as usize) + 200];
         let mut data = fs::read(&body).unwrap();
@@ -607,7 +526,6 @@ mod tests {
             .await
             .unwrap_err();
         assert!(err.to_string().contains("symlink"), "{err}");
-        assert!(!dir.path().join(SPILL_KEY).exists());
     }
 
     #[tokio::test]
@@ -626,44 +544,17 @@ mod tests {
     #[tokio::test]
     async fn incomplete_spill_package_is_rejected() {
         let dir = tempfile::tempdir().unwrap();
+        // Stray legacy key without body → cleaned as noop / incomplete handled.
+        fs::write(dir.path().join(LEGACY_SPILL_KEY), b"00").unwrap();
         let store = Store::new(1_000_000);
-        store
-            .push_line("api", r#"{"msg":"ok","level":"info"}"#)
-            .await;
-        store.spill_for_update_to(dir.path()).await.unwrap();
-        fs::remove_file(dir.path().join(SPILL_KEY)).unwrap();
-
-        let restored = Store::new(1_000_000);
-        let err = restored
-            .restore_update_spill_from_dir(dir.path())
-            .await
-            .unwrap_err();
-        assert!(err.to_string().contains("incomplete"), "{err}");
-    }
-
-    #[tokio::test]
-    async fn invalid_spill_hex_and_key_length_rejected() {
-        let dir = tempfile::tempdir().unwrap();
-        let store = Store::new(1_000_000);
-        store
-            .push_line("api", r#"{"msg":"ok","level":"info"}"#)
-            .await;
-        store.spill_for_update_to(dir.path()).await.unwrap();
-
-        fs::write(dir.path().join(SPILL_KEY), b"zz\n").unwrap();
-        let err = Store::new(1_000_000)
-            .restore_update_spill_from_dir(dir.path())
-            .await
-            .unwrap_err();
-        assert!(err.to_string().contains("hex"), "{err}");
-
-        store.spill_for_update_to(dir.path()).await.unwrap();
-        fs::write(dir.path().join(SPILL_KEY), b"0102\n").unwrap();
-        let err = Store::new(1_000_000)
-            .restore_update_spill_from_dir(dir.path())
-            .await
-            .unwrap_err();
-        assert!(err.to_string().contains("32 bytes"), "{err}");
+        assert_eq!(
+            store
+                .restore_update_spill_from_dir(dir.path())
+                .await
+                .unwrap(),
+            0
+        );
+        assert!(!dir.path().join(LEGACY_SPILL_KEY).exists());
     }
 
     #[tokio::test]
@@ -678,15 +569,27 @@ mod tests {
             .set_bookmark(live_id, Some(true), None, None)
             .await
             .unwrap();
-        store.spill_for_update_to(dir.path()).await.unwrap();
 
-        let body_path = dir.path().join(SPILL_BODY);
-        let key_path = dir.path().join(SPILL_KEY);
-        let hmac_path = dir.path().join(SPILL_HMAC);
-        let key_hex = fs::read_to_string(&key_path).unwrap();
-        let key = hex_decode(&key_hex).unwrap();
-        let mut body = fs::read(&body_path).unwrap();
-        let orphan = serde_json::to_vec(&SpillAnnotationLine {
+        // Build a custom plaintext with an orphan annotation, then seal with DEK.
+        let crypto = disk_crypto_at(dir.path()).unwrap();
+        let mut plain = Vec::new();
+        {
+            let inner = store.inner.read().await;
+            for entry in &inner.entries {
+                plain.extend_from_slice(&serde_json::to_vec(entry).unwrap());
+                plain.push(b'\n');
+            }
+            for (&id, annotation) in &inner.annotations {
+                let line = SpillAnnotationLine {
+                    spill_kind: SPILL_KIND_ANNOTATION.into(),
+                    id,
+                    annotation: annotation.clone(),
+                };
+                plain.extend_from_slice(&serde_json::to_vec(&line).unwrap());
+                plain.push(b'\n');
+            }
+        }
+        let orphan = SpillAnnotationLine {
             spill_kind: SPILL_KIND_ANNOTATION.into(),
             id: live_id + 10_000,
             annotation: Annotation {
@@ -694,14 +597,11 @@ mod tests {
                 tags: vec!["orphan".into()],
                 comment: None,
             },
-        })
-        .unwrap();
-        body.extend_from_slice(&orphan);
-        body.push(b'\n');
-        fs::write(&body_path, &body).unwrap();
-        let mut mac = HmacSha256::new_from_slice(&key).expect("key");
-        mac.update(&body);
-        fs::write(&hmac_path, hex_encode(&mac.finalize().into_bytes())).unwrap();
+        };
+        plain.extend_from_slice(&serde_json::to_vec(&orphan).unwrap());
+        plain.push(b'\n');
+        let sealed = crypto.seal(&plain).unwrap();
+        fs::write(dir.path().join(SPILL_BODY), sealed).unwrap();
 
         let restored = Store::new(1_000_000);
         let n = restored
@@ -713,42 +613,18 @@ mod tests {
         assert!(restored.get_annotation(live_id + 10_000).await.is_none());
     }
 
-    #[test]
-    fn hex_decode_rejects_odd_length_and_bad_digits() {
-        assert!(hex_decode("abc").is_err());
-        assert!(hex_decode("gg").is_err());
-    }
-
     #[tokio::test]
     async fn invalid_spill_line_json_is_rejected() {
         let dir = tempfile::tempdir().unwrap();
-        let store = Store::new(1_000_000);
-        store
-            .push_line("api", r#"{"msg":"ok","level":"info"}"#)
-            .await;
-        store.spill_for_update_to(dir.path()).await.unwrap();
-
-        let body_path = dir.path().join(SPILL_BODY);
-        let key_path = dir.path().join(SPILL_KEY);
-        let hmac_path = dir.path().join(SPILL_HMAC);
-        let key = hex_decode(&fs::read_to_string(&key_path).unwrap()).unwrap();
-        let mut body = b"not-json\n".to_vec();
-        body.extend_from_slice(&fs::read(&body_path).unwrap());
-        fs::write(&body_path, &body).unwrap();
-        let mut mac = HmacSha256::new_from_slice(&key).unwrap();
-        mac.update(&body);
-        fs::write(&hmac_path, hex_encode(&mac.finalize().into_bytes())).unwrap();
+        let crypto = disk_crypto_at(dir.path()).unwrap();
+        let sealed = crypto.seal(b"not-json\n").unwrap();
+        fs::write(dir.path().join(SPILL_BODY), sealed).unwrap();
 
         let err = Store::new(1_000_000)
             .restore_update_spill_from_dir(dir.path())
             .await
             .unwrap_err();
         assert!(err.to_string().contains("invalid spill line"), "{err}");
-    }
-
-    #[test]
-    fn hex_decode_accepts_uppercase() {
-        assert_eq!(hex_decode("ABCD").unwrap(), vec![0xab, 0xcd]);
     }
 
     #[tokio::test]
@@ -761,8 +637,6 @@ mod tests {
         store.spill_for_update_to(dir.path()).await.unwrap();
         cleanup_spill_artifacts(dir.path());
         assert!(!dir.path().join(SPILL_BODY).exists());
-        assert!(!dir.path().join(SPILL_KEY).exists());
-        assert!(!dir.path().join(SPILL_HMAC).exists());
     }
 
     #[tokio::test]
@@ -779,55 +653,11 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn oversized_spill_line_is_rejected() {
-        let dir = tempfile::tempdir().unwrap();
-        let store = Store::new(1_000_000);
-        store
-            .push_line("api", r#"{"msg":"ok","level":"info"}"#)
-            .await;
-        store.spill_for_update_to(dir.path()).await.unwrap();
-
-        let body_path = dir.path().join(SPILL_BODY);
-        let key_path = dir.path().join(SPILL_KEY);
-        let hmac_path = dir.path().join(SPILL_HMAC);
-        let key = hex_decode(&fs::read_to_string(&key_path).unwrap()).unwrap();
-        let mut body = fs::read(&body_path).unwrap();
-        let huge = vec![b'x'; (MAX_LINE_BYTES as usize) + 1];
-        body.extend_from_slice(&huge);
-        body.push(b'\n');
-        fs::write(&body_path, &body).unwrap();
-        let mut mac = HmacSha256::new_from_slice(&key).unwrap();
-        mac.update(&body);
-        fs::write(&hmac_path, hex_encode(&mac.finalize().into_bytes())).unwrap();
-
-        let err = Store::new(1_000_000)
-            .restore_update_spill_from_dir(dir.path())
-            .await
-            .unwrap_err();
-        assert!(
-            err.to_string().contains("too large") || err.to_string().contains("size limit"),
-            "{err}"
-        );
-    }
-
-    #[tokio::test]
     async fn invalid_spill_entry_json_is_rejected() {
         let dir = tempfile::tempdir().unwrap();
-        let store = Store::new(1_000_000);
-        store
-            .push_line("api", r#"{"msg":"ok","level":"info"}"#)
-            .await;
-        store.spill_for_update_to(dir.path()).await.unwrap();
-
-        let body_path = dir.path().join(SPILL_BODY);
-        let key_path = dir.path().join(SPILL_KEY);
-        let hmac_path = dir.path().join(SPILL_HMAC);
-        let key = hex_decode(&fs::read_to_string(&key_path).unwrap()).unwrap();
-        let bad = b"{\"not\":\"a log entry\"}\n".to_vec();
-        fs::write(&body_path, &bad).unwrap();
-        let mut mac = HmacSha256::new_from_slice(&key).unwrap();
-        mac.update(&bad);
-        fs::write(&hmac_path, hex_encode(&mac.finalize().into_bytes())).unwrap();
+        let crypto = disk_crypto_at(dir.path()).unwrap();
+        let sealed = crypto.seal(b"{\"not\":\"a log entry\"}\n").unwrap();
+        fs::write(dir.path().join(SPILL_BODY), sealed).unwrap();
 
         let err = Store::new(1_000_000)
             .restore_update_spill_from_dir(dir.path())

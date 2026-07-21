@@ -69,9 +69,14 @@ pub async fn post_batch_hint(
         lines,
         format_hint,
     };
-    let resp = client
-        .post(url)
-        .json(&body)
+    let mut req = client.post(url).json(&body);
+    if let Ok(token) = std::env::var("MIZPAH_INGEST_TOKEN") {
+        let token = token.trim();
+        if !token.is_empty() {
+            req = req.bearer_auth(token);
+        }
+    }
+    let resp = req
         .send()
         .await
         .map_err(|e| BatchError::Other(e.to_string()))?;

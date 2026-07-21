@@ -19,10 +19,12 @@ pub use crate::mzp_meta::MzpMeta;
 mod activity;
 mod aggregate;
 mod annotate;
+mod crypto;
 mod ingest;
 mod nav;
 mod persist;
 mod query;
+mod redact;
 mod spectrogram;
 mod spill;
 mod trace;
@@ -135,11 +137,17 @@ impl Store {
             self.publish(WsEvent::Evicted {
                 ids: evicted.clone(),
             });
+            // Keep on-disk persist aligned with the ring.
+            self.prune_persist().await;
         }
         evicted
     }
 
-    fn entry_exceeds_ttl(received_at: DateTime<Utc>, ttl: Duration, now: DateTime<Utc>) -> bool {
+    pub(crate) fn entry_exceeds_ttl(
+        received_at: DateTime<Utc>,
+        ttl: Duration,
+        now: DateTime<Utc>,
+    ) -> bool {
         now.signed_duration_since(received_at)
             .to_std()
             .is_ok_and(|age| age > ttl)
@@ -416,7 +424,8 @@ impl Store {
     }
 
     /// Commit one entry. Returns `None` if the service became blocked.
-    async fn commit_entry(&self, service: &str, data: Value) -> Option<LogEntry> {
+    async fn commit_entry(&self, service: &str, mut data: Value) -> Option<LogEntry> {
+        redact::redact_value(&mut data);
         let approx_bytes = estimate_bytes(service, &data);
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
         let received_at = Utc::now();

@@ -17,6 +17,21 @@ export type {
   UpdateStatus,
 } from "./types"
 
+/** Same-origin fetch with cookies; redirects to OIDC login on 401. */
+export async function apiFetch(
+  input: RequestInfo | URL,
+  init?: RequestInit
+): Promise<Response> {
+  const res = await fetch(input, { ...init, credentials: "include" })
+  if (res.status === 401 && typeof window !== "undefined") {
+    const path = window.location.pathname
+    if (!path.startsWith("/api/auth/")) {
+      window.location.assign("/api/auth/login")
+    }
+  }
+  return res
+}
+
 export async function fetchLogs(opts: {
   service?: string
   cursor?: number
@@ -36,7 +51,7 @@ export async function fetchLogs(opts: {
   }
   if (opts.from) params.set("from", opts.from)
   if (opts.to) params.set("to", opts.to)
-  const res = await fetch(`/api/logs?${params}`)
+  const res = await apiFetch(`/api/logs?${params}`)
   if (!res.ok) {
     const body = await res.text().catch(() => "")
     throw new Error(body || `logs: ${res.status}`)
@@ -64,7 +79,7 @@ export async function fetchAggregate(opts: {
   if (opts.service) params.set("service", opts.service)
   if (opts.groupBy) params.set("groupBy", opts.groupBy)
   if (opts.limit != null) params.set("limit", String(opts.limit))
-  const res = await fetch(`/api/aggregate?${params}`)
+  const res = await apiFetch(`/api/aggregate?${params}`)
   if (!res.ok) throw new Error(`aggregate: ${res.status}`)
   const data = (await res.json()) as { rows: AggregateRow[] }
   return data.rows
@@ -74,7 +89,7 @@ export async function fetchTrace(
   opid: string,
   limit = 100
 ): Promise<LogEntry[]> {
-  const res = await fetch(
+  const res = await apiFetch(
     `/api/trace/${encodeURIComponent(opid)}?limit=${limit}`
   )
   if (!res.ok) throw new Error(`trace: ${res.status}`)
@@ -99,7 +114,7 @@ export async function fetchNavLevel(opts: {
   if (opts.q?.trim()) params.set("q", opts.q.trim())
   if (opts.from) params.set("from", opts.from)
   if (opts.to) params.set("to", opts.to)
-  const res = await fetch(`/api/nav/level?${params}`)
+  const res = await apiFetch(`/api/nav/level?${params}`)
   if (!res.ok) {
     const body = await res.text().catch(() => "")
     throw new Error(body || `nav: ${res.status}`)
@@ -118,7 +133,7 @@ export type AnnotatedEntry = {
 }
 
 export async function fetchBookmarks(): Promise<AnnotatedEntry[]> {
-  const res = await fetch("/api/bookmarks")
+  const res = await apiFetch("/api/bookmarks")
   if (!res.ok) throw new Error(`bookmarks: ${res.status}`)
   const data = (await res.json()) as { bookmarks: AnnotatedEntry[] }
   return data.bookmarks
@@ -130,7 +145,7 @@ export async function setBookmark(opts: {
   tags?: string[]
   comment?: string
 }): Promise<void> {
-  const res = await fetch("/api/bookmarks", {
+  const res = await apiFetch("/api/bookmarks", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(opts),
@@ -149,7 +164,7 @@ export type SqlResult = {
 }
 
 export async function runSql(sql: string, limit = 100): Promise<SqlResult> {
-  const res = await fetch("/api/sql", {
+  const res = await apiFetch("/api/sql", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ sql, limit }),
@@ -180,7 +195,7 @@ export type Keymap = {
 }
 
 export async function fetchKeymap(): Promise<Keymap> {
-  const res = await fetch("/api/keymap")
+  const res = await apiFetch("/api/keymap")
   if (!res.ok) throw new Error(`keymap: ${res.status}`)
   return res.json()
 }
@@ -202,7 +217,7 @@ export async function fetchTheme(name?: string): Promise<{
   const params = new URLSearchParams()
   if (name) params.set("name", name)
   const qs = params.toString()
-  const res = await fetch(qs ? `/api/themes?${qs}` : "/api/themes")
+  const res = await apiFetch(qs ? `/api/themes?${qs}` : "/api/themes")
   if (!res.ok) throw new Error(`themes: ${res.status}`)
   return res.json()
 }
@@ -225,7 +240,7 @@ export async function fetchSpectrogram(opts: {
     params.set("valueBuckets", String(opts.valueBuckets))
   }
   const qs = params.toString()
-  const res = await fetch(qs ? `/api/spectrogram?${qs}` : "/api/spectrogram")
+  const res = await apiFetch(qs ? `/api/spectrogram?${qs}` : "/api/spectrogram")
   if (!res.ok) {
     const body = await res.text().catch(() => "")
     throw new Error(body || `spectrogram: ${res.status}`)
@@ -243,14 +258,14 @@ export async function fetchActivity(opts?: {
     params.set("bucketMinutes", String(opts.bucketMinutes))
   }
   const qs = params.toString()
-  const res = await fetch(qs ? `/api/activity?${qs}` : "/api/activity")
+  const res = await apiFetch(qs ? `/api/activity?${qs}` : "/api/activity")
   if (!res.ok) throw new Error(`activity: ${res.status}`)
   const data = (await res.json()) as { buckets: ActivityBucket[] }
   return data.buckets
 }
 
 export async function fetchServices(): Promise<ServicesList> {
-  const res = await fetch("/api/services")
+  const res = await apiFetch("/api/services")
   if (!res.ok) throw new Error(`services: ${res.status}`)
   const data = (await res.json()) as { services: string[]; blocked?: string[] }
   return {
@@ -260,7 +275,7 @@ export async function fetchServices(): Promise<ServicesList> {
 }
 
 export async function disconnectService(service: string): Promise<void> {
-  const res = await fetch("/api/services/disconnect", {
+  const res = await apiFetch("/api/services/disconnect", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ service }),
@@ -272,7 +287,7 @@ export async function disconnectService(service: string): Promise<void> {
 }
 
 export async function reconnectService(service: string): Promise<void> {
-  const res = await fetch("/api/services/reconnect", {
+  const res = await apiFetch("/api/services/reconnect", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ service }),
@@ -295,14 +310,14 @@ export async function fetchProperties(opts?: {
     params.set("q", opts.q.trim())
   }
   const qs = params.toString()
-  const res = await fetch(qs ? `/api/properties?${qs}` : "/api/properties")
+  const res = await apiFetch(qs ? `/api/properties?${qs}` : "/api/properties")
   if (!res.ok) throw new Error(`properties: ${res.status}`)
   const data = (await res.json()) as { properties: PropertyInfo[] }
   return data.properties
 }
 
 export async function fetchStats(): Promise<Stats> {
-  const res = await fetch("/api/stats")
+  const res = await apiFetch("/api/stats")
   if (!res.ok) throw new Error(`stats: ${res.status}`)
   return res.json()
 }
@@ -325,7 +340,7 @@ export type IncidentSummary = {
 export async function fetchIncident(minutes = 15): Promise<IncidentSummary> {
   const params = new URLSearchParams()
   params.set("minutes", String(minutes))
-  const res = await fetch(`/api/incident?${params}`)
+  const res = await apiFetch(`/api/incident?${params}`)
   if (!res.ok) {
     const body = await res.text().catch(() => "")
     throw new Error(body || `incident: ${res.status}`)
@@ -337,7 +352,7 @@ export async function startInvestigate(
   target: InvestigateTarget,
   id: number
 ): Promise<void> {
-  const res = await fetch("/api/investigate", {
+  const res = await apiFetch("/api/investigate", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ target, id }),
@@ -349,7 +364,7 @@ export async function startInvestigate(
 }
 
 export async function fetchUpdateStatus(): Promise<UpdateStatus> {
-  const res = await fetch("/api/update")
+  const res = await apiFetch("/api/update")
   if (!res.ok) throw new Error(`update status: ${res.status}`)
   return res.json()
 }
@@ -359,7 +374,7 @@ export async function streamUpdate(
   onEvent: (ev: UpdateEvent) => void,
   signal?: AbortSignal
 ): Promise<void> {
-  const res = await fetch("/api/update", { method: "POST", signal })
+  const res = await apiFetch("/api/update", { method: "POST", signal })
   if (!res.ok) {
     const body = await res.text().catch(() => "")
     throw new Error(body || `update: ${res.status}`)

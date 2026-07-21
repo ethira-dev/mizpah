@@ -73,7 +73,7 @@ service == "localhost:5173"
 - Needs a debugging port, or `--launch` (not your default profile cookies/extensions)
 - Cannot inject into an already-running normal Chrome without restarting with `--remote-debugging-port`
 - `--all-network` includes static asset metadata
-- Bodies/headers may contain secrets; hub is local but treat the stream as sensitive
+- Bodies/headers may contain secrets; hub is local but treat the stream as sensitive ([storage security](../storage-security/))
 - Foreground; Ctrl-C stops forwarding (launched browser stays open). No `detach browser`.
 
 </details>

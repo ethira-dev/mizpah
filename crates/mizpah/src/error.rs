@@ -34,6 +34,8 @@ pub enum ApiError {
     #[error("{0}")]
     BadRequest(String),
     #[error("{0}")]
+    Unauthorized(String),
+    #[error("{0}")]
     NotFound(String),
     #[error("{0}")]
     Conflict(String),
@@ -48,6 +50,10 @@ pub enum ApiError {
 impl ApiError {
     pub fn bad_request(msg: impl Into<String>) -> Self {
         Self::BadRequest(msg.into())
+    }
+
+    pub fn unauthorized(msg: impl Into<String>) -> Self {
+        Self::Unauthorized(msg.into())
     }
 
     pub fn not_found(msg: impl Into<String>) -> Self {
@@ -73,6 +79,7 @@ impl ApiError {
     fn status(&self) -> StatusCode {
         match self {
             Self::BadRequest(_) => StatusCode::BAD_REQUEST,
+            Self::Unauthorized(_) => StatusCode::UNAUTHORIZED,
             Self::NotFound(_) => StatusCode::NOT_FOUND,
             Self::Conflict(_) => StatusCode::CONFLICT,
             Self::Forbidden(_) => StatusCode::FORBIDDEN,
@@ -113,6 +120,10 @@ mod tests {
         ));
         assert!(matches!(ApiError::not_found("x"), ApiError::NotFound(_)));
         assert!(matches!(ApiError::conflict("x"), ApiError::Conflict(_)));
+        assert!(matches!(
+            ApiError::unauthorized("x"),
+            ApiError::Unauthorized(_)
+        ));
         assert!(matches!(ApiError::forbidden("x"), ApiError::Forbidden(_)));
         assert!(matches!(
             ApiError::bad_gateway("x"),
@@ -120,6 +131,10 @@ mod tests {
         ));
         assert!(matches!(ApiError::internal("x"), ApiError::Internal(_)));
 
+        assert_eq!(
+            ApiError::Unauthorized("x".into()).into_response().status(),
+            StatusCode::UNAUTHORIZED
+        );
         assert_eq!(
             ApiError::BadGateway("x".into()).into_response().status(),
             StatusCode::BAD_GATEWAY
