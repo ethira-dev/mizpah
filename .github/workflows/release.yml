@@ -68,7 +68,16 @@ jobs:
     name: Publish release
     needs: build
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
     steps:
+      - name: Version from tag
+        id: meta
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          VERSION="${TAG#v}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
       - name: Download all archives
         uses: actions/download-artifact@v4
         with:
@@ -82,3 +91,38 @@ jobs:
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload dist for tap bump
+        uses: actions/upload-artifact@v4
+        with:
+          name: mizpah-release-dist
+          path: dist/
+          if-no-files-found: error
+
+  bump-homebrew:
+    name: Bump Homebrew formula
+    needs: publish
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download dist
+        uses: actions/download-artifact@v4
+        with:
+          name: mizpah-release-dist
+          path: dist
+
+      - name: Bump formula in ethira-dev/homebrew-tap
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          VERSION: ${{ needs.publish.outputs.version }}
+          DIST_DIR: dist
+        run: |
+          set -euo pipefail
+          if [ -z "${HOMEBREW_TAP_TOKEN:-}" ]; then
+            echo "::warning::HOMEBREW_TAP_TOKEN not set; skip Homebrew tap bump"
+            exit 0
+          fi
+          chmod +x scripts/bump-homebrew-formula.sh
+          ./scripts/bump-homebrew-formula.sh

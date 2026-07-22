@@ -13,7 +13,7 @@ Local JSON log hub: pipe any process into **`mzp`**, get a searchable UI on `:31
 [![dependency status](https://deps.rs/repo/github/ethira-dev/mizpah/status.svg)](https://deps.rs/repo/github/ethira-dev/mizpah)
 
 ```bash
-brew install ethira-dev/mizpah/mizpah
+brew install ethira-dev/tap/mizpah
 mzp setup --with-skill
 my-app 2>&1 | mzp --service api
 # or: mzp run -s api -- npm test
@@ -25,9 +25,11 @@ my-app 2>&1 | mzp --service api
 **Homebrew**
 
 ```bash
-brew install ethira-dev/mizpah/mizpah
+brew install ethira-dev/tap/mizpah
 mzp --help
 ```
+
+Migrating from the old `ethira-dev/mizpah` tap: `brew untap ethira-dev/mizpah` then install from `ethira-dev/tap` as above.
 
 **From source** (Rust stable, Node 20+)
 

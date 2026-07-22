@@ -26,7 +26,7 @@ pub(crate) const CHECK_TIMEOUT: Duration = Duration::from_secs(10);
 pub(crate) const DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(300);
 /// Re-fetch GitHub latest when status is read and the cache is older than this.
 pub(crate) const CHECK_TTL: Duration = Duration::from_secs(15 * 60);
-pub(crate) const BREW_FORMULA: &str = "ethira-dev/mizpah/mizpah";
+pub(crate) const BREW_FORMULA: &str = "ethira-dev/tap/mizpah";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

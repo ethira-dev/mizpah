@@ -29,7 +29,7 @@ Workflow skill aimed at **token and cost savings**: pipe into Mizpah, prefer JSO
 ### Install the skill
 
 ```bash
-brew install ethira-dev/mizpah/mizpah
+brew install ethira-dev/tap/mizpah
 mzp setup --with-skill
 # restart the agent client, then pipe or: mzp run -s api -- npm test
 ```

@@ -7,8 +7,16 @@ order: 2
 ## Homebrew
 
 ```bash
-brew install ethira-dev/mizpah/mizpah
+brew install ethira-dev/tap/mizpah
 mzp --help
+```
+
+If you previously installed from `ethira-dev/mizpah`:
+
+```bash
+brew uninstall mizpah 2>/dev/null || true
+brew untap ethira-dev/mizpah 2>/dev/null || true
+brew install ethira-dev/tap/mizpah
 ```
 
 After install, start a hub once (or run `mzp mcp install`) so Cursor / Claude Desktop / Claude Code / Codex pick up the MCP server. Restart those clients afterward.
