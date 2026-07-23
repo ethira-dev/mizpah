@@ -80,7 +80,7 @@ rusqlite = { version = "0.32", features = ["bundled"] }
 regex = "1"
 pcre2 = "0.2"
 include_dir = "0.7"
-evtx = "0.8"
+evtx = "0.12"
 tower-http = { version = "0.7", features = ["cors"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
