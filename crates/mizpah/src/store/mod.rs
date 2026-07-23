@@ -1,5 +1,6 @@
 use crate::pretty_ingest::{
-    is_pretty_block_start, parse_pretty_block, strip_ansi, strip_service_prefix, PrettyBuffer,
+    is_pretty_block_start, joined_raw_payload, recover_json_object, strip_ansi,
+    strip_service_prefix, PrettyBuffer,
 };
 use crate::properties::{
     decrement_counts_for_entry, discover_paths_into, paths_to_info, push_service_property,
@@ -34,9 +35,15 @@ pub use ingest::parse_line;
 pub use nav::NavDirection;
 pub use spectrogram::SpectrogramResult;
 
-use ingest::{
-    estimate_bytes, inject_cmd, inject_mzp, raw_payloads_from_lines, try_parse_json_object,
-};
+use ingest::{estimate_bytes, inject_cmd, inject_mzp, try_parse_json_object};
+
+/// Classification under the write lock — recovery of joined text happens after unlock.
+enum ResolveOutcome {
+    /// Payloads ready to commit (including empty while still buffering).
+    Ready(Vec<Value>),
+    /// Joined pretty dump to recover outside the lock into one structured/_raw entry.
+    Recover(String),
+}
 
 pub const DEFAULT_MAX_BYTES: u64 = 1_073_741_824; // 1 GiB
 pub const DEFAULT_TTL_HOURS: u64 = 24;
@@ -202,8 +209,7 @@ impl Store {
         let _ = self.tx.send(event);
     }
 
-    /// Ingest a line. May emit zero entries (still buffering a pretty block),
-    /// one entry (normal / completed block), or many (failed convert flush).
+    /// Ingest a line. May emit zero entries (still buffering a pretty block) or one+ entries.
     #[cfg(test)]
     pub async fn push_line(&self, service: &str, line: &str) -> Vec<LogEntry> {
         self.push_line_with_meta(service, line, None, None)
@@ -232,14 +238,20 @@ impl Store {
         mzp: Option<&MzpMeta>,
         format_hint: Option<&str>,
     ) -> PushLineResult {
-        // Single lock check + commit path: blocked status is re-checked inside commit.
+        // Classify under the write lock; run recovery outside so large dumps don't stall the hub.
         let cleaned = strip_service_prefix(&strip_ansi(line), service);
-        let payloads = {
+        let outcome = {
             let mut inner = self.inner.write().await;
             if inner.blocked.contains(service) {
                 return PushLineResult::Blocked;
             }
             Self::resolve_payloads_locked(&mut inner, service, &cleaned, format_hint)
+        };
+        let payloads = match outcome {
+            ResolveOutcome::Ready(v) => v,
+            ResolveOutcome::Recover(joined) => {
+                vec![Self::recover_and_classify(&joined)]
+            }
         };
         let mut emitted = Vec::with_capacity(payloads.len());
         for mut data in payloads {
@@ -337,26 +349,41 @@ impl Store {
         self.publish(WsEvent::Services { names, blocked });
     }
 
-    /// Decide which JSON payloads a cleaned line should become (may buffer).
+    /// Recover joined pretty/JS text outside the lock, then apply JSON format packs.
+    fn recover_and_classify(joined: &str) -> Value {
+        let Some(obj) = recover_json_object(joined) else {
+            return joined_raw_payload(joined.to_string());
+        };
+        if let Value::Object(map) = &obj {
+            if let Some(norm) = crate::formats::classify_json_object(map) {
+                return norm.data;
+            }
+            if let Some(norm) = crate::formats::classify_pack_json(map) {
+                return norm.data;
+            }
+        }
+        obj
+    }
+
+    /// Decide how a cleaned line should be handled (may buffer). Recovery runs after unlock.
     fn resolve_payloads_locked(
         inner: &mut Inner,
         service: &str,
         cleaned: &str,
         format_hint: Option<&str>,
-    ) -> Vec<Value> {
+    ) -> ResolveOutcome {
         // Mid pretty-block for this service
         if inner.pretty_buffers.contains_key(service) {
             // Complete single-line JSON interrupts an incomplete pretty dump
-            if try_parse_json_object(cleaned).is_some() {
+            if let Some(obj) = try_parse_json_object(cleaned) {
                 let buf = inner
                     .pretty_buffers
                     .remove(service)
                     .expect("pretty buffer present");
-                let mut out = raw_payloads_from_lines(buf.into_lines());
-                if let Some(obj) = try_parse_json_object(cleaned) {
-                    out.push(obj);
-                }
-                return out;
+                // One joined _raw for the abandoned dump + the interrupting JSON object.
+                let mut out = vec![joined_raw_payload(buf.into_joined())];
+                out.push(obj);
+                return ResolveOutcome::Ready(out);
             }
 
             let buf = inner
@@ -365,62 +392,51 @@ impl Store {
                 .expect("pretty buffer present");
             buf.push(cleaned.to_string());
 
-            if buf.is_oversized() {
+            if buf.is_oversized() || buf.is_complete() {
                 let buf = inner
                     .pretty_buffers
                     .remove(service)
                     .expect("pretty buffer present");
-                return raw_payloads_from_lines(buf.into_lines());
+                return ResolveOutcome::Recover(buf.into_joined());
             }
 
-            if buf.is_complete() {
-                let buf = inner
-                    .pretty_buffers
-                    .remove(service)
-                    .expect("pretty buffer present");
-                if let Some(obj) = parse_pretty_block(&buf.joined()) {
-                    return vec![obj];
-                }
-                return raw_payloads_from_lines(buf.into_lines());
-            }
-
-            return Vec::new();
+            return ResolveOutcome::Ready(Vec::new());
         }
 
         // Not buffering — single-line JSON goes through format packs (bunyan/pino/…).
         if try_parse_json_object(cleaned).is_some() {
             let (payload, _) = crate::formats::parse_ingest_line_with_hint(cleaned, format_hint);
-            return vec![payload];
+            return ResolveOutcome::Ready(vec![payload]);
         }
 
-        // Single-line JS-literal object `{ ... }`
+        // Single-line JS-literal / recoverables `{ ... }` — recover outside the lock.
         let trimmed = cleaned.trim();
         if trimmed.starts_with('{') && trimmed.ends_with('}') && trimmed.len() > 1 {
-            if let Some(obj) = parse_pretty_block(trimmed) {
-                if let Value::Object(map) = &obj {
-                    if let Some(norm) = crate::formats::classify_json_object(map) {
-                        return vec![norm.data];
-                    }
-                    if let Some(norm) = crate::formats::classify_pack_json(map) {
-                        return vec![norm.data];
-                    }
-                }
-                return vec![obj];
-            }
+            return ResolveOutcome::Recover(trimmed.to_string());
+        }
+        // Inspect wrappers that are complete on one line (e.g. `Foo { a: 1 }`).
+        if crate::pretty_ingest::looks_like_object(trimmed)
+            && !is_pretty_block_start(cleaned)
+            && trimmed.contains('{')
+            && trimmed.ends_with('}')
+        {
+            return ResolveOutcome::Recover(trimmed.to_string());
         }
 
         // Start multiline pretty block
         if is_pretty_block_start(cleaned) {
-            inner.pretty_buffers.insert(
-                service.to_string(),
-                PrettyBuffer::start(cleaned.to_string()),
-            );
-            return Vec::new();
+            let buf = PrettyBuffer::start(cleaned.to_string());
+            // Enforce byte/line caps on the opener itself (not only on later pushes).
+            if buf.is_oversized() {
+                return ResolveOutcome::Recover(buf.into_joined());
+            }
+            inner.pretty_buffers.insert(service.to_string(), buf);
+            return ResolveOutcome::Ready(Vec::new());
         }
 
         // Format detectors (logfmt, syslog, access_log, packs, …) then raw
         let (payload, _) = crate::formats::parse_ingest_line_with_hint(cleaned, format_hint);
-        vec![payload]
+        ResolveOutcome::Ready(vec![payload])
     }
 
     /// Commit one entry. Returns `None` if the service became blocked.
@@ -596,13 +612,16 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn failed_pretty_flushes_as_raw() {
+    async fn failed_pretty_flushes_as_single_raw() {
         let store = Store::new(1_000_000);
         assert!(store.push_line("api", "{").await.is_empty());
         assert!(store.push_line("api", "  !!!not valid!!!").await.is_empty());
         let entries = store.push_line("api", "}").await;
-        assert_eq!(entries.len(), 3);
-        assert!(entries.iter().all(|e| e.data.get("_raw").is_some()));
+        // One joined _raw — never explode into per-line rows.
+        assert_eq!(entries.len(), 1);
+        assert!(entries[0].data.get("_raw").is_some());
+        let raw = entries[0].data["_raw"].as_str().unwrap();
+        assert!(raw.contains("!!!not valid!!!"));
     }
 
     #[tokio::test]
@@ -611,9 +630,10 @@ mod tests {
         assert!(store.push_line("api", "{").await.is_empty());
         assert!(store.push_line("api", "  a: 1,").await.is_empty());
         let entries = store.push_line("api", r#"{"level":"info"}"#).await;
-        // flushed pretty lines as raw + the JSON object
-        assert!(entries.len() >= 2);
-        assert_eq!(entries.last().unwrap().data["level"], json!("info"));
+        // One joined _raw for abandoned dump + the JSON object
+        assert_eq!(entries.len(), 2);
+        assert!(entries[0].data.get("_raw").is_some());
+        assert_eq!(entries[1].data["level"], json!("info"));
     }
 
     #[tokio::test]
@@ -982,15 +1002,94 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn oversized_pretty_buffer_flushes_as_raw() {
-        let store = Store::new(1_000_000);
+    async fn oversized_pretty_buffer_recovers_or_single_raw() {
+        let store = Store::new(50_000_000);
         assert!(store.push_line("api", "{").await.is_empty());
-        for _ in 0..254 {
-            assert!(store.push_line("api", "  x: 1,").await.is_empty());
+        // Exceed the 1 MiB byte cap with one huge incomplete line.
+        let huge = format!("  x: '{}',", "a".repeat(1024 * 1024));
+        let entries = store.push_line("api", &huge).await;
+        assert_eq!(entries.len(), 1);
+        // Incomplete dump can't recover to a closed object → single joined _raw.
+        assert!(entries[0].data.get("_raw").is_some());
+    }
+
+    #[tokio::test]
+    async fn oversized_pretty_opener_recovers_immediately() {
+        let store = Store::new(50_000_000);
+        // First line alone exceeds the 1 MiB byte cap while still incomplete.
+        let huge = format!("{{ type: '{}',", "a".repeat(1024 * 1024));
+        let entries = store.push_line("api", &huge).await;
+        assert_eq!(entries.len(), 1);
+        assert!(entries[0].data.get("_raw").is_some());
+    }
+
+    #[tokio::test]
+    async fn js_control_flow_does_not_start_pretty_buffer() {
+        let store = Store::new(1_000_000);
+        let entries = store.push_line("api", "try {").await;
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].data["_raw"], json!("try {"));
+        // Following lines must still emit as their own raw entries (not buffered).
+        let entries = store.push_line("api", "doWork();").await;
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].data["_raw"], json!("doWork();"));
+        let entries = store.push_line("api", "return { a: 1 }").await;
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].data["_raw"], json!("return { a: 1 }"));
+    }
+
+    #[tokio::test]
+    async fn large_evidence_decision_pretty_dump_is_one_structured_entry() {
+        let store = Store::new(50_000_000);
+        assert!(store.push_line("api", "{").await.is_empty());
+        assert!(store
+            .push_line(
+                "api",
+                "  type: 'inventory.relationships.evidence.decision',"
+            )
+            .await
+            .is_empty());
+        assert!(store.push_line("api", "  level: 'info',").await.is_empty());
+        assert!(store.push_line("api", "  evidence: [").await.is_empty());
+        for i in 0..300 {
+            assert!(store
+                .push_line("api", &format!("    {{ id: {i}, ok: true }},"))
+                .await
+                .is_empty());
         }
-        let entries = store.push_line("api", "  x: 1,").await;
-        assert!(!entries.is_empty());
-        assert!(entries.iter().all(|e| e.data.get("_raw").is_some()));
+        assert!(store.push_line("api", "  ],").await.is_empty());
+        assert!(store
+            .push_line("api", "  message: 'done',")
+            .await
+            .is_empty());
+        let entries = store.push_line("api", "}").await;
+        assert_eq!(entries.len(), 1);
+        assert_eq!(
+            entries[0].data["type"],
+            json!("inventory.relationships.evidence.decision")
+        );
+        assert_eq!(entries[0].data["message"], json!("done"));
+        assert_eq!(entries[0].data["evidence"].as_array().unwrap().len(), 300);
+    }
+
+    #[tokio::test]
+    async fn incomplete_opener_starts_pretty_buffer() {
+        let store = Store::new(1_000_000);
+        assert!(store
+            .push_line(
+                "api",
+                "{ type: 'inventory.relationships.evidence.decision',"
+            )
+            .await
+            .is_empty());
+        assert!(store.push_line("api", "  level: 'info',").await.is_empty());
+        let entries = store.push_line("api", "}").await;
+        assert_eq!(entries.len(), 1);
+        assert_eq!(
+            entries[0].data["type"],
+            json!("inventory.relationships.evidence.decision")
+        );
+        assert_eq!(entries[0].data["level"], json!("info"));
     }
 
     #[tokio::test]
