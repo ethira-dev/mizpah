@@ -317,6 +317,22 @@ pub fn js_literal_to_json(input: &str) -> Option<String> {
     fused_repair_to_json(candidate)
 }
 
+/// Append one Unicode scalar as JSON string content (caller is inside `"..."`).
+fn append_json_string_char(c: char, out: &mut String) {
+    match c {
+        '"' => out.push_str("\\\""),
+        '\\' => out.push_str("\\\\"),
+        '\n' => out.push_str("\\n"),
+        '\r' => out.push_str("\\r"),
+        '\t' => out.push_str("\\t"),
+        c if (c as u32) < 0x20 => {
+            let code = c as u32;
+            out.push_str(&format!("\\u{code:04x}"));
+        }
+        c => out.push(c),
+    }
+}
+
 fn fused_repair_to_json(input: &str) -> Option<String> {
     #[cfg(test)]
     repair_stats::bump();
@@ -353,29 +369,27 @@ fn fused_repair_to_json(input: &str) -> Option<String> {
 
         if in_single {
             if escape {
-                match c {
-                    '\'' => out.push('\''),
-                    '"' => out.push('"'),
-                    '\\' => out.push('\\'),
-                    'n' => out.push('\n'),
-                    'r' => out.push('\r'),
-                    't' => out.push('\t'),
-                    other => {
-                        out.push('\\');
-                        out.push(other);
-                    }
-                }
+                // Decode JS single-quoted escape → Unicode scalar, then JSON-encode.
+                let decoded = match c {
+                    '\'' => '\'',
+                    '"' => '"',
+                    '\\' => '\\',
+                    'n' => '\n',
+                    'r' => '\r',
+                    't' => '\t',
+                    // Sloppy JS: unknown `\x` is just the character `x`.
+                    other => other,
+                };
+                append_json_string_char(decoded, &mut out);
                 escape = false;
             } else if c == '\\' {
                 escape = true;
             } else if c == '\'' {
                 out.push('"');
                 in_single = false;
-            } else if c == '"' {
-                out.push('\\');
-                out.push('"');
             } else {
-                out.push(c);
+                // Literal chars (including raw `"`, controls) → JSON string text.
+                append_json_string_char(c, &mut out);
             }
             i += 1;
             continue;
@@ -1169,7 +1183,11 @@ mod tests {
     #[test]
     fn js_literal_newline_tab_carriage_escape() {
         let jsonish = js_literal_to_json("{ s: 'a\\nb\\tc' }").unwrap();
-        assert!(jsonish.contains('a') && jsonish.contains('b') && jsonish.contains('c'));
+        let v: serde_json::Value = serde_json::from_str(&jsonish).unwrap();
+        assert_eq!(v["s"], "a\nb\tc");
+        // JSON text must use escapes, not raw controls.
+        assert!(jsonish.contains("\\n") && jsonish.contains("\\t"));
+        assert!(!jsonish.contains('\n'));
     }
 
     #[test]
@@ -1181,8 +1199,10 @@ mod tests {
 
     #[test]
     fn single_quoted_unknown_escape_and_bare_undefined() {
+        // Sloppy JS: `\z` → `z`, then JSON-encode.
         let jsonish = js_literal_to_json("{ s: 'a\\z' }").unwrap();
-        assert!(jsonish.contains('a'));
+        let v: serde_json::Value = serde_json::from_str(&jsonish).unwrap();
+        assert_eq!(v["s"], "az");
         let jsonish = js_literal_to_json("{ x: undefined, y: bare }").unwrap();
         let v: serde_json::Value = serde_json::from_str(&jsonish).unwrap();
         assert_eq!(v["x"], serde_json::Value::Null);
@@ -1332,5 +1352,114 @@ mod tests {
         let value = recover_json_object(block).expect("should recover");
         assert_eq!(value["ts"], json!("2026-07-15T19:37:27.513Z"));
         assert_eq!(value["ok"], json!(true));
+    }
+
+    #[test]
+    fn single_quoted_escaped_quote_roundtrip() {
+        // Nest style: `\"` inside single quotes → string value contains `"`
+        let block = r#"{ factKey: '["[\"asset_edge\"]",""]' }"#;
+        let value = recover_json_object(block).expect("should recover");
+        // `'["[\"asset_edge\"]",""]'` → `["["asset_edge"]",""]` (`\"` → `"`)
+        assert_eq!(
+            value["factKey"].as_str().unwrap(),
+            r#"["["asset_edge"]",""]"#
+        );
+        let roundtrip = serde_json::to_string(&value).unwrap();
+        let again: serde_json::Value = serde_json::from_str(&roundtrip).unwrap();
+        assert_eq!(again["factKey"], value["factKey"]);
+    }
+
+    #[test]
+    fn single_quoted_inspect_backslash_quote_roundtrip() {
+        // util.inspect style for a string value that contains `\"`:
+        // '["[\\"asset_edge\\"]",""]'
+        let block = r#"{ factKey: '["[\\"asset_edge\\"]",""]' }"#;
+        let value = recover_json_object(block).expect("should recover");
+        assert_eq!(
+            value["factKey"].as_str().unwrap(),
+            r#"["[\"asset_edge\"]",""]"#
+        );
+        let roundtrip = serde_json::to_string(&value).unwrap();
+        let again: serde_json::Value = serde_json::from_str(&roundtrip).unwrap();
+        assert_eq!(again, value);
+    }
+
+    #[test]
+    fn single_quoted_raw_newline_json_escapes() {
+        let block = "{ s: 'a\nb' }";
+        let value = recover_json_object(block).expect("should recover");
+        assert_eq!(value["s"], json!("a\nb"));
+        let jsonish = js_literal_to_json(block).unwrap();
+        assert!(jsonish.contains("\\n"));
+        let _: serde_json::Value = serde_json::from_str(&jsonish).unwrap();
+    }
+
+    #[test]
+    fn evidence_decision_with_factkey_source_scope_recovers() {
+        // Shape from Ethira API inventory.relationships.evidence.decision dumps
+        // that previously landed as `_raw` due to nested JSON-in-string escapes.
+        let block = r#"{
+context: 'InventoryRelationshipReconciliationService',
+event: 'inventory.relationships.evidence.decision',
+workspaceId: 'c0f00a4b-20d8-4599-89bd-d752101a4855',
+action: 'remove',
+reason: 'evidence_unseen_on_complete_rescan',
+relationshipKind: 'asset_edge',
+sourceAssetType: 'microservice',
+sourceAssetId: '524b2e4e-933d-4bb6-98ae-aa47cc9cc121',
+targetAssetType: 'third_party_system',
+targetAssetId: 'fd787c69-9a34-4207-b29e-0af025021f8d',
+sourceKey: 'repository:e06829da-ab03-4c5b-9774-c9dee572a107',
+sourceScope: '["third_party_systems","third_party_system_consumer","e06829da-ab03-4c5b-9774-c9dee572a107"]',
+factKey: '["[\\"asset_edge\\",\\"microservice\\",\\"524b2e4e-933d-4bb6-98ae-aa47cc9cc121\\",\\"third_party_system\\",\\"fd787c69-9a34-4207-b29e-0af025021f8d\\",\\"\\",\\"\\"]",""]',
+scanId: '6574d2f8-3326-45a6-87f9-e76eb5c619d9',
+level: 'debug',
+message: 'inventory.relationships.evidence.decision',
+timestamp: '2026-07-23T12:17:08.945Z',
+ms: '+0ms',
+correlationId: 'job-acabeaee-e371-4fb1-991a-2aadfab040f3',
+userId: undefined
+}"#;
+        let value = recover_json_object(block).expect("evidence.decision must recover");
+        assert_eq!(
+            value["event"],
+            json!("inventory.relationships.evidence.decision")
+        );
+        assert_eq!(value["action"], json!("remove"));
+        assert_eq!(value["level"], json!("debug"));
+        assert_eq!(value["userId"], json!(null));
+        assert_eq!(
+            value["sourceScope"].as_str().unwrap(),
+            r#"["third_party_systems","third_party_system_consumer","e06829da-ab03-4c5b-9774-c9dee572a107"]"#
+        );
+        assert_eq!(
+            value["factKey"].as_str().unwrap(),
+            r#"["[\"asset_edge\",\"microservice\",\"524b2e4e-933d-4bb6-98ae-aa47cc9cc121\",\"third_party_system\",\"fd787c69-9a34-4207-b29e-0af025021f8d\",\"\",\"\"]",""]"#
+        );
+        let roundtrip = serde_json::to_string(&value).unwrap();
+        let again: serde_json::Value = serde_json::from_str(&roundtrip).unwrap();
+        assert_eq!(again["event"], value["event"]);
+        assert_eq!(again["factKey"], value["factKey"]);
+    }
+
+    #[test]
+    fn escape_matrix_single_quoted_roundtrips() {
+        let cases = [
+            ("{ s: 'it\\'s' }", "it's"),
+            ("{ s: 'a\"b' }", "a\"b"),
+            (r#"{ s: 'a\"b' }"#, "a\"b"),
+            (r#"{ s: 'a\\b' }"#, "a\\b"),
+            ("{ s: 'a\\nb' }", "a\nb"),
+            ("{ s: 'a\\tb' }", "a\tb"),
+            ("{ s: 'a\\rb' }", "a\rb"),
+            ("{ s: 'a\\zb' }", "azb"),
+        ];
+        for (block, expected) in cases {
+            let value = recover_json_object(block).unwrap_or_else(|| panic!("failed: {block}"));
+            assert_eq!(value["s"].as_str().unwrap(), expected, "block={block}");
+            let encoded = serde_json::to_string(&value).unwrap();
+            let again: serde_json::Value = serde_json::from_str(&encoded).unwrap();
+            assert_eq!(again["s"], value["s"]);
+        }
     }
 }
