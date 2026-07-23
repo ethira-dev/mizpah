@@ -425,10 +425,12 @@ impl Store {
 
         // Start multiline pretty block
         if is_pretty_block_start(cleaned) {
-            inner.pretty_buffers.insert(
-                service.to_string(),
-                PrettyBuffer::start(cleaned.to_string()),
-            );
+            let buf = PrettyBuffer::start(cleaned.to_string());
+            // Enforce byte/line caps on the opener itself (not only on later pushes).
+            if buf.is_oversized() {
+                return ResolveOutcome::Recover(buf.into_joined());
+            }
+            inner.pretty_buffers.insert(service.to_string(), buf);
             return ResolveOutcome::Ready(Vec::new());
         }
 
@@ -1009,6 +1011,31 @@ mod tests {
         assert_eq!(entries.len(), 1);
         // Incomplete dump can't recover to a closed object → single joined _raw.
         assert!(entries[0].data.get("_raw").is_some());
+    }
+
+    #[tokio::test]
+    async fn oversized_pretty_opener_recovers_immediately() {
+        let store = Store::new(50_000_000);
+        // First line alone exceeds the 1 MiB byte cap while still incomplete.
+        let huge = format!("{{ type: '{}',", "a".repeat(1024 * 1024));
+        let entries = store.push_line("api", &huge).await;
+        assert_eq!(entries.len(), 1);
+        assert!(entries[0].data.get("_raw").is_some());
+    }
+
+    #[tokio::test]
+    async fn js_control_flow_does_not_start_pretty_buffer() {
+        let store = Store::new(1_000_000);
+        let entries = store.push_line("api", "try {").await;
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].data["_raw"], json!("try {"));
+        // Following lines must still emit as their own raw entries (not buffered).
+        let entries = store.push_line("api", "doWork();").await;
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].data["_raw"], json!("doWork();"));
+        let entries = store.push_line("api", "return { a: 1 }").await;
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].data["_raw"], json!("return { a: 1 }"));
     }
 
     #[tokio::test]

@@ -200,14 +200,16 @@ pub fn looks_like_object(input: &str) -> bool {
     if trimmed.starts_with("Object:") || trimmed.starts_with("object:") {
         return true;
     }
-    // `Foo {`, `Map(2) {`, `Set(1) {` — ident then optional `(…)` then `{`
+    // `Foo {`, `Map(2) {`, `Set(1) {` — PascalCase constructor, optional `(…)`, then `{`.
+    // Require uppercase so JS control-flow (`try {`, `if (err) {`, `return {`) stays raw.
     let bytes = trimmed.as_bytes();
     let mut i = 0;
-    if !(bytes[i].is_ascii_alphabetic() || bytes[i] == b'_' || bytes[i] == b'$') {
+    if !bytes[i].is_ascii_uppercase() {
         return false;
     }
     i += 1;
-    while i < bytes.len() && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'_' || bytes[i] == b'$')
+    while i < bytes.len()
+        && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'_' || bytes[i] == b'$')
     {
         i += 1;
     }
@@ -299,7 +301,10 @@ pub fn parse_pretty_block(joined: &str) -> Option<Value> {
 
 /// Single joined `_raw` payload (never explode a pretty block into N rows).
 pub fn joined_raw_payload(joined: String) -> Value {
-    Value::Object(Map::from_iter([("_raw".to_string(), Value::String(joined))]))
+    Value::Object(Map::from_iter([(
+        "_raw".to_string(),
+        Value::String(joined),
+    )]))
 }
 
 /// Convert a JS-object-literal dump into JSON text (fused repair without gating).
@@ -1261,6 +1266,14 @@ mod tests {
         assert!(looks_like_object("Object:\n{"));
         assert!(!looks_like_object("hello world"));
         assert!(!looks_like_object("level=info msg=hi"));
+        // JS control-flow / lowercase idents must not look like inspect wrappers.
+        assert!(!looks_like_object("try {"));
+        assert!(!looks_like_object("else {"));
+        assert!(!looks_like_object("if (err) {"));
+        assert!(!looks_like_object("return { a: 1 }"));
+        assert!(!is_pretty_block_start("try {"));
+        assert!(!is_pretty_block_start("if (err) {"));
+        assert!(!is_pretty_block_start("return {"));
     }
 
     #[test]
