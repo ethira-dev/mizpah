@@ -75,7 +75,7 @@ toon-format = { version = "0.5.0", default-features = false }
 bzip2 = "0.5"
 notify = "8"
 ratatui = "0.29"
-crossterm = "0.28"
+crossterm = "0.29"
 rusqlite = { version = "0.32", features = ["bundled"] }
 regex = "1"
 pcre2 = "0.2"
