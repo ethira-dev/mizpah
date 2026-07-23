@@ -333,6 +333,40 @@ fn append_json_string_char(c: char, out: &mut String) {
     }
 }
 
+/// Decode one JS string escape at `chars[i]` (the character after `\`).
+/// Returns `(decoded scalar, index after the escape sequence)`.
+fn decode_js_string_escape(chars: &[char], i: usize) -> (char, usize) {
+    if i >= chars.len() {
+        return ('\\', i);
+    }
+    let c = chars[i];
+    match c {
+        '\'' => ('\'', i + 1),
+        '"' => ('"', i + 1),
+        '\\' => ('\\', i + 1),
+        'n' => ('\n', i + 1),
+        'r' => ('\r', i + 1),
+        't' => ('\t', i + 1),
+        'b' => ('\u{0008}', i + 1),
+        'f' => ('\u{000c}', i + 1),
+        'u' if i + 4 < chars.len()
+            && chars[i + 1].is_ascii_hexdigit()
+            && chars[i + 2].is_ascii_hexdigit()
+            && chars[i + 3].is_ascii_hexdigit()
+            && chars[i + 4].is_ascii_hexdigit() =>
+        {
+            let hex: String = chars[i + 1..i + 5].iter().collect();
+            let code = u32::from_str_radix(&hex, 16).unwrap_or(0);
+            (
+                char::from_u32(code).unwrap_or(char::REPLACEMENT_CHARACTER),
+                i + 5,
+            )
+        }
+        // Sloppy JS: unknown `\x` is just the character `x`.
+        other => (other, i + 1),
+    }
+}
+
 fn fused_repair_to_json(input: &str) -> Option<String> {
     #[cfg(test)]
     repair_stats::bump();
@@ -370,28 +404,22 @@ fn fused_repair_to_json(input: &str) -> Option<String> {
         if in_single {
             if escape {
                 // Decode JS single-quoted escape → Unicode scalar, then JSON-encode.
-                let decoded = match c {
-                    '\'' => '\'',
-                    '"' => '"',
-                    '\\' => '\\',
-                    'n' => '\n',
-                    'r' => '\r',
-                    't' => '\t',
-                    // Sloppy JS: unknown `\x` is just the character `x`.
-                    other => other,
-                };
+                let (decoded, next) = decode_js_string_escape(&chars, i);
                 append_json_string_char(decoded, &mut out);
                 escape = false;
+                i = next;
             } else if c == '\\' {
                 escape = true;
+                i += 1;
             } else if c == '\'' {
                 out.push('"');
                 in_single = false;
+                i += 1;
             } else {
                 // Literal chars (including raw `"`, controls) → JSON string text.
                 append_json_string_char(c, &mut out);
+                i += 1;
             }
-            i += 1;
             continue;
         }
 
@@ -704,28 +732,24 @@ fn stringify_value_span(chars: &[char], i: usize) -> (usize, String) {
     if c == '\'' || c == '"' {
         let quote = c;
         let mut j = i + 1;
-        let mut esc = false;
+        let mut quoted = String::from("\"");
         while j < chars.len() {
             let ch = chars[j];
-            if esc {
-                esc = false;
-                j += 1;
-                continue;
-            }
             if ch == '\\' {
-                esc = true;
-                j += 1;
+                let (decoded, next) = decode_js_string_escape(chars, j + 1);
+                append_json_string_char(decoded, &mut quoted);
+                j = next;
                 continue;
             }
             if ch == quote {
                 j += 1;
                 break;
             }
+            append_json_string_char(ch, &mut quoted);
             j += 1;
         }
-        let span: String = chars[i + 1..j.saturating_sub(1)].iter().collect();
-        let escaped = span.replace('\\', "\\\\").replace('"', "\\\"");
-        return (j, format!("\"{escaped}\""));
+        quoted.push('"');
+        return (j, quoted);
     }
     // Bare token until comma / brace
     let mut j = i;
@@ -1452,6 +1476,10 @@ userId: undefined
             ("{ s: 'a\\nb' }", "a\nb"),
             ("{ s: 'a\\tb' }", "a\tb"),
             ("{ s: 'a\\rb' }", "a\rb"),
+            ("{ s: 'a\\bb' }", "a\u{0008}b"),
+            ("{ s: 'a\\fb' }", "a\u{000c}b"),
+            ("{ s: 'a\\u0041b' }", "aAb"),
+            ("{ s: 'a\\u0000b' }", "a\u{0000}b"),
             ("{ s: 'a\\zb' }", "azb"),
         ];
         for (block, expected) in cases {
@@ -1461,5 +1489,16 @@ userId: undefined
             let again: serde_json::Value = serde_json::from_str(&encoded).unwrap();
             assert_eq!(again["s"], value["s"]);
         }
+    }
+
+    #[test]
+    fn map_arrow_quoted_value_decodes_escapes() {
+        let block = r#"Map(1) { 'k' => 'a\\b' }"#;
+        let value = recover_json_object(block).expect("Map dump should recover");
+        assert_eq!(value["k"].as_str().unwrap(), "a\\b");
+
+        let block_bf = "Map(1) { 'k' => 'a\\b\\f\\u0041' }";
+        let value = recover_json_object(block_bf).expect("Map dump should recover");
+        assert_eq!(value["k"].as_str().unwrap(), "a\u{0008}\u{000c}A");
     }
 }
